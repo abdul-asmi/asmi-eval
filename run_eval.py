@@ -23,8 +23,12 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime
+
+# Auto-sync test cases from GitHub before every run
+subprocess.run(["git", "pull", "--quiet"], cwd=os.path.dirname(os.path.abspath(__file__)))
 
 from test_cases import TEST_CASES
 from runner import run_all
