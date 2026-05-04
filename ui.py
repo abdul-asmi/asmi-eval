@@ -1,20 +1,34 @@
 #!/usr/bin/env python3
 """
 Asmi Eval — Test Case Editor UI
-Run:  python ui.py
-Then open: http://localhost:8765
+Reads/writes test_cases.py via GitHub API so it works hosted on Railway.
+
+Env vars required:
+  GITHUB_TOKEN      — personal access token (repo scope)
+  GITHUB_REPO       — e.g. "abdul-asmi/asmi-eval"
+  GITHUB_FILE_PATH  — e.g. "test_cases.py"
+  PORT              — optional, defaults to 8765
 """
 
 import ast
+import base64
 import json
 import os
 import re
-import sys
+import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
-PORT      = 8765
-TC_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_cases.py")
+PORT      = int(os.environ.get("PORT", 8765))
+GH_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
+GH_REPO   = os.environ.get("GITHUB_REPO", "")
+GH_FILE   = os.environ.get("GITHUB_FILE_PATH", "test_cases.py")
+
+# Fallback: read/write local file if GitHub not configured (local dev)
+LOCAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_cases.py")
+USE_GITHUB = bool(GH_TOKEN and GH_REPO)
+
 CATEGORIES = [
     "sticky_message","call_dedup","call_summary","language_pref",
     "location_memory","onboarding","capability","threep_nudge",
@@ -22,9 +36,46 @@ CATEGORIES = [
 TYPES = ["single","burst","sequence","dedup","burst_with_setup"]
 
 
+# ── GitHub API helpers ─────────────────────────────────────────────────────────
+
+def _gh_request(method: str, path: str, body: dict = None):
+    url = f"https://api.github.com/repos/{GH_REPO}/contents/{path}"
+    data = json.dumps(body).encode() if body else None
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("Authorization", f"Bearer {GH_TOKEN}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"GitHub API {method} {path}: {e.code} {e.read().decode()}")
+
+
+def _gh_get_file():
+    """Returns (content_str, sha)."""
+    data = _gh_request("GET", GH_FILE)
+    content = base64.b64decode(data["content"]).decode()
+    return content, data["sha"]
+
+
+def _gh_put_file(content: str, sha: str, message: str = "Update test cases via eval UI"):
+    encoded = base64.b64encode(content.encode()).decode()
+    _gh_request("PUT", GH_FILE, {
+        "message": message,
+        "content": encoded,
+        "sha": sha,
+    })
+
+
+# ── Test case load/save ────────────────────────────────────────────────────────
+
 def load_test_cases():
-    with open(TC_FILE) as f:
-        src = f.read()
+    if USE_GITHUB:
+        src, _ = _gh_get_file()
+    else:
+        with open(LOCAL_FILE) as f:
+            src = f.read()
     match = re.search(r'TEST_CASES\s*=\s*(\[.*\])', src, re.DOTALL)
     if not match:
         return []
@@ -32,12 +83,18 @@ def load_test_cases():
 
 
 def save_test_cases(cases: list):
-    with open(TC_FILE) as f:
-        src = f.read()
     new_list = "TEST_CASES = " + _format_list(cases)
-    src = re.sub(r'TEST_CASES\s*=\s*\[.*\]', new_list, src, flags=re.DOTALL)
-    with open(TC_FILE, "w") as f:
-        f.write(src)
+
+    if USE_GITHUB:
+        src, sha = _gh_get_file()
+        src = re.sub(r'TEST_CASES\s*=\s*\[.*\]', new_list, src, flags=re.DOTALL)
+        _gh_put_file(src, sha)
+    else:
+        with open(LOCAL_FILE) as f:
+            src = f.read()
+        src = re.sub(r'TEST_CASES\s*=\s*\[.*\]', new_list, src, flags=re.DOTALL)
+        with open(LOCAL_FILE, "w") as f:
+            f.write(src)
 
 
 def _format_list(cases: list) -> str:
@@ -51,10 +108,13 @@ def _format_list(cases: list) -> str:
     return "\n".join(lines)
 
 
+# ── HTML ───────────────────────────────────────────────────────────────────────
+
 HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Asmi Eval — Test Case Editor</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -112,12 +172,13 @@ textarea { resize: vertical; min-height: 70px; }
              padding: 8px 0 4px; border-bottom: 1px solid #e2e8f0; margin-bottom: 8px; }
 #toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b; color: white;
          padding: 12px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 500;
-         opacity: 0; transition: opacity .3s; pointer-events: none; }
+         opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
 #toast.show { opacity: 1; }
 .new-form { background: white; border-radius: 12px; padding: 20px;
             margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
             display: none; border: 2px dashed #3b82f6; }
 .new-form.open { display: block; }
+.saving { opacity: 0.6; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -146,9 +207,10 @@ textarea { resize: vertical; min-height: 70px; }
     <option value="burst">burst</option>
     <option value="sequence">sequence</option>
     <option value="dedup">dedup</option>
+    <option value="burst_with_setup">burst_with_setup</option>
   </select>
   <button class="btn btn-primary" onclick="toggleNew()">+ Add Test</button>
-  <button class="btn btn-success" onclick="saveAll()">💾 Save All</button>
+  <button class="btn btn-success" id="saveBtn" onclick="saveAll()">💾 Save All</button>
   <span class="count" id="countBadge">0 tests</span>
 </div>
 
@@ -175,11 +237,12 @@ textarea { resize: vertical; min-height: 70px; }
       </div>
       <div>
         <label>Type</label>
-        <select id="new_type" onchange="toggleMsgFields('new')">
+        <select id="new_type" onchange="toggleNewMsgFields()">
           <option value="single">single</option>
           <option value="burst">burst</option>
           <option value="sequence">sequence</option>
           <option value="dedup">dedup</option>
+          <option value="burst_with_setup">burst_with_setup</option>
         </select>
       </div>
       <div class="form-full" id="new_msg_wrap">
@@ -217,9 +280,16 @@ textarea { resize: vertical; min-height: 70px; }
 let tests = [];
 
 async function load() {
-  const res = await fetch('/api/tests');
-  tests = await res.json();
-  render();
+  document.getElementById('subtitle').textContent = 'Loading from GitHub…';
+  try {
+    const res = await fetch('/api/tests');
+    tests = await res.json();
+    if (tests.error) throw new Error(tests.error);
+    render();
+  } catch(e) {
+    document.getElementById('subtitle').textContent = '❌ Load failed: ' + e.message;
+    document.getElementById('testList').innerHTML = '<p style="color:#ef4444;padding:20px">Failed to load test cases. Check GitHub env vars.</p>';
+  }
 }
 
 function render() {
@@ -235,9 +305,8 @@ function render() {
   );
 
   document.getElementById('countBadge').textContent = `${filtered.length} / ${tests.length} tests`;
-  document.getElementById('subtitle').textContent   = `${tests.length} tests loaded`;
+  document.getElementById('subtitle').textContent   = `${tests.length} tests · GitHub`;
 
-  // Group by category
   const bycat = {};
   filtered.forEach(t => {
     if (!bycat[t.category]) bycat[t.category] = [];
@@ -286,18 +355,18 @@ function renderCard(t) {
         </div>
         <div>
           <label>Type</label>
-          <select onchange="update(${idx},'type',this.value); toggleMsgFields('edit_${t.id}')">
+          <select onchange="update(${idx},'type',this.value)">
             ${['single','burst','sequence','dedup','burst_with_setup']
               .map(tp=>`<option value="${tp}" ${t.type===tp?'selected':''}>${tp}</option>`).join('')}
           </select>
         </div>
         ${t.message !== undefined ? `
-        <div class="form-full" id="edit_${t.id}_msg_wrap">
+        <div class="form-full">
           <label>Message</label>
           <input type="text" value="${esc(t.message||'')}" onchange="update(${idx},'message',this.value)">
         </div>` : ''}
         ${t.messages !== undefined ? `
-        <div class="form-full" id="edit_${t.id}_msgs_wrap">
+        <div class="form-full">
           <label>Messages (one per line)</label>
           <textarea onchange="updateMsgs(${idx},this.value)">${esc(msgs)}</textarea>
         </div>` : ''}
@@ -318,7 +387,7 @@ function renderCard(t) {
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-success btn-sm" onclick="saveAll()">💾 Save</button>
+        <button class="btn btn-success" onclick="saveAll()">💾 Save to GitHub</button>
         <button class="btn btn-danger" onclick="deleteTest(${idx})">🗑 Delete</button>
       </div>
     </div>
@@ -330,8 +399,7 @@ function esc(s) {
 }
 
 function toggle(id) {
-  const b = document.getElementById('body_' + id);
-  b.classList.toggle('open');
+  document.getElementById('body_' + id).classList.toggle('open');
 }
 
 function filter() { render(); }
@@ -349,8 +417,11 @@ function toggleNew() {
   document.getElementById('newForm').classList.toggle('open');
 }
 
-function toggleMsgFields(prefix) {
-  // stub — could show/hide based on type
+function toggleNewMsgFields() {
+  const type = document.getElementById('new_type').value;
+  const multi = ['burst','sequence','burst_with_setup'].includes(type);
+  document.getElementById('new_msg_wrap').style.display  = multi ? 'none' : '';
+  document.getElementById('new_msgs_wrap').style.display = multi ? '' : 'none';
 }
 
 function addNew() {
@@ -379,32 +450,42 @@ function addNew() {
   tests.push(tc);
   toggleNew();
   render();
-  toast('✅ Test added — click Save All to write to file');
+  toast('✅ Test added — click Save All to commit to GitHub');
 }
 
 function deleteTest(idx) {
   if (!confirm('Delete this test case?')) return;
   tests.splice(idx, 1);
   render();
-  toast('🗑 Deleted — click Save All to write to file');
+  toast('🗑 Deleted — click Save All to commit to GitHub');
 }
 
 async function saveAll() {
-  const res = await fetch('/api/tests', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(tests),
-  });
-  const data = await res.json();
-  if (data.ok) toast('✅ Saved to test_cases.py');
-  else toast('❌ Save failed: ' + data.error);
+  const btn = document.getElementById('saveBtn');
+  btn.textContent = '⏳ Saving…';
+  btn.classList.add('saving');
+  try {
+    const res = await fetch('/api/tests', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(tests),
+    });
+    const data = await res.json();
+    if (data.ok) toast('✅ Committed to GitHub — pull on Mac before next eval run');
+    else toast('❌ Save failed: ' + data.error);
+  } catch(e) {
+    toast('❌ Save failed: ' + e.message);
+  } finally {
+    btn.textContent = '💾 Save All';
+    btn.classList.remove('saving');
+  }
 }
 
 function toast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3000);
+  setTimeout(() => el.classList.remove('show'), 4000);
 }
 
 load();
@@ -414,15 +495,22 @@ load();
 """
 
 
+# ── HTTP server ────────────────────────────────────────────────────────────────
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
-        pass  # suppress request logs
+        pass
 
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/api/tests":
-            cases = load_test_cases()
-            self._json(cases)
+            try:
+                cases = load_test_cases()
+                self._json(cases)
+            except Exception as e:
+                self._json({"error": str(e)})
+        elif path == "/health":
+            self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
         else:
             self._html(HTML)
 
@@ -454,10 +542,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    mode = f"GitHub ({GH_REPO}/{GH_FILE})" if USE_GITHUB else f"Local file ({LOCAL_FILE})"
     print(f"\n  Asmi Eval UI — http://localhost:{PORT}")
-    print(f"  Editing: {TC_FILE}")
+    print(f"  Storage: {mode}")
     print(f"  Ctrl+C to stop\n")
-    server = HTTPServer(("localhost", PORT), Handler)
+    server = HTTPServer(("0.0.0.0", PORT), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
