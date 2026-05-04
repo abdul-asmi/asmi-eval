@@ -12,10 +12,13 @@
 # To run in background:  nohup python daemon.py > daemon.log 2>&1 &
 # To stop:               pkill -f daemon.py
 
+import json
 import os
 import sqlite3
 import sys
 import time
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,6 +27,10 @@ from config import (
     CHAT_DB, COMMAND_HANDLE, COMMAND_PREFIX,
     DAEMON_POLL, ASMI_HANDLE, EVAL_DIR
 )
+try:
+    from config import RAILWAY_URL
+except ImportError:
+    RAILWAY_URL = ""
 from commands import handle
 from imessage import send_imessage
 
@@ -84,6 +91,19 @@ def _send_reply(text: str):
     send_imessage(text, handle=COMMAND_HANDLE)
 
 
+def _poll_railway() -> dict | None:
+    """Check Railway UI for a pending run request. Returns run dict or None."""
+    if not RAILWAY_URL:
+        return None
+    try:
+        req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            return data.get("run")
+    except Exception:
+        return None
+
+
 def run():
     since_ns    = _mac_ts(datetime.now(timezone.utc))
     processed   = set()
@@ -139,6 +159,20 @@ def run():
 
                 print(f"  → Sending reply ({len(response)} chars)")
                 _send_reply(response)
+
+            # Check Railway UI for run requests triggered from the browser
+            pending = _poll_railway()
+            if pending:
+                cat = pending.get("category")
+                rid = pending.get("id")
+                cmd = f"run {rid or cat or 'all'}"
+                ts  = datetime.now().strftime("%H:%M:%S")
+                print(f"\n  [{ts}] UI run request: {cmd}")
+                try:
+                    response = handle(cmd)
+                except Exception as e:
+                    response = f"❌ Error: {e}"
+                _send_reply(f"🖥 Run triggered from UI\n{response}")
 
         except KeyboardInterrupt:
             print("\n\n  Daemon stopped.")

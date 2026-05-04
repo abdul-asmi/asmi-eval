@@ -15,10 +15,15 @@ import base64
 import json
 import os
 import re
+import time
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
+
+# ── Run queue (in-memory) ──────────────────────────────────────────────────────
+_pending_run    = None   # dict {category, id} or None
+_last_heartbeat = 0.0    # epoch time of last daemon poll
 
 PORT      = int(os.environ.get("PORT", 8765))
 GH_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
@@ -175,6 +180,8 @@ textarea { resize: vertical; min-height: 70px; }
             display: none; border: 2px dashed #3b82f6; }
 .new-form.open { display: block; }
 .saving { opacity: 0.6; pointer-events: none; }
+.btn-run { background: #7c3aed; color: white; }
+.btn-run:hover { background: #6d28d9; }
 #toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b; color: white;
          padding: 12px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 500;
          opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
@@ -211,6 +218,18 @@ textarea { resize: vertical; min-height: 70px; }
   </select>
   <button class="btn btn-primary" onclick="toggleNew()">+ Add Test</button>
   <button class="btn btn-success" id="saveBtn" onclick="saveAll()">💾 Save All</button>
+  <select id="runCat" style="margin-left:12px">
+    <option value="">All tests</option>
+    <option value="sticky_message">Sticky Message</option>
+    <option value="call_dedup">Call Deduping</option>
+    <option value="call_summary">Post-Call Summary</option>
+    <option value="language_pref">Language Preference</option>
+    <option value="location_memory">Location Memory</option>
+    <option value="onboarding">Onboarding</option>
+    <option value="capability">Capability Prompts</option>
+    <option value="threep_nudge">3P Call Nudge</option>
+  </select>
+  <button class="btn btn-run" id="runBtn" onclick="runTests()">▶ Run</button>
   <span class="count" id="countBadge">0 tests</span>
 </div>
 
@@ -477,6 +496,31 @@ async function saveAll() {
   }
 }
 
+async function runTests() {
+  const btn = document.getElementById('runBtn');
+  btn.textContent = '⏳ Queuing…';
+  btn.classList.add('saving');
+  try {
+    const cat = document.getElementById('runCat').value;
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({category: cat || null}),
+    });
+    const data = await res.json();
+    if (data.mac_online) {
+      toast('✅ Run started on your Mac!');
+    } else {
+      toast('⚠️ Mac is offline — ask Abdul to turn it on');
+    }
+  } catch(e) {
+    toast('❌ Failed to queue run: ' + e.message);
+  } finally {
+    btn.textContent = '▶ Run';
+    btn.classList.remove('saving');
+  }
+}
+
 function toast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -498,6 +542,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        global _pending_run, _last_heartbeat
         path = urlparse(self.path).path
         if path == "/api/tests":
             try:
@@ -505,12 +550,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(cases)
             except Exception as e:
                 self._json({"error": str(e)})
+        elif path == "/api/poll":
+            # Daemon calls this: update heartbeat, return + clear any pending run
+            _last_heartbeat = time.time()
+            run = _pending_run
+            _pending_run = None
+            self._json({"run": run})
         elif path == "/health":
             self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
         else:
             self._html(HTML)
 
     def do_POST(self):
+        global _pending_run, _last_heartbeat
         path = urlparse(self.path).path
         if path == "/api/tests":
             length = int(self.headers.get("Content-Length", 0))
@@ -521,6 +573,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
+        elif path == "/api/run":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if length else {}
+            except Exception:
+                data = {}
+            _pending_run = {
+                "category": data.get("category"),
+                "id":       data.get("id"),
+                "ts":       time.time(),
+            }
+            mac_online = (time.time() - _last_heartbeat) < 90
+            self._json({"ok": True, "mac_online": mac_online})
 
     def _html(self, body):
         self.send_response(200)
