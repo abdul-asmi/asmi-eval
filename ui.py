@@ -175,6 +175,10 @@ textarea { resize: vertical; min-height: 70px; }
             display: none; border: 2px dashed #3b82f6; }
 .new-form.open { display: block; }
 .saving { opacity: 0.6; pointer-events: none; }
+#toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b; color: white;
+         padding: 12px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 500;
+         opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+#toast.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -269,7 +273,7 @@ textarea { resize: vertical; min-height: 70px; }
 
   <div id="testList"></div>
 </main>
-
+<div id="toast"></div>
 <script>
 let tests = [];
 
@@ -463,7 +467,8 @@ async function saveAll() {
       body: JSON.stringify(tests),
     });
     const data = await res.json();
-    if (!data.ok) alert('Save failed: ' + data.error);
+    if (data.ok) toast('✅ Saved successfully');
+    else alert('Save failed: ' + data.error);
   } catch(e) {
     alert('Save failed: ' + e.message);
   } finally {
@@ -472,6 +477,12 @@ async function saveAll() {
   }
 }
 
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
 
 load();
 </script>
