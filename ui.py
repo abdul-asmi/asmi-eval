@@ -471,7 +471,7 @@ async function saveAll() {
       body: JSON.stringify(tests),
     });
     const data = await res.json();
-    if (data.ok) toast('✅ Committed to GitHub — pull on Mac before next eval run');
+    if (data.ok) toast('✅ Committed to GitHub — changes sync automatically');
     else toast('❌ Save failed: ' + data.error);
   } catch(e) {
     toast('❌ Save failed: ' + e.message);
