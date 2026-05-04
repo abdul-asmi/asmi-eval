@@ -4,485 +4,302 @@
 #   location_memory | onboarding | capability | threep_nudge
 
 TEST_CASES = [
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # CATEGORY 1 — STICKY MESSAGE
-    # Validate: messages arrive without user re-prompting, even in burst mode
-    # ══════════════════════════════════════════════════════════════════════════
     {
-        "id": "sticky_01",
-        "name": "Single research task arrives unprompted",
-        "category": "sticky_message",
-        "type": "single",
-        "message": "Find me the top 3 Italian restaurants in Pittsburgh with their hours and ratings",
-        "wait": 150,
-        "pass_criteria": (
-            "Asmi responds with at least 3 restaurant recommendations. "
-            "Response arrives without user needing to follow up. "
-            "Includes hours or ratings."
-        ),
+        'id': 'sticky_01',
+        'name': 'Single research task arrives unprompted',
+        'category': 'sticky_message',
+        'type': 'single',
+        'message': 'Find me the top 3 Italian restaurants in Pittsburgh with their hours and ratings',
+        'wait': 150,
+        'pass_criteria': 'Asmi responds with at least 3 restaurant recommendations. Response arrives without user needing to follow up. Includes hours or ratings.',
     },
     {
-        "id": "sticky_02",
-        "name": "Single research task with Sunday-specific detail",
-        "category": "sticky_message",
-        "type": "single",
-        "message": "What are the best coffee shops in downtown Pittsburgh that are open on Sundays?",
-        "wait": 150,
-        "pass_criteria": (
-            "Asmi responds with coffee shop recommendations. "
-            "Response arrives without needing a follow-up nudge."
-        ),
+        'id': 'sticky_02',
+        'name': 'Single research task with Sunday-specific detail',
+        'category': 'sticky_message',
+        'type': 'single',
+        'message': 'What are the best coffee shops in downtown Pittsburgh that are open on Sundays?',
+        'wait': 150,
+        'pass_criteria': 'Asmi responds with coffee shop recommendations. Response arrives without needing a follow-up nudge.',
     },
     {
-        "id": "sticky_03",
-        "name": "Burst: 4 tasks back-to-back, all arrive",
-        "category": "sticky_message",
-        "type": "burst",
-        "messages": [
-            "What is the weather like in Pittsburgh today?",
-            "What are the top 3 pizza places in Pittsburgh?",
-            "What time does Target in Pittsburgh open on weekdays?",
-            "Find me a highly rated plumber in Pittsburgh",
-        ],
-        "burst_delay": 1.0,
-        "wait": 240,
-        "expected_responses": 4,
-        "pass_criteria": (
-            "All 4 responses arrive within the wait window. "
-            "None are dropped, merged, or stuck. "
-            "Each response is relevant to its specific task."
-        ),
+        'id': 'sticky_03',
+        'name': 'Burst: 4 tasks back-to-back, all arrive',
+        'category': 'sticky_message',
+        'type': 'burst',
+        'messages': ['What is the weather like in Pittsburgh today?', 'What are the top 3 pizza places in Pittsburgh?', 'What time does Target in Pittsburgh open on weekdays?', 'Find me a highly rated plumber in Pittsburgh'],
+        'burst_delay': 1,
+        'wait': 240,
+        'expected_responses': 4,
+        'pass_criteria': 'All 4 responses arrive within the wait window. None are dropped, merged, or stuck. Each response is relevant to its specific task.',
     },
     {
-        "id": "sticky_04",
-        "name": "Task after locking phone still arrives",
-        "category": "sticky_message",
-        "type": "single",
-        "message": "Find me a good Thai restaurant in Pittsburgh with vegetarian options",
-        "wait": 150,
-        "pass_criteria": (
-            "Asmi responds with Thai restaurant recommendations including vegetarian options. "
-            "No follow-up needed."
-        ),
-        "note": "After sending, lock your phone for 30 seconds then check — response should be waiting.",
-    },
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # CATEGORY 2 — CALL DEDUPING
-    # Validate: same call task sent twice does not fire two calls
-    # ══════════════════════════════════════════════════════════════════════════
-    {
-        "id": "dedup_01",
-        "name": "Exact duplicate call within 2 seconds → only one call fires",
-        "category": "call_dedup",
-        "type": "dedup",
-        "message": "Call a local pharmacy in Pittsburgh and ask if they have flu shots available",
-        "dedup_message": "Call a local pharmacy in Pittsburgh and ask if they have flu shots available",
-        "dedup_delay": 2.0,
-        "wait": 180,
-        "expected_responses": 1,
-        "pass_criteria": (
-            "Only one call result is returned in iMessage. "
-            "Asmi does not mention making two separate calls."
-        ),
-        "manual_check": "Open ElevenLabs dashboard — confirm only 1 call was initiated.",
+        'id': 'sticky_04',
+        'name': 'Task after locking phone still arrives',
+        'category': 'sticky_message',
+        'type': 'single',
+        'message': 'Find me a good Thai restaurant in Pittsburgh with vegetarian options',
+        'wait': 150,
+        'pass_criteria': 'Asmi responds with Thai restaurant recommendations including vegetarian options. No follow-up needed.',
+        'note': 'After sending, lock your phone for 30 seconds then check — response should be waiting.',
     },
     {
-        "id": "dedup_02",
-        "name": "Near-duplicate call within 5 seconds → treated as one",
-        "category": "call_dedup",
-        "type": "dedup",
-        "message": "Call the nearest CVS in Pittsburgh and ask about their hours",
-        "dedup_message": "Can you call CVS and check what time they close today?",
-        "dedup_delay": 5.0,
-        "wait": 180,
-        "expected_responses": 1,
-        "pass_criteria": (
-            "Asmi treats both as one task. "
-            "One call result returned. No duplicate call."
-        ),
+        'id': 'dedup_01',
+        'name': 'Exact duplicate call within 2 seconds → only one call fires',
+        'category': 'call_dedup',
+        'type': 'dedup',
+        'message': 'Call a local pharmacy in Pittsburgh and ask if they have flu shots available',
+        'dedup_message': 'Call a local pharmacy in Pittsburgh and ask if they have flu shots available',
+        'dedup_delay': 2,
+        'wait': 180,
+        'expected_responses': 1,
+        'pass_criteria': 'Only one call result is returned in iMessage. Asmi does not mention making two separate calls.',
+        'manual_check': 'Open ElevenLabs dashboard — confirm only 1 call was initiated.',
     },
     {
-        "id": "dedup_03",
-        "name": "Two genuinely different call tasks both fire independently",
-        "category": "call_dedup",
-        "type": "sequence",
-        "messages": [
-            "Call the nearest CVS in Pittsburgh and ask about flu shots",
-            "Also call the nearest Walgreens and ask the same question",
-        ],
-        "sequence_delay": 3.0,
-        "wait": 300,
-        "expected_responses": 2,
-        "pass_criteria": (
-            "Both calls fire independently and both results are returned. "
-            "CVS result and Walgreens result arrive separately."
-        ),
-        "manual_check": "ElevenLabs dashboard should show 2 separate calls.",
+        'id': 'dedup_02',
+        'name': 'Near-duplicate call within 5 seconds → treated as one',
+        'category': 'call_dedup',
+        'type': 'dedup',
+        'message': 'Call the nearest CVS in Pittsburgh and ask about their hours',
+        'dedup_message': 'Can you call CVS and check what time they close today?',
+        'dedup_delay': 5,
+        'wait': 180,
+        'expected_responses': 1,
+        'pass_criteria': 'Asmi treats both as one task. One call result returned. No duplicate call.',
     },
     {
-        "id": "dedup_04",
-        "name": "Burst 4 different call tasks: all 4 fire and return results",
-        "category": "call_dedup",
-        "type": "burst",
-        "messages": [
-            "Call the nearest CVS in Pittsburgh and ask about their hours",
-            "Call the nearest Walgreens in Pittsburgh and ask about flu shots",
-            "Call Domino's in Pittsburgh and ask what time they close tonight",
-            "Call a local Italian restaurant in Pittsburgh and ask if they take reservations",
-        ],
-        "burst_delay": 2.0,
-        "wait": 360,
-        "expected_responses": 4,
-        "pass_criteria": (
-            "All 4 call tasks fire. All 4 results return. "
-            "No results merged or dropped. Each summary mentions the correct business."
-        ),
-        "manual_check": "ElevenLabs should show 4 distinct calls.",
-    },
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # CATEGORY 3 — POST-CALL SUMMARY (hallucination prevention)
-    # Validate: summaries are accurate, grounded, no invented details
-    # ══════════════════════════════════════════════════════════════════════════
-    {
-        "id": "summary_01",
-        "name": "Successful call summary matches reality",
-        "category": "call_summary",
-        "type": "single",
-        "message": "Call a Domino's in Pittsburgh and ask what time they close tonight",
-        "wait": 180,
-        "pass_criteria": (
-            "Summary includes a specific closing time. "
-            "Does not contain vague or invented details. "
-            "If the call was answered, includes the actual response from the business."
-        ),
-        "manual_check": "Compare summary against ElevenLabs call recording to verify accuracy.",
+        'id': 'dedup_03',
+        'name': 'Two genuinely different call tasks both fire independently',
+        'category': 'call_dedup',
+        'type': 'sequence',
+        'messages': ['Call the nearest CVS in Pittsburgh and ask about flu shots', 'Also call the nearest Walgreens and ask the same question'],
+        'sequence_delay': 3,
+        'wait': 300,
+        'expected_responses': 2,
+        'pass_criteria': 'Both calls fire independently and both results are returned. CVS result and Walgreens result arrive separately.',
+        'manual_check': 'ElevenLabs dashboard should show 2 separate calls.',
     },
     {
-        "id": "summary_02",
-        "name": "Unanswered call reported honestly, not invented",
-        "category": "call_summary",
-        "type": "single",
-        "message": "Call +14085550100 and ask about their hours",
-        "wait": 120,
-        "pass_criteria": (
-            "Asmi reports the call was not answered, went to voicemail, or could not be completed. "
-            "Does NOT invent a business name, hours, or outcome that wasn't on the call."
-        ),
+        'id': 'dedup_04',
+        'name': 'Burst 4 different call tasks: all 4 fire and return results',
+        'category': 'call_dedup',
+        'type': 'burst',
+        'messages': ['Call the nearest CVS in Pittsburgh and ask about their hours', 'Call the nearest Walgreens in Pittsburgh and ask about flu shots', "Call Domino's in Pittsburgh and ask what time they close tonight", 'Call a local Italian restaurant in Pittsburgh and ask if they take reservations'],
+        'burst_delay': 2,
+        'wait': 360,
+        'expected_responses': 4,
+        'pass_criteria': 'All 4 call tasks fire. All 4 results return. No results merged or dropped. Each summary mentions the correct business.',
+        'manual_check': 'ElevenLabs should show 4 distinct calls.',
     },
     {
-        "id": "summary_03",
-        "name": "Two back-to-back calls: summaries don't cross-contaminate",
-        "category": "call_summary",
-        "type": "burst",
-        "messages": [
-            "Call the nearest Walgreens in Pittsburgh and ask if they have flu shots",
-            "Call the nearest CVS in Pittsburgh and ask about their hours today",
-        ],
-        "burst_delay": 3.0,
-        "wait": 300,
-        "expected_responses": 2,
-        "pass_criteria": (
-            "Walgreens summary mentions flu shots — not hours. "
-            "CVS summary mentions hours — not flu shots. "
-            "Details do not bleed between summaries."
-        ),
-        "manual_check": "Check ElevenLabs recordings for both calls individually.",
+        'id': 'summary_01',
+        'name': 'Successful call summary matches reality',
+        'category': 'call_summary',
+        'type': 'single',
+        'message': "Call a Domino's in Pittsburgh and ask what time they close tonight",
+        'wait': 180,
+        'pass_criteria': 'Summary includes a specific closing time. Does not contain vague or invented details. If the call was answered, includes the actual response from the business.',
+        'manual_check': 'Compare summary against ElevenLabs call recording to verify accuracy.',
     },
     {
-        "id": "summary_04",
-        "name": "Call to business that can't answer specific question — no hallucination",
-        "category": "call_summary",
-        "type": "single",
-        "message": "Call a local restaurant in Pittsburgh and ask who their head chef is",
-        "wait": 180,
-        "pass_criteria": (
-            "If the business didn't know or answer, Asmi reports that honestly. "
-            "Does not invent a chef's name or any other fabricated detail."
-        ),
-    },
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # CATEGORY 4 — NO LANGUAGE PREFERENCE BEFORE FIRST CALL
-    # Validate: Asmi no longer gates calls behind a language prompt
-    # ══════════════════════════════════════════════════════════════════════════
-    {
-        "id": "lang_01",
-        "name": "First call task: no language preference asked before call fires",
-        "category": "language_pref",
-        "type": "single",
-        "message": "Call a local Italian restaurant in Pittsburgh and ask if they have outdoor seating",
-        "wait": 90,
-        "pass_criteria": (
-            "Asmi does NOT send a message asking for language preference before initiating the call. "
-            "Call fires directly."
-        ),
-        "precondition": "Use fresh/new account — this should be the first ever call.",
+        'id': 'summary_02',
+        'name': 'Unanswered call reported honestly, not invented',
+        'category': 'call_summary',
+        'type': 'single',
+        'message': 'Call +14085550100 and ask about their hours',
+        'wait': 120,
+        'pass_criteria': "Asmi reports the call was not answered, went to voicemail, or could not be completed. Does NOT invent a business name, hours, or outcome that wasn't on the call.",
     },
     {
-        "id": "lang_02",
-        "name": "Burst: 3 call tasks, none trigger language prompt upfront",
-        "category": "language_pref",
-        "type": "burst",
-        "messages": [
-            "Call the nearest pharmacy in Pittsburgh and ask about flu shots",
-            "Call a local Italian restaurant in Pittsburgh and ask about reservations",
-            "Call the nearest urgent care in Pittsburgh and ask about walk-in hours",
-        ],
-        "burst_delay": 2.0,
-        "wait": 300,
-        "expected_responses": 3,
-        "pass_criteria": (
-            "None of the 3 call tasks produce a language preference prompt before calling. "
-            "All 3 calls fire directly. All 3 results return."
-        ),
+        'id': 'summary_03',
+        'name': "Two back-to-back calls: summaries don't cross-contaminate",
+        'category': 'call_summary',
+        'type': 'burst',
+        'messages': ['Call the nearest Walgreens in Pittsburgh and ask if they have flu shots', 'Call the nearest CVS in Pittsburgh and ask about their hours today'],
+        'burst_delay': 3,
+        'wait': 300,
+        'expected_responses': 2,
+        'pass_criteria': 'Walgreens summary mentions flu shots — not hours. CVS summary mentions hours — not flu shots. Details do not bleed between summaries.',
+        'manual_check': 'Check ElevenLabs recordings for both calls individually.',
     },
     {
-        "id": "lang_03",
-        "name": "Explicit language in request: no re-ask",
-        "category": "language_pref",
-        "type": "single",
-        "message": "Call a restaurant in Pittsburgh in English and ask about their menu",
-        "wait": 120,
-        "pass_criteria": (
-            "Asmi uses English on the call without asking for language preference first. "
-            "No language prompt appears."
-        ),
-    },
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # CATEGORY 5 — LOCATION MEMORY
-    # Validate: location provided once is retained across tasks in the session
-    # ══════════════════════════════════════════════════════════════════════════
-    {
-        "id": "loc_01",
-        "name": "Location retained across 3 follow-up tasks (sequence)",
-        "category": "location_memory",
-        "type": "sequence",
-        "messages": [
-            "Find a good sushi restaurant near me in Pittsburgh, PA",
-            "Now find a good Italian restaurant near me",
-            "What is the closest urgent care to me?",
-            "Find a pharmacy near me",
-        ],
-        "sequence_delay": 12.0,
-        "wait": 120,
-        "expected_responses": 4,
-        "pass_criteria": (
-            "Messages 2, 3, and 4 are answered without asking for location again. "
-            "Asmi uses Pittsburgh from message 1 for all follow-up tasks."
-        ),
+        'id': 'summary_04',
+        'name': "Call to business that can't answer specific question — no hallucination",
+        'category': 'call_summary',
+        'type': 'single',
+        'message': 'Call a local restaurant in Pittsburgh and ask who their head chef is',
+        'wait': 180,
+        'pass_criteria': "If the business didn't know or answer, Asmi reports that honestly. Does not invent a chef's name or any other fabricated detail.",
     },
     {
-        "id": "loc_02",
-        "name": "Burst: 4 location tasks after setup, no re-ask",
-        "category": "location_memory",
-        "type": "burst_with_setup",
-        "setup_message": "I'm based in Pittsburgh, PA",
-        "setup_wait": 20,
-        "messages": [
-            "Find a pizza place near me",
-            "Find a coffee shop near me",
-            "Find a gym near me",
-            "Find a grocery store near me",
-        ],
-        "burst_delay": 1.5,
-        "wait": 200,
-        "expected_responses": 4,
-        "pass_criteria": (
-            "All 4 responses use Pittsburgh as the location. "
-            "None of the 4 ask for location again. "
-            "All 4 arrive without being dropped."
-        ),
+        'id': 'lang_01',
+        'name': 'First call task: no language preference asked before call fires',
+        'category': 'language_pref',
+        'type': 'single',
+        'message': 'Call a local Italian restaurant in Pittsburgh and ask if they have outdoor seating',
+        'wait': 90,
+        'pass_criteria': 'Asmi does NOT send a message asking for language preference before initiating the call. Call fires directly.',
+        'precondition': 'Use fresh/new account — this should be the first ever call.',
     },
     {
-        "id": "loc_03",
-        "name": "Location retained after providing it during a call task",
-        "category": "location_memory",
-        "type": "sequence",
-        "messages": [
-            "Call the nearest Walgreens to me in Pittsburgh and ask about flu shots",
-            "Now find me a pharmacy near me that's open late",
-        ],
-        "sequence_delay": 30.0,
-        "wait": 180,
-        "expected_responses": 2,
-        "pass_criteria": (
-            "Message 2 does not ask for location again — uses Pittsburgh from message 1."
-        ),
-    },
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # CATEGORY 6 — PRE-ONBOARDING REACTIONS
-    # Validate: reliable, consistent responses during onboarding
-    # ══════════════════════════════════════════════════════════════════════════
-    {
-        "id": "onboard_01",
-        "name": "First message gets exactly one response",
-        "category": "onboarding",
-        "type": "single",
-        "message": "Hi, what can you do?",
-        "wait": 60,
-        "expected_responses": 1,
-        "pass_criteria": (
-            "Exactly one response arrives. Not zero, not two. "
-            "Response is relevant and coherent."
-        ),
-        "precondition": "Fresh account in pre-onboarding state.",
+        'id': 'lang_02',
+        'name': 'Burst: 3 call tasks, none trigger language prompt upfront',
+        'category': 'language_pref',
+        'type': 'burst',
+        'messages': ['Call the nearest pharmacy in Pittsburgh and ask about flu shots', 'Call a local Italian restaurant in Pittsburgh and ask about reservations', 'Call the nearest urgent care in Pittsburgh and ask about walk-in hours'],
+        'burst_delay': 2,
+        'wait': 300,
+        'expected_responses': 3,
+        'pass_criteria': 'None of the 3 call tasks produce a language preference prompt before calling. All 3 calls fire directly. All 3 results return.',
     },
     {
-        "id": "onboard_02",
-        "name": "Burst during onboarding: all messages handled cleanly",
-        "category": "onboarding",
-        "type": "burst",
-        "messages": [
-            "Hi",
-            "What can you help me with?",
-            "Can you make phone calls?",
-            "How do I get started?",
-        ],
-        "burst_delay": 1.0,
-        "wait": 120,
-        "expected_responses": 4,
-        "pass_criteria": (
-            "All 4 messages receive responses. "
-            "No dropped messages. No doubled replies. "
-            "Onboarding flow is not broken by the burst."
-        ),
-        "precondition": "Fresh account in pre-onboarding state.",
+        'id': 'lang_03',
+        'name': 'Explicit language in request: no re-ask',
+        'category': 'language_pref',
+        'type': 'single',
+        'message': 'Call a restaurant in Pittsburgh in English and ask about their menu',
+        'wait': 120,
+        'pass_criteria': 'Asmi uses English on the call without asking for language preference first. No language prompt appears.',
     },
     {
-        "id": "onboard_03",
-        "name": "Onboarding completes correctly end-to-end",
-        "category": "onboarding",
-        "type": "sequence",
-        "messages": [
-            "Hi",
-            "My name is Abdul",
-            "I'm in Pittsburgh, PA",
-            "What can you do for me?",
-        ],
-        "sequence_delay": 8.0,
-        "wait": 60,
-        "expected_responses": 4,
-        "pass_criteria": (
-            "All 4 exchanges complete. Asmi acknowledges name and location. "
-            "Final response describes capabilities."
-        ),
-        "precondition": "Fresh account.",
-    },
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # CATEGORY 7 — CALLING PROMPTS / CAPABILITY SECTION
-    # Validate: improved capability description, calling clearly surfaced
-    # ══════════════════════════════════════════════════════════════════════════
-    {
-        "id": "cap_01",
-        "name": "What can you do: calling clearly mentioned",
-        "category": "capability",
-        "type": "single",
-        "message": "What can you help me with?",
-        "wait": 60,
-        "pass_criteria": (
-            "Response clearly mentions phone calling as a capability. "
-            "Not vague — explains what kind of calls Asmi can make."
-        ),
+        'id': 'loc_01',
+        'name': 'Location retained across 3 follow-up tasks (sequence)',
+        'category': 'location_memory',
+        'type': 'sequence',
+        'messages': ['Find a good sushi restaurant near me in Pittsburgh, PA', 'Now find a good Italian restaurant near me', 'What is the closest urgent care to me?', 'Find a pharmacy near me'],
+        'sequence_delay': 12,
+        'wait': 120,
+        'expected_responses': 4,
+        'pass_criteria': 'Messages 2, 3, and 4 are answered without asking for location again. Asmi uses Pittsburgh from message 1 for all follow-up tasks.',
     },
     {
-        "id": "cap_02",
-        "name": "Calling capability described accurately and specifically",
-        "category": "capability",
-        "type": "single",
-        "message": "Can you make phone calls on my behalf?",
-        "wait": 60,
-        "pass_criteria": (
-            "Response accurately describes what Asmi does during calls. "
-            "Specific — not vague, not overpromising. "
-            "Mentions calling businesses or services."
-        ),
+        'id': 'loc_02',
+        'name': 'Burst: 4 location tasks after setup, no re-ask',
+        'category': 'location_memory',
+        'type': 'burst_with_setup',
+        'setup_message': "I'm based in Pittsburgh, PA",
+        'setup_wait': 20,
+        'messages': ['Find a pizza place near me', 'Find a coffee shop near me', 'Find a gym near me', 'Find a grocery store near me'],
+        'burst_delay': 1.5,
+        'wait': 200,
+        'expected_responses': 4,
+        'pass_criteria': 'All 4 responses use Pittsburgh as the location. None of the 4 ask for location again. All 4 arrive without being dropped.',
     },
     {
-        "id": "cap_03",
-        "name": "Burst: 4 capability questions, consistent answers across all",
-        "category": "capability",
-        "type": "burst",
-        "messages": [
-            "What can you do?",
-            "Can you book things for me?",
-            "Can you make phone calls?",
-            "What can't you do?",
-        ],
-        "burst_delay": 1.0,
-        "wait": 120,
-        "expected_responses": 4,
-        "pass_criteria": (
-            "All 4 responses arrive. "
-            "Calling described consistently across questions — no contradictions. "
-            "What Asmi can and cannot do is accurately represented."
-        ),
+        'id': 'loc_03',
+        'name': 'Location retained after providing it during a call task',
+        'category': 'location_memory',
+        'type': 'sequence',
+        'messages': ['Call the nearest Walgreens to me in Pittsburgh and ask about flu shots', "Now find me a pharmacy near me that's open late"],
+        'sequence_delay': 30,
+        'wait': 180,
+        'expected_responses': 2,
+        'pass_criteria': 'Message 2 does not ask for location again — uses Pittsburgh from message 1.',
     },
     {
-        "id": "cap_04",
-        "name": "Mid-task: framing of what Asmi is about to do is accurate",
-        "category": "capability",
-        "type": "single",
-        "message": "Call a local restaurant in Pittsburgh and get me a reservation for 2 people tonight at 7pm",
-        "wait": 180,
-        "pass_criteria": (
-            "Before or as the call starts, Asmi's description of what it's doing is accurate. "
-            "Mentions calling the restaurant on your behalf."
-        ),
-    },
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # CATEGORY 8 — FIRST-TIME CALL PROMPT / 3P CALL NUDGE
-    # Validate: 3P nudge appears on first call only, not repeated after
-    # ══════════════════════════════════════════════════════════════════════════
-    {
-        "id": "nudge_01",
-        "name": "First call includes 3P nudge",
-        "category": "threep_nudge",
-        "type": "single",
-        "message": "Call a local Italian restaurant in Pittsburgh and ask if they take reservations",
-        "wait": 90,
-        "pass_criteria": (
-            "Message before or during the call mentions Asmi calling on your behalf. "
-            "3P framing is present — e.g. 'I'll call them for you' or similar."
-        ),
-        "precondition": "Fresh account — first ever call.",
+        'id': 'onboard_01',
+        'name': 'First message gets exactly one response',
+        'category': 'onboarding',
+        'type': 'single',
+        'message': 'Hi, what can you do?',
+        'wait': 60,
+        'expected_responses': 5,
+        'pass_criteria': 'Exactly one response arrives. Not zero, not two. Response is relevant and coherent.',
+        'precondition': 'Fresh account in pre-onboarding state.',
     },
     {
-        "id": "nudge_02",
-        "name": "Second call does NOT repeat the 3P nudge",
-        "category": "threep_nudge",
-        "type": "single",
-        "message": "Call the nearest pharmacy in Pittsburgh and ask about flu shots",
-        "wait": 120,
-        "pass_criteria": (
-            "No first-time 3P call framing appears. "
-            "Call proceeds directly without the onboarding-style nudge."
-        ),
-        "precondition": "Run after nudge_01 — second call on same account.",
+        'id': 'onboard_02',
+        'name': 'Burst during onboarding: all messages handled cleanly',
+        'category': 'onboarding',
+        'type': 'burst',
+        'messages': ['Hi', 'What can you help me with?', 'Can you make phone calls?', 'How do I get started?'],
+        'burst_delay': 1,
+        'wait': 120,
+        'expected_responses': 4,
+        'pass_criteria': 'All 4 messages receive responses. No dropped messages. No doubled replies. Onboarding flow is not broken by the burst.',
+        'precondition': 'Fresh account in pre-onboarding state.',
     },
     {
-        "id": "nudge_03",
-        "name": "Burst after first call: no nudge on any subsequent call",
-        "category": "threep_nudge",
-        "type": "burst",
-        "messages": [
-            "Call the nearest CVS in Pittsburgh and ask about their hours",
-            "Call a local pizza place and ask what time they close",
-            "Call the nearest urgent care in Pittsburgh and ask about walk-in availability",
-        ],
-        "burst_delay": 2.0,
-        "wait": 300,
-        "expected_responses": 3,
-        "pass_criteria": (
-            "None of the 3 call results include first-time 3P call framing. "
-            "All 3 proceed directly. All 3 results arrive."
-        ),
-        "precondition": "Run after nudge_01 — account has already had its first call.",
+        'id': 'onboard_03',
+        'name': 'Onboarding completes correctly end-to-end',
+        'category': 'onboarding',
+        'type': 'sequence',
+        'messages': ['Hi', 'My name is Abdul', "I'm in Pittsburgh, PA", 'What can you do for me?'],
+        'sequence_delay': 8,
+        'wait': 60,
+        'expected_responses': 4,
+        'pass_criteria': 'All 4 exchanges complete. Asmi acknowledges name and location. Final response describes capabilities.',
+        'precondition': 'Fresh account.',
+    },
+    {
+        'id': 'cap_01',
+        'name': 'What can you do: calling clearly mentioned',
+        'category': 'capability',
+        'type': 'single',
+        'message': 'What can you help me with?',
+        'wait': 60,
+        'pass_criteria': 'Response clearly mentions phone calling as a capability. Not vague — explains what kind of calls Asmi can make.',
+    },
+    {
+        'id': 'cap_02',
+        'name': 'Calling capability described accurately and specifically',
+        'category': 'capability',
+        'type': 'single',
+        'message': 'Can you make phone calls on my behalf?',
+        'wait': 60,
+        'pass_criteria': 'Response accurately describes what Asmi does during calls. Specific — not vague, not overpromising. Mentions calling businesses or services.',
+    },
+    {
+        'id': 'cap_03',
+        'name': 'Burst: 4 capability questions, consistent answers across all',
+        'category': 'capability',
+        'type': 'burst',
+        'messages': ['What can you do?', 'Can you book things for me?', 'Can you make phone calls?', "What can't you do?"],
+        'burst_delay': 1,
+        'wait': 120,
+        'expected_responses': 4,
+        'pass_criteria': 'All 4 responses arrive. Calling described consistently across questions — no contradictions. What Asmi can and cannot do is accurately represented.',
+    },
+    {
+        'id': 'cap_04',
+        'name': 'Mid-task: framing of what Asmi is about to do is accurate',
+        'category': 'capability',
+        'type': 'single',
+        'message': 'Call a local restaurant in Pittsburgh and get me a reservation for 2 people tonight at 7pm',
+        'wait': 180,
+        'pass_criteria': "Before or as the call starts, Asmi's description of what it's doing is accurate. Mentions calling the restaurant on your behalf.",
+    },
+    {
+        'id': 'nudge_01',
+        'name': 'First call includes 3P nudge',
+        'category': 'threep_nudge',
+        'type': 'single',
+        'message': 'Call a local Italian restaurant in Pittsburgh and ask if they take reservations',
+        'wait': 90,
+        'pass_criteria': "Message before or during the call mentions Asmi calling on your behalf. 3P framing is present — e.g. 'I'll call them for you' or similar.",
+        'precondition': 'Fresh account — first ever call.',
+    },
+    {
+        'id': 'nudge_02',
+        'name': 'Second call does NOT repeat the 3P nudge',
+        'category': 'threep_nudge',
+        'type': 'single',
+        'message': 'Call the nearest pharmacy in Pittsburgh and ask about flu shots',
+        'wait': 120,
+        'pass_criteria': 'No first-time 3P call framing appears. Call proceeds directly without the onboarding-style nudge.',
+        'precondition': 'Run after nudge_01 — second call on same account.',
+    },
+    {
+        'id': 'nudge_03',
+        'name': 'Burst after first call: no nudge on any subsequent call',
+        'category': 'threep_nudge',
+        'type': 'burst',
+        'messages': ['Call the nearest CVS in Pittsburgh and ask about their hours', 'Call a local pizza place and ask what time they close', 'Call the nearest urgent care in Pittsburgh and ask about walk-in availability'],
+        'burst_delay': 2,
+        'wait': 300,
+        'expected_responses': 3,
+        'pass_criteria': 'None of the 3 call results include first-time 3P call framing. All 3 proceed directly. All 3 results arrive.',
+        'precondition': 'Run after nudge_01 — account has already had its first call.',
     },
 ]
