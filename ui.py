@@ -170,10 +170,6 @@ textarea { resize: vertical; min-height: 70px; }
 .cat-label { font-size: 0.75rem; font-weight: 700; color: #64748b;
              text-transform: uppercase; letter-spacing: .06em;
              padding: 8px 0 4px; border-bottom: 1px solid #e2e8f0; margin-bottom: 8px; }
-#toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b; color: white;
-         padding: 12px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 500;
-         opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
-#toast.show { opacity: 1; }
 .new-form { background: white; border-radius: 12px; padding: 20px;
             margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
             display: none; border: 2px dashed #3b82f6; }
@@ -273,8 +269,6 @@ textarea { resize: vertical; min-height: 70px; }
 
   <div id="testList"></div>
 </main>
-
-<div id="toast"></div>
 
 <script>
 let tests = [];
@@ -446,18 +440,16 @@ function addNew() {
   if (pre)  tc.precondition  = pre;
   if (mchk) tc.manual_check  = mchk;
 
-  if (!tc.id || !tc.name) { toast('❌ ID and Name are required'); return; }
+  if (!tc.id || !tc.name) { alert('ID and Name are required'); return; }
   tests.push(tc);
   toggleNew();
   render();
-  toast('✅ Test added — click Save All to commit to GitHub');
 }
 
 function deleteTest(idx) {
   if (!confirm('Delete this test case?')) return;
   tests.splice(idx, 1);
   render();
-  toast('🗑 Deleted — click Save All to commit to GitHub');
 }
 
 async function saveAll() {
@@ -471,22 +463,15 @@ async function saveAll() {
       body: JSON.stringify(tests),
     });
     const data = await res.json();
-    if (data.ok) toast('✅ Committed to GitHub — changes sync automatically');
-    else toast('❌ Save failed: ' + data.error);
+    if (!data.ok) alert('Save failed: ' + data.error);
   } catch(e) {
-    toast('❌ Save failed: ' + e.message);
+    alert('Save failed: ' + e.message);
   } finally {
     btn.textContent = '💾 Save All';
     btn.classList.remove('saving');
   }
 }
 
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 4000);
-}
 
 load();
 </script>
