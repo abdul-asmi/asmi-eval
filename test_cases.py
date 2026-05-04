@@ -97,10 +97,11 @@ TEST_CASES = [
         'name': 'Successful call summary matches reality',
         'category': 'call_summary',
         'type': 'single',
-        'message': "Call a Domino's in Pittsburgh and ask what time they close tonight",
+        'message': 'Call me now',
         'wait': 180,
         'pass_criteria': 'Summary includes a specific closing time. Does not contain vague or invented details. If the call was answered, includes the actual response from the business.',
         'manual_check': 'Compare summary against ElevenLabs call recording to verify accuracy.',
+        'expected_responses': 5,
     },
     {
         'id': 'summary_02',
