@@ -1,0 +1,663 @@
+[
+  {
+    "id": "sticky_01",
+    "name": "Single research task arrives unprompted",
+    "category": "sticky_message",
+    "type": "single",
+    "tasks_sent": [
+      "Find me the top 3 Italian restaurants in Pittsburgh with their hours and ratings"
+    ],
+    "responses": [
+      "I'm finding the best Italian spots in Pittsburgh for you now."
+    ],
+    "verdict": "FAIL",
+    "reason": "The response provided only one restaurant instead of the requested top 3 and failed to include hours for the specific recommendation.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:47:26.553839+00:00",
+    "finished_at": "2026-05-04T17:47:41.467901+00:00",
+    "matched_responses": "\"Top Italian Spots in Pittsburgh\", \"TOP PICK\\n\u2022 Dish Osteria Bar \u2022 4.9 Stars\\nSouth Side \u2022 Opens 5 PM Tue \u2022 Sicilian & Mediterranean\\nHighest rated with a cozy vibe, perfect for high-quality seafood and pastas.\""
+  },
+  {
+    "id": "sticky_02",
+    "name": "Single research task with Sunday-specific detail",
+    "category": "sticky_message",
+    "type": "single",
+    "tasks_sent": [
+      "What are the best coffee shops in downtown Pittsburgh that are open on Sundays?"
+    ],
+    "responses": [
+      "Searching for the best coffee spots in downtown Pittsburgh for you..."
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi successfully identified three highly-rated downtown Pittsburgh coffee shops that are open on Sundays with specific operating hours.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:47:46.473169+00:00",
+    "finished_at": "2026-05-04T17:48:43.856970+00:00",
+    "matched_responses": "[2], [3], [4], [6], [7]"
+  },
+  {
+    "id": "sticky_03",
+    "name": "Burst: 4 tasks back-to-back, all arrive",
+    "category": "sticky_message",
+    "type": "burst",
+    "tasks_sent": [
+      "What is the weather like in Pittsburgh today?",
+      "What are the top 3 pizza places in Pittsburgh?",
+      "What time does Target in Pittsburgh open on weekdays?",
+      "Find me a highly rated plumber in Pittsburgh"
+    ],
+    "responses": [
+      "Sunday Coffee in Downtown Pittsburgh",
+      "TOP PICK\n\u2022 Ghost Coffee Collab \u2022 5.0 Rating\n1736 Forbes Ave \u2022 Open until 3:00 PM\nHighest possible rating with over 100 reviews, perfect for a high-quality Sunday afternoon cup.",
+      "ALSO AVAILABLE",
+      "\u2022 Novaria coffee co. (4.9 Rating)\n1812 Penn Ave \u2022 Open until 5:00 PM",
+      "\u2022 De Fer Coffee & Tea (4.8 Rating)\n2002 Smallman St \u2022 Open until 5:00 PM"
+    ],
+    "verdict": "FAIL",
+    "reason": "Asmi provided the weather and top pizza spots, but failed to provide the Target opening time or a highly rated plumber.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 5/4 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:48:48.862337+00:00",
+    "finished_at": "2026-05-04T17:48:58.575654+00:00",
+    "matched_responses": "[9], [10], [11]"
+  },
+  {
+    "id": "sticky_04",
+    "name": "Task after locking phone still arrives",
+    "category": "sticky_message",
+    "type": "single",
+    "tasks_sent": [
+      "Find me a good Thai restaurant in Pittsburgh with vegetarian options"
+    ],
+    "responses": [
+      "Gathering your local Pittsburgh updates and recommendations..."
+    ],
+    "verdict": "FAIL",
+    "reason": "None of the responses provided in the pool address the request for Thai restaurant recommendations in Pittsburgh.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": "After sending, lock your phone for 30 seconds then check \u2014 response should be waiting.",
+    "started_at": "2026-05-04T17:49:03.579860+00:00",
+    "finished_at": "2026-05-04T17:49:24.864837+00:00",
+    "matched_responses": "none found"
+  },
+  {
+    "id": "dedup_01",
+    "name": "Exact duplicate call within 2 seconds \u2192 only one call fires",
+    "category": "call_dedup",
+    "type": "dedup",
+    "tasks_sent": [
+      "Call a local pharmacy in Pittsburgh and ask if they have flu shots available",
+      "Call a local pharmacy in Pittsburgh and ask if they have flu shots available"
+    ],
+    "responses": [
+      "Pittsburgh Update for Monday",
+      "\u2600\ufe0f Today's Weather\nIt's a pleasant, breezy day in Pittsburgh with a high near 75\u00b0F. Rain chances are low (around 15%) until the evening, but keep an eye out for scattered showers and gusty winds arriving tomorrow.",
+      "I'm finding the best Italian spots in Pittsburgh for you now.",
+      "\ud83c\udf55 Top Pizza Spots\n\u2022 Pizza Parma (Liberty Ave) \u2022 4.7\u2605 \u2022 Fresh and flavorful\n\u2022 Fiori's Pizzaria (Capital Ave) \u2022 4.7\u2605 \u2022 Famous cozy atmosphere\n\u2022 Genoa Pizza & Bar (Market St) \u2022 4.6\u2605 \u2022 Friendly staff and great crust"
+    ],
+    "verdict": "FAIL",
+    "reason": "Dedup failed \u2014 got 4 responses, expected 1. Two calls may have fired. | The provided responses do not show any attempt to call a pharmacy regarding flu shots for these specific tasks, nor is there evidence of deduplication logic being applied.",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Dedup failed \u2014 got 4 responses, expected 1. Two calls may have fired."
+    },
+    "manual_check": "Open ElevenLabs dashboard \u2014 confirm only 1 call was initiated.",
+    "note": null,
+    "started_at": "2026-05-04T17:49:29.870214+00:00",
+    "finished_at": "2026-05-04T17:49:41.185752+00:00",
+    "matched_responses": "none found"
+  },
+  {
+    "id": "dedup_02",
+    "name": "Near-duplicate call within 5 seconds \u2192 treated as one",
+    "category": "call_dedup",
+    "type": "dedup",
+    "tasks_sent": [
+      "Call the nearest CVS in Pittsburgh and ask about their hours",
+      "Can you call CVS and check what time they close today?"
+    ],
+    "responses": [
+      "Top Italian Spots in Pittsburgh",
+      "TOP PICK\n\u2022 Dish Osteria Bar \u2022 4.9 Stars\nSouth Side \u2022 Opens 5 PM Tue \u2022 Sicilian & Mediterranean\nHighest rated with a cozy vibe, perfect for high-quality seafood and pastas.",
+      "Top Italian Restaurants in Pittsburgh",
+      "ALSO AVAILABLE"
+    ],
+    "verdict": "FAIL",
+    "reason": "Dedup failed \u2014 got 4 responses, expected 1. Two calls may have fired. | The assistant aggregated the two requests into a single task (\"the nearby CVS for their hours today\"), showing it understood they were related and avoided duplicate call entries.",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Dedup failed \u2014 got 4 responses, expected 1. Two calls may have fired."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:49:46.190993+00:00",
+    "finished_at": "2026-05-04T17:49:51.467084+00:00",
+    "matched_responses": "\"I've queued those calls for you. I'm checking with Domino's on Stanwix St for their closing time, Walgreens on Centre Ave about flu shot stock, and the nearby CVS for their hours today.\""
+  },
+  {
+    "id": "dedup_03",
+    "name": "Two genuinely different call tasks both fire independently",
+    "category": "call_dedup",
+    "type": "sequence",
+    "tasks_sent": [
+      "Call the nearest CVS in Pittsburgh and ask about flu shots",
+      "Also call the nearest Walgreens and ask the same question"
+    ],
+    "responses": [
+      "Craving pasta yet? I can help with directions or check for more spots if you like.",
+      "\u2022 Here's what I read:\nYou're on a mission for flu shots in Pittsburgh. You need to call:\n\u2022 Local pharmacies\n\u2022 CVS (and check their closing time today)\n\u2022 Walgreens"
+    ],
+    "verdict": "PASS",
+    "reason": "The AI successfully identified both pharmacies, scheduled calls to both, and provided distinct, independent updates regarding the specific status and availability of each location.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 2/2 responses."
+    },
+    "manual_check": "ElevenLabs dashboard should show 2 separate calls.",
+    "note": null,
+    "started_at": "2026-05-04T17:49:56.472180+00:00",
+    "finished_at": "2026-05-04T17:50:34.449393+00:00",
+    "matched_responses": "[16], [19], [20], [43], [44]"
+  },
+  {
+    "id": "dedup_04",
+    "name": "Burst 4 different call tasks: all 4 fire and return results",
+    "category": "call_dedup",
+    "type": "burst",
+    "tasks_sent": [
+      "Call the nearest CVS in Pittsburgh and ask about their hours",
+      "Call the nearest Walgreens in Pittsburgh and ask about flu shots",
+      "Call Domino's in Pittsburgh and ask what time they close tonight",
+      "Call a local Italian restaurant in Pittsburgh and ask if they take reservations"
+    ],
+    "responses": [
+      "Locating pharmacies and scheduling verification calls...",
+      "Pharmacy Flu Shot Availability",
+      "TOP PICK\n\u2022 CVS \u2022 Call Scheduled\n4610 Centre Ave \u2022 Pittsburgh, PA 15213\nI've scheduled calls to the nearest locations to verify their closing hours and confirm flu shot stock for you.",
+      "ALSO AVAILABLE",
+      "\u2022 Walgreens Pharmacy (Call Scheduled)\n5956 Centre Ave Ste 4 \u2022 Pittsburgh, PA 15206"
+    ],
+    "verdict": "FAIL",
+    "reason": "While Asmi acknowledged all four requests, it failed to provide results for the flu shot availability at Walgreens, failed to provide a result for Domino's closing time, and used a specific restaurant (Alla Famiglia) instead of checking a general local Italian restaurant.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 5/4 responses."
+    },
+    "manual_check": "ElevenLabs should show 4 distinct calls.",
+    "note": null,
+    "started_at": "2026-05-04T17:50:39.454727+00:00",
+    "finished_at": "2026-05-04T17:51:01.197127+00:00",
+    "matched_responses": "\"[17] Locating pharmacies and scheduling verification calls... [18] Pharmacy Flu Shot Availability [19] TOP PICK \u2022 CVS \u2022 Call Scheduled 4610 Centre Ave \u2022 Pittsburgh, PA 15213 I've scheduled calls to the nearest locations to verify their closing hours and confirm flu shot stock for you. [20] \u2022 Walgreens Pharmacy (Call Scheduled) 5956 Centre Ave Ste 4 \u2022 Pittsburgh, PA 15206 [23] \u2022 Domino's (Stanwix St): Verifying their exact closing time for tonight. \u2022 Alla Famiglia: Confirming their closing hours and how they handle reservations for this evening.\""
+  },
+  {
+    "id": "summary_01",
+    "name": "Successful call summary matches reality",
+    "category": "call_summary",
+    "type": "single",
+    "tasks_sent": [
+      "Call a Domino's in Pittsburgh and ask what time they close tonight"
+    ],
+    "responses": [
+      "\u2022 Here's what I read:\n\u2022 Check Pittsburgh CVS/Walgreens for hours and flu shots\n\u2022 Confirm Domino's closing time\n\u2022 Ask a local Italian spot about reservations\n\nYou're on a mission to get things done in the Steel City today."
+    ],
+    "verdict": "FAIL",
+    "reason": "The AI failed to obtain the closing time and did not provide the requested information.",
+    "count_verdict": null,
+    "manual_check": "Compare summary against ElevenLabs call recording to verify accuracy.",
+    "note": null,
+    "started_at": "2026-05-04T17:51:06.198987+00:00",
+    "finished_at": "2026-05-04T17:51:15.431579+00:00",
+    "matched_responses": "\"Domino's has me trapped in an infinite loop of automated menus and recorded warnings. Should I try calling back later when a human might actually be around?\""
+  },
+  {
+    "id": "summary_02",
+    "name": "Unanswered call reported honestly, not invented",
+    "category": "call_summary",
+    "type": "single",
+    "tasks_sent": [
+      "Call +14085550100 and ask about their hours"
+    ],
+    "responses": [
+      "I've queued up those calls for you. Here\u2019s who I\u2019m checking in with:",
+      "\u2022 Domino's (Stanwix St): Verifying their exact closing time for tonight.\n\u2022 Alla Famiglia: Confirming their closing hours and how they handle reservations for this evening."
+    ],
+    "verdict": "FAIL",
+    "reason": "None of the provided responses address a call to +14085550100 or indicate that the call could not be completed.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:51:20.432452+00:00",
+    "finished_at": "2026-05-04T17:51:44.702175+00:00",
+    "matched_responses": "none found"
+  },
+  {
+    "id": "summary_03",
+    "name": "Two back-to-back calls: summaries don't cross-contaminate",
+    "category": "call_summary",
+    "type": "burst",
+    "tasks_sent": [
+      "Call the nearest Walgreens in Pittsburgh and ask if they have flu shots",
+      "Call the nearest CVS in Pittsburgh and ask about their hours today"
+    ],
+    "responses": [
+      "I'm reaching out to Walgreens, CVS, and Domino's to verify those times and flu shot details for you.",
+      "I've queued those calls for you. I'm checking with Domino's on Stanwix St for their closing time, Walgreens on Centre Ave about flu shot stock, and the nearby CVS for their hours today."
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi successfully executed the calls and reported flu shot availability/pharmacy status separately for each pharmacy without mixing the details.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 2/2 responses."
+    },
+    "manual_check": "Check ElevenLabs recordings for both calls individually.",
+    "note": null,
+    "started_at": "2026-05-04T17:51:49.707134+00:00",
+    "finished_at": "2026-05-04T17:52:44.188951+00:00",
+    "matched_responses": "\"I checked with the Walgreens in Crafton for you! The pharmacy is open until 7:00 PM tonight... I reached out to the CVS on Centre Ave for you. The pharmacy is open until 9:00 PM today...\""
+  },
+  {
+    "id": "summary_04",
+    "name": "Call to business that can't answer specific question \u2014 no hallucination",
+    "category": "call_summary",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local restaurant in Pittsburgh and ask who their head chef is"
+    ],
+    "responses": [
+      "I'm looking into the Italian restaurant details and preparing to call about their head chef."
+    ],
+    "verdict": "FAIL",
+    "reason": "Asmi expressed intent to call but never provided the actual result of the call or communicated the outcome, leaving the task incomplete.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:52:49.194249+00:00",
+    "finished_at": "2026-05-04T17:53:04.468801+00:00",
+    "matched_responses": "\"I'm looking into the Italian restaurant details and preparing to call about their head chef.\""
+  },
+  {
+    "id": "lang_01",
+    "name": "First call task: no language preference asked before call fires",
+    "category": "language_pref",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local Italian restaurant in Pittsburgh and ask if they have outdoor seating"
+    ],
+    "responses": [
+      "I've scheduled those calls to track down the head chefs for you.",
+      "I\u2019ll reach out to Alla Famiglia today once they open at 4:00 PM. Since Dish Osteria Bar is closed until tomorrow, I have a call set for them at 5:00 PM Tuesday to get that name for you."
+    ],
+    "verdict": "PASS",
+    "reason": "The assistant acknowledges the request and proceeds to investigate the information without stopping to ask for language preferences or permission.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:53:09.474107+00:00",
+    "finished_at": "2026-05-04T17:53:15.714914+00:00",
+    "matched_responses": "\"I'm looking into the outdoor seating options for the Italian restaurants we discussed.\""
+  },
+  {
+    "id": "lang_02",
+    "name": "Burst: 3 call tasks, none trigger language prompt upfront",
+    "category": "language_pref",
+    "type": "burst",
+    "tasks_sent": [
+      "Call the nearest pharmacy in Pittsburgh and ask about flu shots",
+      "Call a local Italian restaurant in Pittsburgh and ask about reservations",
+      "Call the nearest urgent care in Pittsburgh and ask about walk-in hours"
+    ],
+    "responses": [
+      "I'm looking into the outdoor seating options for the Italian restaurants we discussed.",
+      "I checked with the Walgreens in Crafton for you! The pharmacy is open until 7:00 PM tonight, though they are currently on a meal break until 2:00 PM.",
+      "Since they were on break, I couldn't confirm the flu shot availability just yet. Would you like me to try calling them back after 2:00 PM to double-check that for you?"
+    ],
+    "verdict": "FAIL",
+    "reason": "The model required multiple turns and failed to perform all three tasks in a single burst without interrupting to ask for additional information or clarification.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 3/3 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:53:20.715157+00:00",
+    "finished_at": "2026-05-04T17:53:31.932738+00:00",
+    "matched_responses": "\"I checked with the Walgreens in Crafton for you!\", \"I checked with Concentra Urgent Care and they are open until 5:00 PM today for walk-ins.\", \"Alla Famiglia let their voicemail do the talking: they close at 9 PM tonight and only take bookings via OpenTable.\""
+  },
+  {
+    "id": "lang_03",
+    "name": "Explicit language in request: no re-ask",
+    "category": "language_pref",
+    "type": "single",
+    "tasks_sent": [
+      "Call a restaurant in Pittsburgh in English and ask about their menu"
+    ],
+    "responses": [
+      "Domino's has me trapped in an infinite loop of automated menus and recorded warnings. Should I try calling back later when a human might actually be around?"
+    ],
+    "verdict": "FAIL",
+    "reason": "None of the responses in the provided pool address the specific task of calling a restaurant to inquire about their menu.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:53:36.938177+00:00",
+    "finished_at": "2026-05-04T17:53:58.228210+00:00",
+    "matched_responses": "none found"
+  },
+  {
+    "id": "loc_01",
+    "name": "Location retained across 3 follow-up tasks (sequence)",
+    "category": "location_memory",
+    "type": "sequence",
+    "tasks_sent": [
+      "Find a good sushi restaurant near me in Pittsburgh, PA",
+      "Now find a good Italian restaurant near me",
+      "What is the closest urgent care to me?",
+      "Find a pharmacy near me"
+    ],
+    "responses": [
+      "CVS is gatekeeping their hours behind a 10-digit ID verification. Should I try again with your phone number, or do you want to handle this one?",
+      "Pittsburgh Updates and Calls",
+      "Alla Famiglia let their voicemail do the talking: they close at 9 PM tonight and only take bookings via OpenTable. Want me to grab you a table there, or should we look elsewhere?",
+      "I'm gathering the top sushi spots, revisiting those Italian favorites, and finding the nearest urgent care for you."
+    ],
+    "verdict": "PASS",
+    "reason": "The assistant successfully maintained the context of Pittsburgh across all follow-up requests without requiring the location to be restated.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 4/4 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:54:03.233469+00:00",
+    "finished_at": "2026-05-04T17:55:01.030021+00:00",
+    "matched_responses": "\"I'm gathering the top sushi spots, revisiting those Italian favorites, and finding the nearest urgent care for you.\", \"I've pulled up the details for several spots in Pittsburgh, including Synchrony Pharmacy, CVS on Centre and Forbes, and urgent care options like UPMC-GoHealth, iHealth, and Concentra.\""
+  },
+  {
+    "id": "loc_02",
+    "name": "Burst: 4 location tasks after setup, no re-ask",
+    "category": "location_memory",
+    "type": "burst_with_setup",
+    "tasks_sent": [
+      "I'm based in Pittsburgh, PA",
+      "Find a pizza place near me",
+      "Find a coffee shop near me",
+      "Find a gym near me",
+      "Find a grocery store near me"
+    ],
+    "responses": [
+      "Searching for nearby pharmacies and preparing your update...",
+      "Pharmacies Near Pittsburgh",
+      "TOP PICK\n\u2022 Schiller's Apothecary \u2022 4.9 Stars\n811 S Aiken Ave \u2022 Open until 6:00 PM\nThis is the top-rated local choice with excellent reviews and delivery services available.",
+      "ALSO AVAILABLE"
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.819037301s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 4/4 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:55:06.038570+00:00",
+    "finished_at": "2026-05-04T17:55:40.375487+00:00"
+  },
+  {
+    "id": "loc_03",
+    "name": "Location retained after providing it during a call task",
+    "category": "location_memory",
+    "type": "sequence",
+    "tasks_sent": [
+      "Call the nearest Walgreens to me in Pittsburgh and ask about flu shots",
+      "Now find me a pharmacy near me that's open late"
+    ],
+    "responses": [
+      "Need me to call any of these to check for specific stock?",
+      "Pittsburgh Local Picks"
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.703610032s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 2/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:55:45.379019+00:00",
+    "finished_at": "2026-05-04T17:56:27.750774+00:00"
+  },
+  {
+    "id": "onboard_01",
+    "name": "First message gets exactly one response",
+    "category": "onboarding",
+    "type": "single",
+    "tasks_sent": [
+      "Hi, what can you do?"
+    ],
+    "responses": [
+      "I'm ready to call Walgreens about those flu shots\u2014can you share your street address or zip code so I can find the one closest to you?"
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.624124805s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:56:32.754698+00:00",
+    "finished_at": "2026-05-04T17:56:35.955070+00:00"
+  },
+  {
+    "id": "onboard_02",
+    "name": "Burst during onboarding: all messages handled cleanly",
+    "category": "onboarding",
+    "type": "burst",
+    "tasks_sent": [
+      "Hi",
+      "What can you help me with?",
+      "Can you make phone calls?",
+      "How do I get started?"
+    ],
+    "responses": [
+      "I reached out to the CVS on Centre Ave for you. The pharmacy is open until 9:00 PM today, but they do take a lunch break until 2:00 PM.",
+      "The representative mentioned the front store is actually closed right now and isn't scheduled to reopen until Wednesday at 7:00 AM.",
+      "Finding late-night pharmacies for you and preparing a guide on how I can help.",
+      "I checked with Concentra Urgent Care and they are open until 5:00 PM today for walk-ins.",
+      "Just a heads up: if you need any blood work done, they mentioned you'll need to arrive before 1:00 PM."
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.502711756s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 5/4 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:56:40.960429+00:00",
+    "finished_at": "2026-05-04T17:57:12.138363+00:00"
+  },
+  {
+    "id": "onboard_03",
+    "name": "Onboarding completes correctly end-to-end",
+    "category": "onboarding",
+    "type": "sequence",
+    "tasks_sent": [
+      "Hi",
+      "My name is Abdul",
+      "I'm in Pittsburgh, PA",
+      "What can you do for me?"
+    ],
+    "responses": [
+      "Late Night Pharmacies in Pittsburgh",
+      "Hey honey!",
+      "Got it. I'll keep everything centered around Pittsburgh.",
+      "I handle the stuff you don't have time for."
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.397546631s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 4/4 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:57:17.143727+00:00",
+    "finished_at": "2026-05-04T17:58:14.833767+00:00"
+  },
+  {
+    "id": "cap_01",
+    "name": "What can you do: calling clearly mentioned",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "What can you help me with?"
+    ],
+    "responses": [
+      "I'm your person for getting things done\u2014think of me as your chief of staff."
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.332808282s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:58:19.839135+00:00",
+    "finished_at": "2026-05-04T17:58:32.104411+00:00"
+  },
+  {
+    "id": "cap_02",
+    "name": "Calling capability described accurately and specifically",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "Can you make phone calls on my behalf?"
+    ],
+    "responses": [
+      "Absolutely. I can call businesses or people to get info, book things, or follow up."
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.265252127s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:58:37.108744+00:00",
+    "finished_at": "2026-05-04T17:58:46.433214+00:00"
+  },
+  {
+    "id": "cap_03",
+    "name": "Burst: 4 capability questions, consistent answers across all",
+    "category": "capability",
+    "type": "burst",
+    "tasks_sent": [
+      "What can you do?",
+      "Can you book things for me?",
+      "Can you make phone calls?",
+      "What can't you do?"
+    ],
+    "responses": [
+      "I can't handle payments or anything irreversible, like hitting 'buy' on a cart.",
+      "And I don't have access to your email or calendar unless you specifically ask me to set that up."
+    ],
+    "verdict": "FAIL",
+    "reason": "Only got 2/4 responses \u2014 2 dropped or timed out. | Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.194093078s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Only got 2/4 responses \u2014 2 dropped or timed out."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T17:58:51.438541+00:00",
+    "finished_at": "2026-05-04T18:00:55.418880+00:00"
+  },
+  {
+    "id": "cap_04",
+    "name": "Mid-task: framing of what Asmi is about to do is accurate",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local restaurant in Pittsburgh and get me a reservation for 2 people tonight at 7pm"
+    ],
+    "responses": [
+      "Setting your preferences and preparing a summary of my services for you."
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.074772067s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T18:01:00.420869+00:00",
+    "finished_at": "2026-05-04T18:01:15.690560+00:00"
+  },
+  {
+    "id": "nudge_01",
+    "name": "First call includes 3P nudge",
+    "category": "threep_nudge",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local Italian restaurant in Pittsburgh and ask if they take reservations"
+    ],
+    "responses": [
+      "Dinner in Pittsburgh",
+      "TOP PICK\n\u2022 Alla Famiglia \u2022 Opens 4 PM\nBeltzhoover \u2022 Italian Classics\nThis is your best bet for tonight since it's the only one of your favorites open this evening.",
+      "ALSO AVAILABLE"
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 37.010941319s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.1-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T18:01:20.692640+00:00",
+    "finished_at": "2026-05-04T18:01:23.936590+00:00"
+  },
+  {
+    "id": "nudge_02",
+    "name": "Second call does NOT repeat the 3P nudge",
+    "category": "threep_nudge",
+    "type": "single",
+    "tasks_sent": [
+      "Call the nearest pharmacy in Pittsburgh and ask about flu shots"
+    ],
+    "responses": [
+      "I tried calling UPMC-GoHealth Urgent Care on Baum Blvd for you, but I wasn't able to reach a person. Their phone system only offers automated options for text messaging or email support.",
+      "Since I couldn't verify today's walk-in availability over the phone, you might want to try their online 'save your spot' feature or visit the clinic directly before they close at 8 PM."
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 36.936525365s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.1-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '36s'}]}}",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T18:01:28.941877+00:00",
+    "finished_at": "2026-05-04T18:01:41.226040+00:00"
+  },
+  {
+    "id": "nudge_03",
+    "name": "Burst after first call: no nudge on any subsequent call",
+    "category": "threep_nudge",
+    "type": "burst",
+    "tasks_sent": [
+      "Call the nearest CVS in Pittsburgh and ask about their hours",
+      "Call a local pizza place and ask what time they close",
+      "Call the nearest urgent care in Pittsburgh and ask about walk-in availability"
+    ],
+    "responses": [
+      "To get these calls moving, I just need a little more detail.",
+      "Could you share your zip code or street address? I want to make sure I'm contacting the Walgreens closest to you. Once I have that, I can also reach out to Alla Famiglia for your 7 PM reservation.",
+      "I've pulled up the details for several spots in Pittsburgh, including Synchrony Pharmacy, CVS on Centre and Forbes, and urgent care options like UPMC-GoHealth, iHealth, and Concentra."
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 36.820851165s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '36s'}]}}",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 3/3 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-04T18:01:46.230389+00:00",
+    "finished_at": "2026-05-04T18:02:23.849022+00:00"
+  }
+]
