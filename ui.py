@@ -358,7 +358,12 @@ function render() {
 
   let html = '';
   for (const [cat, items] of Object.entries(bycat)) {
-    html += `<div class="cat-section"><div class="cat-label">${CAT_LABELS[cat]||cat} (${items.length})</div>`;
+    html += `<div class="cat-section">
+      <div class="cat-label" style="display:flex;align-items:center">
+        <span>${CAT_LABELS[cat]||cat} (${items.length})</span>
+        <button class="btn btn-run" style="margin-left:auto;padding:3px 12px;font-size:0.75rem"
+          onclick="runByCategory('${cat}')">▶ Run category</button>
+      </div>`;
     items.forEach(t => { html += renderCard(t); });
     html += '</div>';
   }
@@ -423,6 +428,7 @@ function renderCard(t) {
         </div>
       </div>
       <div class="form-actions">
+        <button class="btn btn-run" onclick="runById('${t.id}')">▶ Run this test</button>
         <button class="btn btn-success" onclick="saveAll()">💾 Save to GitHub</button>
         <button class="btn btn-danger" onclick="deleteTest(${idx})">🗑 Delete</button>
       </div>
@@ -519,36 +525,44 @@ let _pollTimer = null;
 let _runStart  = 0;
 
 async function runTests() {
-  const btn = document.getElementById('runBtn');
-  btn.textContent = '⏳ Queuing…';
-  btn.classList.add('saving');
+  const cat = document.getElementById('runCat').value;
+  await _triggerRun({category: cat || null});
+}
+
+async function runById(id) {
+  await _triggerRun({id});
+}
+
+async function runByCategory(cat) {
+  await _triggerRun({category: cat});
+}
+
+async function _triggerRun(payload) {
+  const label = payload.id ? `test: ${payload.id}` :
+                payload.category ? `category: ${payload.category}` : 'all tests';
   try {
-    const cat = document.getElementById('runCat').value;
     const res = await fetch('/api/run', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({category: cat || null}),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (data.mac_online) {
-      toast('✅ Run started on your Mac!');
-      _openOutput();
+      toast(`✅ Running ${label}…`);
+      _openOutput(`Running ${label}…`);
     } else {
       toast('⚠️ Mac is offline — daemon not running');
     }
   } catch(e) {
     toast('❌ Failed to queue run: ' + e.message);
-  } finally {
-    btn.textContent = '▶ Run';
-    btn.classList.remove('saving');
   }
 }
 
-function _openOutput() {
+function _openOutput(label) {
   _runStart = Date.now();
   document.getElementById('outputPanel').style.display = 'block';
   document.getElementById('outputBody').textContent = '';
-  document.getElementById('outputStatus').textContent = '⏳ Waiting for daemon…';
+  document.getElementById('outputStatus').textContent = `⏳ ${label || 'Waiting for daemon…'}`;
   document.getElementById('outputElapsed').textContent = '';
   if (_pollTimer) clearInterval(_pollTimer);
   _pollTimer = setInterval(_pollOutput, 3000);
