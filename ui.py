@@ -628,7 +628,7 @@ class Handler(BaseHTTPRequestHandler):
             self._html(HTML)
 
     def do_POST(self):
-        global _pending_run, _last_heartbeat
+        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started
         path = urlparse(self.path).path
         if path == "/api/tests":
             length = int(self.headers.get("Content-Length", 0))
@@ -640,7 +640,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
         elif path == "/api/run":
-            global _run_output, _run_status, _run_started
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
             try:
@@ -658,7 +657,6 @@ class Handler(BaseHTTPRequestHandler):
             mac_online = (time.time() - _last_heartbeat) < 90
             self._json({"ok": True, "mac_online": mac_online})
         elif path == "/api/output":
-            global _run_output, _run_status
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
             try:
