@@ -724,4 +724,166 @@ TEST_CASES = [
         'pass_criteria': 'If the business doesn\'t answer or can\'t answer, Asmi reports honestly. Does NOT make up an answer or a conversation that didn\'t happen.',
     },
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CADENCE CONTROL & CALL SPAM  [P0 — from user insights]
+    # Users: Mayank / Devdutta / Arpita / Shubham / Mukil / Vaibhav
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    {
+        'id': 'cadence_01',
+        'name': 'Stop calling: user says stop → Asmi stops immediately, no retry',
+        'category': 'cadence_control',
+        'type': 'sequence',
+        'messages': [
+            'Stop calling me about this',
+            'I already said stop, please do not call again',
+        ],
+        'sequence_delay': 5,
+        'wait': 60,
+        'expected_responses': 2,
+        'pass_criteria': 'Asmi acknowledges stop request immediately. Does NOT ask "are you sure?". Does NOT re-surface calling. Second message also gets a calm acknowledgement — not a re-ask.',
+        'note': 'P0: Mayank/Devdutta/Arpita/Shubham/Mukil all reported repeated unwanted calls that required multiple attempts to stop.',
+    },
+
+    {
+        'id': 'cadence_02',
+        'name': 'Cadence reduction: user asks for less frequent messages → Asmi confirms and reduces',
+        'category': 'cadence_control',
+        'type': 'sequence',
+        'messages': [
+            'You are messaging me too much. Only update me once a day.',
+            'Actually make it once a week.',
+        ],
+        'sequence_delay': 5,
+        'wait': 60,
+        'expected_responses': 2,
+        'pass_criteria': 'Asmi acknowledges each cadence change and confirms the new frequency. Does not continue at old frequency. Clear confirmation: "Got it, I\'ll only update you once a week."',
+    },
+
+    {
+        'id': 'cadence_03',
+        'name': 'Reminder setup: single confirmation only, no spam burst',
+        'category': 'cadence_control',
+        'type': 'single',
+        'message': 'Remind me to exercise every day this week',
+        'wait': 60,
+        'expected_responses': 1,
+        'pass_criteria': 'Asmi confirms reminder setup in exactly 1 message. Does NOT send multiple follow-up confirmations or status pings. One clean response, then silence until trigger time.',
+        'note': 'P0: Vaibhav reported fitness accountability loop sent ~20 messages every 2 hours instead of periodic reminders.',
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TASK RELIABILITY  [P1 — from user insights]
+    # Users: Vaibhav / Shipra / Mudit
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    {
+        'id': 'reliable_01',
+        'name': 'Silent failure: closed task always returns explicit outcome, never silently drops',
+        'category': 'task_reliability',
+        'type': 'single',
+        'message': 'Research the best laser printers under $300 and let me know what you find',
+        'wait': 150,
+        'expected_responses': 1,
+        'pass_criteria': 'Asmi returns explicit research findings OR a clear reason why it could not complete. Task does NOT silently close with no message. Result must be specific, not "I\'ll look into that."',
+        'note': 'P1: Vaibhav reported a printer research task was silently closed — user never received the outcome.',
+    },
+
+    {
+        'id': 'reliable_02',
+        'name': 'Business call execution: calls the business, does not just return a phone number',
+        'category': 'task_reliability',
+        'type': 'single',
+        'message': 'Call Comcast customer service and ask how to pause my subscription for a month',
+        'wait': 180,
+        'expected_responses': 1,
+        'pass_criteria': 'Asmi attempts the call and reports the outcome (what happened, what they said, result). Does NOT respond with just a phone number or Google search results. If call fails, gives a specific reason why.',
+        'note': 'P1: Vaibhav expected Asmi to call ISP reps but received phone numbers / search results instead.',
+    },
+
+    {
+        'id': 'reliable_03',
+        'name': 'Delegated call uses correct nickname, not full name, and delivers correct message',
+        'category': 'task_reliability',
+        'type': 'sequence',
+        'messages': [
+            'My boyfriend\'s name is Alex but I always call him Lex',
+            'Can you call Lex and tell him I\'ll be 20 minutes late to dinner?',
+        ],
+        'sequence_delay': 8,
+        'wait': 150,
+        'expected_responses': 2,
+        'pass_criteria': 'Asmi uses the nickname (Lex) when referring to the contact. Message delivered is accurate: "20 minutes late to dinner" — not paraphrased incorrectly. No context loss between messages.',
+        'note': 'P1: Shipra reported Asmi used full name instead of nickname and delivered wrong message content.',
+    },
+
+    {
+        'id': 'reliable_04',
+        'name': 'Post-call text summary sent by default after every call',
+        'category': 'task_reliability',
+        'type': 'single',
+        'message': 'Call a dentist in Pittsburgh and ask about their next available appointment for a cleaning',
+        'wait': 180,
+        'expected_responses': 1,
+        'pass_criteria': 'After the call, Asmi sends a specific text summary: who answered, what was discussed, what the next available appointment is. Not vague ("I called them"). Concrete outcome.',
+        'note': 'P1: Shipra noted post-call summaries existed previously but stopped being sent.',
+    },
+
+    {
+        'id': 'reliable_05',
+        'name': 'Context survives 4-5 message gaps without being dropped',
+        'category': 'task_reliability',
+        'type': 'sequence',
+        'messages': [
+            'My name is Sarah and I live in Austin, Texas',
+            'What is the weather like today?',
+            'Any good coffee shops nearby?',
+            'Find me a dentist who takes Aetna insurance',
+            'Can you now call the first dentist you found?',
+        ],
+        'sequence_delay': 8,
+        'wait': 150,
+        'expected_responses': 5,
+        'pass_criteria': 'By message 5, Asmi still knows user is in Austin, TX. Call is placed to a dentist found in Austin. No re-asking for location. Context from message 1 persists throughout.',
+        'note': 'P1: Shipra reported context being dropped 4-5 times across conversations.',
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TIMEZONE (expanded from user insights)
+    # Users: Pankaj / Arpita / Shipra / Digant
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    {
+        'id': 'tz_02',
+        'name': 'Timezone: IST user gets calls and reminders at correct Indian time',
+        'category': 'timezone',
+        'type': 'sequence',
+        'messages': [
+            'I am based in India (IST). Please remember this.',
+            'Set a reminder for 8pm tonight',
+            'Schedule a call for 10am tomorrow my time',
+        ],
+        'sequence_delay': 5,
+        'wait': 90,
+        'expected_responses': 3,
+        'pass_criteria': 'Asmi acknowledges IST. Confirms 8pm IST (not 8pm US time). Confirms 10am IST for tomorrow. Does NOT silently convert to US timezone without explicit acknowledgement.',
+        'note': 'P0: Shipra needed multiple corrections before Asmi reliably used IST. Pankaj got midnight calls due to timezone errors.',
+    },
+
+    {
+        'id': 'tz_03',
+        'name': 'Timezone: single explicit location mention locks timezone for session',
+        'category': 'timezone',
+        'type': 'sequence',
+        'messages': [
+            'I\'m in London right now',
+            'Call a restaurant here and ask if they\'re open at 7pm',
+            'Set a reminder for 9pm',
+        ],
+        'sequence_delay': 5,
+        'wait': 120,
+        'expected_responses': 3,
+        'pass_criteria': 'After user says "London", all time references in messages 2 and 3 use GMT/BST. Call inquiry uses London time. Reminder is set for 9pm GMT/BST — not US time. No re-asking for timezone.',
+    },
+
 ]

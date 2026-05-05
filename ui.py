@@ -293,20 +293,39 @@ header { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 55%, #4c1d95 10
 .btn-outline:hover { background: #f9fafb; }
 .count { background: #eff6ff; color: #1d4ed8; padding: 4px 10px;
          border-radius: 99px; font-size: 0.8rem; font-weight: 700; margin-left: auto; }
-main { padding: 24px; max-width: 1000px; margin: 0 auto; }
-.card { background: white; border-radius: 12px; margin-bottom: 16px;
-        box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden; }
-.card-header { padding: 14px 18px; display: flex; align-items: center; gap: 10px;
-               cursor: pointer; border-bottom: 1px solid #f1f5f9; }
-.card-header:hover { background: #f8fafc; }
-.card-body { padding: 18px; display: none; }
-.card-body.open { display: block; }
+main { padding: 24px; max-width: 1300px; margin: 0 auto; }
+/* Monday.com style table */
+.test-table { width:100%; border-collapse:collapse; background:white;
+              border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.test-table th { padding:9px 12px; text-align:left; font-size:0.7rem; font-weight:700;
+                  text-transform:uppercase; letter-spacing:.05em; color:#94a3b8;
+                  background:#f8fafc; border-bottom:2px solid #e2e8f0; white-space:nowrap; }
+.test-table td { padding:9px 12px; vertical-align:middle; border-bottom:1px solid #f1f5f9;
+                  font-size:0.87rem; }
+.cat-row td { background:#f8fafc; font-size:0.72rem; font-weight:700; text-transform:uppercase;
+              letter-spacing:.06em; color:#64748b; padding:6px 12px;
+              border-top:2px solid #e2e8f0; border-bottom:1px solid #e2e8f0; }
+.test-row:hover td { background:#fafbff; cursor:pointer; }
+.test-row.editing > td { background:#eff6ff !important; }
+.edit-row > td { padding:0; background:white !important; }
+.edit-form-inner { padding:18px; border-top:3px solid #3b82f6; }
+.result-row > td { padding:0; }
+.cat-pill { display:inline-block; padding:2px 8px; border-radius:99px;
+            font-size:0.69rem; font-weight:700; white-space:nowrap; }
+.type-pill { display:inline-block; padding:2px 7px; border-radius:4px; font-size:0.7rem;
+             font-weight:600; background:#f0fdf4; color:#15803d; white-space:nowrap; }
+.msg-cell { max-width:300px; overflow:hidden; text-overflow:ellipsis;
+            white-space:nowrap; color:#475569; font-size:0.82rem; }
+.id-cell { font-family:monospace; font-size:0.78rem; color:#94a3b8; white-space:nowrap; }
+.run-cell-btn { background:#7c3aed; color:white; border:none; border-radius:5px;
+                padding:4px 9px; font-size:0.8rem; font-weight:700; cursor:pointer; }
+.run-cell-btn:hover { background:#6d28d9; }
+.run-cell-btn:disabled { opacity:.5; cursor:not-allowed; }
+.action-btn { background:none; border:none; cursor:pointer; font-size:0.9rem;
+              padding:3px 5px; border-radius:4px; color:#64748b; }
+.action-btn:hover { background:#f1f5f9; color:#1e293b; }
 .badge { padding: 2px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; }
-.badge-cat { background: #eff6ff; color: #1d4ed8; }
-.badge-type { background: #f0fdf4; color: #15803d; }
 .badge-warn { background: #fffbeb; color: #b45309; }
-.test-name { font-weight: 600; flex: 1; font-size: 0.95rem; }
-.test-id { color: #94a3b8; font-size: 0.8rem; font-family: monospace; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-full { grid-column: 1 / -1; }
 label { display: block; font-size: 0.78rem; font-weight: 600; color: #475569;
@@ -318,11 +337,7 @@ input[type=text], textarea, select {
 input[type=text]:focus, textarea:focus, select:focus {
     outline: none; border-color: #3b82f6; background: white; }
 textarea { resize: vertical; min-height: 70px; }
-.form-actions { margin-top: 16px; display: flex; gap: 8px; }
-.cat-section { margin-bottom: 8px; }
-.cat-label { font-size: 0.75rem; font-weight: 700; color: #64748b;
-             text-transform: uppercase; letter-spacing: .06em;
-             padding: 8px 0 4px; border-bottom: 1px solid #e2e8f0; margin-bottom: 8px; }
+.form-actions { margin-top: 16px; display: flex; gap: 8px; flex-wrap:wrap; }
 .new-form { background: white; border-radius: 12px; padding: 20px;
             margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
             display: none; border: 2px dashed #3b82f6; }
@@ -416,18 +431,8 @@ textarea { resize: vertical; min-height: 70px; }
   </div>
 </div>
 <div class="toolbar">
-  <input type="text" id="search" placeholder="Search tests…" style="width:200px" oninput="filter()">
-  <select id="filterCat" onchange="filter()">
-    <option value="">All categories</option>
-    <option value="sticky_message">Sticky Message</option>
-    <option value="call_dedup">Call Deduping</option>
-    <option value="call_summary">Post-Call Summary</option>
-    <option value="language_pref">Language Preference</option>
-    <option value="location_memory">Location Memory</option>
-    <option value="onboarding">Onboarding</option>
-    <option value="capability">Capability Prompts</option>
-    <option value="threep_nudge">3P Call Nudge</option>
-  </select>
+  <input type="text" id="search" placeholder="Search tests…" style="width:180px" oninput="filter()">
+  <select id="filterCat" onchange="filter()"><option value="">All categories</option></select>
   <select id="filterType" onchange="filter()">
     <option value="">All types</option>
     <option value="single">single</option>
@@ -437,19 +442,9 @@ textarea { resize: vertical; min-height: 70px; }
     <option value="burst_with_setup">burst_with_setup</option>
   </select>
   <button class="btn btn-primary" onclick="toggleNew()">+ Add Test</button>
-  <button class="btn btn-outline" onclick="toggleGenerate()" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;">🤖 Generate Tests</button>
-  <button class="btn btn-success" id="saveBtn" onclick="saveAll()">Save All</button>
-  <select id="runCat" style="margin-left:12px">
-    <option value="">All tests</option>
-    <option value="sticky_message">Sticky Message</option>
-    <option value="call_dedup">Call Deduping</option>
-    <option value="call_summary">Post-Call Summary</option>
-    <option value="language_pref">Language Preference</option>
-    <option value="location_memory">Location Memory</option>
-    <option value="onboarding">Onboarding</option>
-    <option value="capability">Capability Prompts</option>
-    <option value="threep_nudge">3P Call Nudge</option>
-  </select>
+  <button class="btn btn-outline" onclick="toggleGenerate()" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;">🤖 Generate</button>
+  <button class="btn btn-success" id="saveBtn" onclick="saveAll()">💾 Save All</button>
+  <select id="runCat" style="margin-left:12px"><option value="">All tests</option></select>
   <button class="btn btn-run" id="runBtn" onclick="runTests()">▶ Run</button>
   <span class="count" id="countBadge">0 tests</span>
 </div>
@@ -464,16 +459,7 @@ textarea { resize: vertical; min-height: 70px; }
       <div><label>Name</label><input type="text" id="new_name" placeholder="Short description"></div>
       <div>
         <label>Category</label>
-        <select id="new_category">
-          <option value="sticky_message">Sticky Message</option>
-          <option value="call_dedup">Call Deduping</option>
-          <option value="call_summary">Post-Call Summary</option>
-          <option value="language_pref">Language Preference</option>
-          <option value="location_memory">Location Memory</option>
-          <option value="onboarding">Onboarding</option>
-          <option value="capability">Capability Prompts</option>
-          <option value="threep_nudge">3P Call Nudge</option>
-        </select>
+        <select id="new_category"></select>
       </div>
       <div>
         <label>Type</label>
@@ -534,17 +520,7 @@ textarea { resize: vertical; min-height: 70px; }
       </div>
       <div>
         <label>Category Focus (optional)</label>
-        <select id="generate_category">
-          <option value="">Any category</option>
-          <option value="sticky_message">Sticky Message</option>
-          <option value="call_dedup">Call Deduping</option>
-          <option value="call_summary">Post-Call Summary</option>
-          <option value="language_pref">Language Preference</option>
-          <option value="location_memory">Location Memory</option>
-          <option value="onboarding">Onboarding</option>
-          <option value="capability">Capability Prompts</option>
-          <option value="threep_nudge">3P Call Nudge</option>
-        </select>
+        <select id="generate_category"><option value="">Any category</option></select>
       </div>
     </div>
     <div class="form-actions">
@@ -576,8 +552,59 @@ textarea { resize: vertical; min-height: 70px; }
 <div id="toast"></div>
 <script>
 let tests = [];
+let _editingId = null;
+
+const CAT_META = {
+  onboarding:         {label:'Onboarding',        color:'#7c3aed', bg:'#f5f3ff'},
+  capability:         {label:'Capability',         color:'#1d4ed8', bg:'#eff6ff'},
+  sticky_message:     {label:'Sticky Message',     color:'#15803d', bg:'#f0fdf4'},
+  call_dedup:         {label:'Call Dedup',         color:'#c2410c', bg:'#fff7ed'},
+  cadence_control:    {label:'Cadence Control',    color:'#dc2626', bg:'#fef2f2'},
+  call_summary:       {label:'Call Summary',       color:'#0e7490', bg:'#ecfeff'},
+  voicemail:          {label:'Voicemail',          color:'#475569', bg:'#f1f5f9'},
+  task_reliability:   {label:'Task Reliability',   color:'#b45309', bg:'#fffbeb'},
+  task_specific_call: {label:'Task Calls',         color:'#7c2d12', bg:'#fff7ed'},
+  threep_nudge:       {label:'3P Nudge',           color:'#6d28d9', bg:'#f5f3ff'},
+  location_memory:    {label:'Location Memory',    color:'#065f46', bg:'#ecfdf5'},
+  language_pref:      {label:'Language',           color:'#0369a1', bg:'#f0f9ff'},
+  timezone:           {label:'Timezone',           color:'#1e40af', bg:'#dbeafe'},
+  checklist:          {label:'Checklist',          color:'#166534', bg:'#dcfce7'},
+  chat_brevity:       {label:'Chat Brevity',       color:'#9d174d', bg:'#fdf2f8'},
+  chat_flow:          {label:'Chat Flow',          color:'#831843', bg:'#fce7f3'},
+  personalization:    {label:'Personalization',    color:'#3730a3', bg:'#eef2ff'},
+  reengagement:       {label:'Reengagement',       color:'#7e22ce', bg:'#faf5ff'},
+  guardrails:         {label:'Guardrails',         color:'#991b1b', bg:'#fee2e2'},
+  generated:          {label:'Generated',          color:'#334155', bg:'#f1f5f9'},
+};
+const CAT_ORDER = [
+  'onboarding','capability','sticky_message','call_dedup','cadence_control',
+  'call_summary','voicemail','task_reliability','task_specific_call','threep_nudge',
+  'location_memory','language_pref','timezone','checklist','chat_brevity','chat_flow',
+  'personalization','reengagement','guardrails','generated',
+];
+
+function _catOptions(selected = '', includeAll = false) {
+  let html = includeAll ? '<option value="">All categories</option>' : '';
+  CAT_ORDER.forEach(c => {
+    const m = CAT_META[c] || {label:c};
+    html += `<option value="${c}" ${selected===c?'selected':''}>${m.label}</option>`;
+  });
+  return html;
+}
+
+function _initCatDropdowns() {
+  ['filterCat','runCat'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = _catOptions('', true);
+  });
+  ['new_category','generate_category'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = _catOptions('');
+  });
+}
 
 async function load() {
+  _initCatDropdowns();
   document.getElementById('subtitle').textContent = 'Loading…';
   try {
     const res = await fetch('/api/tests');
@@ -591,13 +618,14 @@ async function load() {
 }
 
 function render() {
-  const search  = document.getElementById('search').value.toLowerCase();
-  const catF    = document.getElementById('filterCat').value;
-  const typeF   = document.getElementById('filterType').value;
+  const search = document.getElementById('search').value.toLowerCase();
+  const catF   = document.getElementById('filterCat').value;
+  const typeF  = document.getElementById('filterType').value;
 
   const filtered = tests.filter(t =>
     (!search || t.id.includes(search) || t.name.toLowerCase().includes(search) ||
-     (t.message||'').toLowerCase().includes(search)) &&
+     (t.message||'').toLowerCase().includes(search) ||
+     (t.pass_criteria||'').toLowerCase().includes(search)) &&
     (!catF  || t.category === catF) &&
     (!typeF || t.type === typeF)
   );
@@ -611,100 +639,136 @@ function render() {
     bycat[t.category].push(t);
   });
 
-  const CAT_LABELS = {
-    sticky_message:'Sticky Message', call_dedup:'Call Deduping',
-    call_summary:'Post-Call Summary', language_pref:'Language Preference',
-    location_memory:'Location Memory', onboarding:'Onboarding',
-    capability:'Capability Prompts', threep_nudge:'3P Call Nudge',
-  };
+  const orderedCats = CAT_ORDER.filter(c => bycat[c])
+    .concat(Object.keys(bycat).filter(c => !CAT_ORDER.includes(c)));
 
-  let html = '';
-  for (const [cat, items] of Object.entries(bycat)) {
-    html += `<div class="cat-section">
-      <div class="cat-label" style="display:flex;align-items:center">
-        <span>${CAT_LABELS[cat]||cat} (${items.length})</span>
-        <button class="btn btn-run" style="margin-left:auto;padding:3px 12px;font-size:0.75rem"
-          onclick="runByCategory('${cat}')">▶ Run category</button>
-      </div>`;
-    items.forEach(t => { html += renderCard(t); });
-    html += '</div>';
+  if (!orderedCats.length) {
+    document.getElementById('testList').innerHTML = '<p style="color:#94a3b8;padding:20px">No tests match filter.</p>';
+    return;
   }
-  document.getElementById('testList').innerHTML = html || '<p style="color:#94a3b8;padding:20px">No tests match filter.</p>';
+
+  let rows = '';
+  orderedCats.forEach(cat => {
+    const items = bycat[cat];
+    const m = CAT_META[cat] || {label:cat, color:'#334155', bg:'#f8fafc'};
+    rows += `<tr class="cat-row">
+      <td colspan="5" style="color:${m.color}">
+        <span style="background:${m.bg};padding:2px 10px;border-radius:99px">${m.label}</span>
+        <span style="color:#94a3b8;font-weight:400;margin-left:6px">${items.length} test${items.length!==1?'s':''}</span>
+      </td>
+      <td style="text-align:right">
+        <button class="run-cell-btn" style="font-size:0.7rem;padding:3px 10px"
+          onclick="runByCategory('${cat}')">▶ Run</button>
+      </td>
+    </tr>`;
+    items.forEach(t => { rows += renderRow(t); });
+  });
+
+  document.getElementById('testList').innerHTML =
+    `<table class="test-table">
+      <thead><tr>
+        <th style="width:44px"></th>
+        <th style="width:110px">ID</th>
+        <th>Name</th>
+        <th style="width:100px">Type</th>
+        <th>Message preview</th>
+        <th style="width:68px"></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
-function renderCard(t) {
-  const idx   = tests.indexOf(t);
-  const msgs  = t.messages ? t.messages.join('\\n') : '';
-  const pre   = t.precondition ? `<span class="badge badge-warn">precondition</span>` : '';
+function renderRow(t) {
+  const idx      = tests.indexOf(t);
+  const m        = CAT_META[t.category] || {label:t.category, color:'#334155', bg:'#f8fafc'};
+  const msgs     = t.messages ? t.messages.join('\\n') : '';
+  const preview  = esc((t.message || (t.messages||[]).join(' · ') || '').substring(0, 80));
+  const preWarn  = t.precondition ? ' ⚠' : '';
+
   return `
-  <div class="card" id="card_${t.id}">
-    <div class="card-header" onclick="toggle('${t.id}')">
-      <span class="test-id">[${t.id}]</span>
-      <span class="test-name">${t.name}</span>
-      ${pre}
-      <span class="badge badge-cat">${t.category}</span>
-      <span class="badge badge-type">${t.type}</span>
-    </div>
-    <div class="card-body" id="body_${t.id}">
-      <div class="form-grid">
-        <div><label>ID</label><input type="text" value="${esc(t.id)}" onchange="update(${idx},'id',this.value)"></div>
-        <div><label>Name</label><input type="text" value="${esc(t.name)}" onchange="update(${idx},'name',this.value)"></div>
-        <div>
-          <label>Category</label>
-          <select onchange="update(${idx},'category',this.value)">
-            ${['sticky_message','call_dedup','call_summary','language_pref','location_memory','onboarding','capability','threep_nudge']
-              .map(c=>`<option value="${c}" ${t.category===c?'selected':''}>${c}</option>`).join('')}
-          </select>
+  <tr class="test-row" id="row_${t.id}" onclick="editRow('${t.id}')">
+    <td onclick="event.stopPropagation()">
+      <button class="run-cell-btn" id="runbtn_${t.id}" onclick="runById('${t.id}')">▶</button>
+    </td>
+    <td class="id-cell">${esc(t.id)}</td>
+    <td style="font-weight:600">${esc(t.name)}${preWarn}</td>
+    <td><span class="type-pill">${t.type}</span></td>
+    <td class="msg-cell" title="${preview}">${preview}</td>
+    <td onclick="event.stopPropagation()" style="white-space:nowrap">
+      <button class="action-btn" onclick="editRow('${t.id}')" title="Edit">✎</button>
+      <button class="action-btn" onclick="deleteTest(${idx})" title="Delete">🗑</button>
+    </td>
+  </tr>
+  <tr class="edit-row" id="editrow_${t.id}" style="display:none">
+    <td colspan="6">
+      <div class="edit-form-inner">
+        <div class="form-grid">
+          <div><label>ID</label><input type="text" value="${esc(t.id)}" onchange="update(${idx},'id',this.value)"></div>
+          <div><label>Name</label><input type="text" value="${esc(t.name)}" onchange="update(${idx},'name',this.value)"></div>
+          <div><label>Category</label>
+            <select onchange="update(${idx},'category',this.value)">${_catOptions(t.category)}</select>
+          </div>
+          <div><label>Type</label>
+            <select onchange="update(${idx},'type',this.value)">
+              ${['single','burst','sequence','dedup','burst_with_setup']
+                .map(tp=>`<option value="${tp}" ${t.type===tp?'selected':''}>${tp}</option>`).join('')}
+            </select>
+          </div>
+          ${t.message !== undefined ? `
+          <div class="form-full"><label>Message</label>
+            <input type="text" value="${esc(t.message||'')}" onchange="update(${idx},'message',this.value)">
+          </div>` : ''}
+          ${t.messages !== undefined ? `
+          <div class="form-full"><label>Messages (one per line)</label>
+            <textarea onchange="updateMsgs(${idx},this.value)">${esc(msgs)}</textarea>
+          </div>` : ''}
+          <div><label>Wait (s)</label>
+            <input type="text" value="${t.wait||120}" onchange="update(${idx},'wait',parseInt(this.value))">
+          </div>
+          <div><label>Expected Responses</label>
+            <input type="text" value="${t.expected_responses||''}" onchange="update(${idx},'expected_responses',parseInt(this.value)||undefined)">
+          </div>
+          <div class="form-full"><label>Pass Criteria</label>
+            <textarea onchange="update(${idx},'pass_criteria',this.value)">${esc(t.pass_criteria||'')}</textarea>
+          </div>
+          <div class="form-full"><label>Precondition</label>
+            <input type="text" value="${esc(t.precondition||'')}" onchange="update(${idx},'precondition',this.value||undefined)">
+          </div>
+          <div class="form-full"><label>Notes</label>
+            <input type="text" value="${esc(t.note||t.manual_check||'')}" onchange="update(${idx},'note',this.value||undefined)">
+          </div>
         </div>
-        <div>
-          <label>Type</label>
-          <select onchange="update(${idx},'type',this.value)">
-            ${['single','burst','sequence','dedup','burst_with_setup']
-              .map(tp=>`<option value="${tp}" ${t.type===tp?'selected':''}>${tp}</option>`).join('')}
-          </select>
+        <div class="form-actions">
+          <button class="btn btn-run" onclick="runById('${t.id}')">▶ Run this test</button>
+          <button class="btn btn-success" onclick="saveAll()">💾 Save</button>
+          <button class="btn btn-danger" onclick="deleteTest(${idx})">Delete</button>
+          <button class="btn btn-outline" onclick="editRow('${t.id}')">✕ Close</button>
         </div>
-        ${t.message !== undefined ? `
-        <div class="form-full">
-          <label>Message</label>
-          <input type="text" value="${esc(t.message||'')}" onchange="update(${idx},'message',this.value)">
-        </div>` : ''}
-        ${t.messages !== undefined ? `
-        <div class="form-full">
-          <label>Messages (one per line)</label>
-          <textarea onchange="updateMsgs(${idx},this.value)">${esc(msgs)}</textarea>
-        </div>` : ''}
-        <div><label>Wait (seconds)</label>
-          <input type="text" value="${t.wait||120}" onchange="update(${idx},'wait',parseInt(this.value))">
-        </div>
-        <div><label>Expected Responses</label>
-          <input type="text" value="${t.expected_responses||''}" onchange="update(${idx},'expected_responses',parseInt(this.value)||undefined)">
-        </div>
-        <div class="form-full"><label>Pass Criteria</label>
-          <textarea onchange="update(${idx},'pass_criteria',this.value)">${esc(t.pass_criteria||'')}</textarea>
-        </div>
-        <div class="form-full"><label>Precondition (optional)</label>
-          <input type="text" value="${esc(t.precondition||'')}" onchange="update(${idx},'precondition',this.value||undefined)">
-        </div>
-        <div class="form-full"><label>Manual Check (optional)</label>
-          <input type="text" value="${esc(t.manual_check||'')}" onchange="update(${idx},'manual_check',this.value||undefined)">
-        </div>
+        <div class="inline-result" id="result_${t.id}"></div>
       </div>
-      <div class="form-actions">
-        <button class="btn btn-run" id="runbtn_${t.id}" onclick="runById('${t.id}')">▶ Run this test</button>
-        <button class="btn btn-success" onclick="saveAll()">Save</button>
-        <button class="btn btn-danger" onclick="deleteTest(${idx})">Delete</button>
-      </div>
-      <div class="inline-result" id="result_${t.id}"></div>
-    </div>
-  </div>`;
+    </td>
+  </tr>`;
 }
 
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 }
 
-function toggle(id) {
-  document.getElementById('body_' + id).classList.toggle('open');
+function editRow(id) {
+  const editEl = document.getElementById('editrow_' + id);
+  const rowEl  = document.getElementById('row_' + id);
+  if (!editEl) return;
+  const isOpen = editEl.style.display !== 'none';
+  // Close previously open row
+  if (_editingId && _editingId !== id) {
+    const prev    = document.getElementById('editrow_' + _editingId);
+    const prevRow = document.getElementById('row_'     + _editingId);
+    if (prev) prev.style.display = 'none';
+    if (prevRow) prevRow.classList.remove('editing');
+  }
+  editEl.style.display = isOpen ? 'none' : '';
+  rowEl && rowEl.classList.toggle('editing', !isOpen);
+  _editingId = isOpen ? null : id;
 }
 
 function filter() { render(); }
@@ -796,9 +860,8 @@ async function runTests() {
 
 async function runById(id) {
   _activeTestId = id;
-  // Open the card body so inline result is visible
-  const body = document.getElementById('body_' + id);
-  if (body && !body.classList.contains('open')) body.classList.add('open');
+  // Open the edit row so inline result is visible
+  editRow(id);
   // Show running indicator inline
   const inlineEl = document.getElementById('result_' + id);
   if (inlineEl) {
