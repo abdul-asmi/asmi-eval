@@ -22,9 +22,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 import google.genai as genai
-from config import GEMINI_API_KEY, GEMINI_MODEL
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-preview")
 
-_client = genai.Client(api_key=GEMINI_API_KEY)
+_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # ── Run queue (in-memory) ──────────────────────────────────────────────────────
 _pending_run     = None   # dict {category, id} or None
@@ -140,6 +141,9 @@ Each test case should be a Python dict with these exact keys:
 Make test cases realistic and varied. Focus on edge cases and real user scenarios.
 Return ONLY valid Python list of dicts, no other text.
 """
+
+    if not _client:
+        return None, "GEMINI_API_KEY not set"
 
     try:
         response = _client.models.generate_content(
