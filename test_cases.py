@@ -229,8 +229,8 @@ TEST_CASES = [
         'messages': ['Hi', 'My name is Abdul', "I'm in Pittsburgh, PA", 'What can you do for me?'],
         'sequence_delay': 8,
         'wait': 60,
-        'expected_responses': 4,
-        'pass_criteria': 'All 4 exchanges complete. Asmi acknowledges name and location. Final response describes capabilities.',
+        'expected_responses': 8,
+        'pass_criteria': 'All 8 exchanges complete. Asmi acknowledges name and location. Final response describes capabilities.',
         'precondition': 'Fresh account.',
     },
     {
