@@ -66,7 +66,7 @@ def _get_new_commands(since_ns: int) -> list[dict]:
             ORDER  BY m.date ASC
         """, (COMMAND_HANDLE, since_ns))
 
-        rows = conn.fetchall() if hasattr(conn, 'fetchall') else cur.fetchall()
+        rows = cur.fetchall()
         conn.close()
 
         return [{"text": row["text"], "date": row["date"], "guid": row["guid"]}
@@ -102,6 +102,22 @@ def _poll_railway() -> dict | None:
             return data.get("run")
     except Exception:
         return None
+
+
+def _post_output_to_railway(output: str, status: str = "done"):
+    """Send run output back to Railway UI so it shows in the browser."""
+    if not RAILWAY_URL:
+        return
+    try:
+        body = json.dumps({"output": output, "status": status}).encode()
+        req  = urllib.request.Request(
+            f"{RAILWAY_URL}/api/output",
+            data=body, method="POST",
+        )
+        req.add_header("Content-Type", "application/json")
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"  [railway output post error] {e}")
 
 
 def run():
@@ -172,6 +188,8 @@ def run():
                     response = handle(cmd)
                 except Exception as e:
                     response = f"❌ Error: {e}"
+                # Post full output to Railway UI for display in browser
+                _post_output_to_railway(response, status="done")
                 _send_reply(f"🖥 Run triggered from UI\n{response}")
 
         except KeyboardInterrupt:

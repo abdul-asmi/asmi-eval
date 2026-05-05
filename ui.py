@@ -24,6 +24,9 @@ from urllib.parse import urlparse
 # ── Run queue (in-memory) ──────────────────────────────────────────────────────
 _pending_run    = None   # dict {category, id} or None
 _last_heartbeat = 0.0    # epoch time of last daemon poll
+_run_output     = ""     # captured stdout from last run
+_run_status     = "idle" # "idle" | "running" | "done"
+_run_started    = 0.0    # epoch time when run started
 
 PORT      = int(os.environ.get("PORT", 8765))
 GH_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
@@ -186,6 +189,13 @@ textarea { resize: vertical; min-height: 70px; }
          padding: 12px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 500;
          opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
 #toast.show { opacity: 1; }
+#outputPanel { display:none; background:#0f172a; color:#cbd5e1; font-family:monospace;
+               font-size:0.78rem; border-bottom:3px solid #3b82f6; }
+#outputHeader { display:flex; align-items:center; gap:12px; padding:10px 24px;
+                background:#1e293b; color:#94a3b8; font-size:0.8rem; }
+#outputHeader strong { color:#e2e8f0; }
+#outputBody { padding:12px 24px 16px; max-height:420px; overflow-y:auto;
+              white-space:pre-wrap; line-height:1.5; }
 </style>
 </head>
 <body>
@@ -195,6 +205,15 @@ textarea { resize: vertical; min-height: 70px; }
   <span id="subtitle">Loading…</span>
 </header>
 
+<div id="outputPanel">
+  <div id="outputHeader">
+    <span id="outputStatus">⏳ Running…</span>
+    <span id="outputElapsed" style="margin-left:auto;color:#64748b"></span>
+    <button onclick="clearOutput()" style="background:#334155;color:#94a3b8;border:none;
+            border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.75rem">✕ Close</button>
+  </div>
+  <div id="outputBody"></div>
+</div>
 <div class="toolbar">
   <input type="text" id="search" placeholder="Search tests…" style="width:200px" oninput="filter()">
   <select id="filterCat" onchange="filter()">
@@ -496,6 +515,9 @@ async function saveAll() {
   }
 }
 
+let _pollTimer = null;
+let _runStart  = 0;
+
 async function runTests() {
   const btn = document.getElementById('runBtn');
   btn.textContent = '⏳ Queuing…';
@@ -510,8 +532,9 @@ async function runTests() {
     const data = await res.json();
     if (data.mac_online) {
       toast('✅ Run started on your Mac!');
+      _openOutput();
     } else {
-      toast('⚠️ Mac is offline — ask Abdul to turn it on');
+      toast('⚠️ Mac is offline — daemon not running');
     }
   } catch(e) {
     toast('❌ Failed to queue run: ' + e.message);
@@ -519,6 +542,43 @@ async function runTests() {
     btn.textContent = '▶ Run';
     btn.classList.remove('saving');
   }
+}
+
+function _openOutput() {
+  _runStart = Date.now();
+  document.getElementById('outputPanel').style.display = 'block';
+  document.getElementById('outputBody').textContent = '';
+  document.getElementById('outputStatus').textContent = '⏳ Waiting for daemon…';
+  document.getElementById('outputElapsed').textContent = '';
+  if (_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(_pollOutput, 3000);
+}
+
+async function _pollOutput() {
+  try {
+    const res  = await fetch('/api/output');
+    const data = await res.json();
+    const secs = Math.round((Date.now() - _runStart) / 1000);
+    document.getElementById('outputElapsed').textContent = `${secs}s elapsed`;
+
+    if (data.status === 'running') {
+      document.getElementById('outputStatus').textContent = '⏳ Running…';
+    } else if (data.status === 'done') {
+      document.getElementById('outputStatus').textContent = '✅ Done';
+      clearInterval(_pollTimer);
+    }
+
+    if (data.output) {
+      const el = document.getElementById('outputBody');
+      el.textContent = data.output;
+      el.scrollTop = el.scrollHeight;
+    }
+  } catch(e) {}
+}
+
+function clearOutput() {
+  document.getElementById('outputPanel').style.display = 'none';
+  if (_pollTimer) clearInterval(_pollTimer);
 }
 
 function toast(msg) {
@@ -556,6 +616,12 @@ class Handler(BaseHTTPRequestHandler):
             run = _pending_run
             _pending_run = None
             self._json({"run": run})
+        elif path == "/api/output":
+            self._json({
+                "status":  _run_status,
+                "output":  _run_output,
+                "elapsed": int(time.time() - _run_started) if _run_started else 0,
+            })
         elif path == "/health":
             self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
         else:
@@ -574,6 +640,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
         elif path == "/api/run":
+            global _run_output, _run_status, _run_started
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
             try:
@@ -585,8 +652,22 @@ class Handler(BaseHTTPRequestHandler):
                 "id":       data.get("id"),
                 "ts":       time.time(),
             }
+            _run_output  = ""
+            _run_status  = "running"
+            _run_started = time.time()
             mac_online = (time.time() - _last_heartbeat) < 90
             self._json({"ok": True, "mac_online": mac_online})
+        elif path == "/api/output":
+            global _run_output, _run_status
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body)
+                _run_output = data.get("output", "")
+                _run_status = data.get("status", "done")
+                self._json({"ok": True})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
 
     def _html(self, body):
         self.send_response(200)
