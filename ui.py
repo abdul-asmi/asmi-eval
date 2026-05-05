@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 
 import google.genai as genai
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-2.0-flash-lite")
+GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-preview")
 
 _client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
@@ -47,7 +47,7 @@ USE_GITHUB = bool(GH_TOKEN and GH_REPO)
 
 CATEGORIES = [
     "sticky_message","call_dedup","call_summary","language_pref",
-    "location_memory","onboarding","capability","threep_nudge",
+    "location_memory","onboarding","capability","threep_nudge","generated",
 ]
 TYPES = ["single","burst","sequence","dedup","burst_with_setup"]
 
@@ -161,9 +161,12 @@ Return ONLY valid Python list of dicts, no other text.
             generated_code = generated_code[:-3]
         
         generated_code = generated_code.strip()
-        
-        # Parse the generated Python code
-        cases = ast.literal_eval(generated_code)
+
+        # Parse: try Python literal first, then JSON
+        try:
+            cases = ast.literal_eval(generated_code)
+        except (ValueError, SyntaxError):
+            cases = json.loads(generated_code)
         
         # Validate and fix the generated cases
         validated_cases = []
@@ -198,6 +201,46 @@ Return ONLY valid Python list of dicts, no other text.
             'pass_criteria': 'Asmi responds to the generated prompt appropriately',
             'expected_responses': 1
         }]
+
+def analyze_behavior(results: list) -> dict:
+    """Call Gemini with all results to produce coherent behavior analysis."""
+    if not _client:
+        raise RuntimeError("GEMINI_API_KEY not configured")
+
+    lines = []
+    for r in results:
+        lines.append(f"\n--- Test: {r.get('id')} | {r.get('name')} | Verdict: {r.get('verdict','?')} ---")
+        for i, t in enumerate(r.get('tasks_sent', [])):
+            lines.append(f"  Sent [{i+1}]: {t}")
+        for i, rsp in enumerate(r.get('responses', [])):
+            lines.append(f"  Response [{i+1}]: {rsp}")
+        lines.append(f"  Judge: {r.get('reason','')}")
+
+    prompt = f"""You are analyzing eval results for Asmi, an AI personal assistant accessible via iMessage.
+Asmi handles: web research, outbound calls to businesses, emails, scheduling, memory of preferences.
+
+Below are all the test results from a generated eval run. Analyze them TOGETHER as a coherent whole —
+not just test by test. Look at how Asmi handled the scenario overall.
+
+{chr(10).join(lines)}
+
+Provide a structured behavior analysis in this EXACT format:
+
+OVERALL_SCORE: X/Y passed
+SUMMARY: 2-3 sentences on how Asmi is currently handling this scenario category overall.
+HITS:
+- (what Asmi is doing well, be specific with examples from responses)
+- ...
+MISSES:
+- (what Asmi is failing at or doing suboptimally, specific examples)
+- ...
+BEHAVIOR_PATTERN: 1-2 sentences describing Asmi's current consistent behavior pattern for this type of request.
+GAPS: Specific capability or behavior gaps observed.
+RECOMMENDATION: What should be added/changed in Asmi's skills or memory to fix the misses.
+"""
+    result = _client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+    return {"text": result.text.strip()}
+
 
 def _format_list(cases: list) -> str:
     lines = ["["]
@@ -502,10 +545,18 @@ textarea { resize: vertical; min-height: 70px; }
     </div>
     <div id="generatedPreview" style="margin-top:16px;display:none;">
       <div style="font-weight:600;margin-bottom:8px;color:#374151;">Generated Test Cases:</div>
-      <div id="generatedList" style="max-height:300px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;padding:12px;background:#f8fafc;"></div>
-      <div style="margin-top:12px;display:flex;gap:8px;">
-        <button class="btn btn-success" onclick="addGeneratedTests()">✓ Add All to Test Suite</button>
+      <div id="generatedList" style="border:1px solid #e2e8f0;border-radius:6px;padding:12px;background:#f8fafc;"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" style="background:#7c3aed;color:white;" onclick="saveAndRunGenerated()" id="runGenBtn">▶ Save to Generated &amp; Run All</button>
         <button class="btn btn-outline" onclick="clearGenerated()">Clear</button>
+        <span id="genRunStatus" style="color:#64748b;font-size:0.83rem;margin-left:4px;"></span>
+      </div>
+      <div id="genAnalysisSection" style="display:none;margin-top:20px;">
+        <div style="font-weight:700;font-size:0.95rem;color:#1e293b;margin-bottom:8px;">🧠 Overall Behavior Analysis</div>
+        <div id="genAnalysisBox" style="background:#1e293b;color:#e2e8f0;border-radius:8px;padding:16px;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;line-height:1.6;max-height:400px;overflow-y:auto;"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <button class="btn btn-success" onclick="saveBehaviorAnalysis()">💾 Save to ASMI_BEHAVIOR_ANALYSIS.md</button>
+        </div>
       </div>
     </div>
   </div>
@@ -937,6 +988,9 @@ function toast(msg) {
 // ── Test Case Generation Functions ───────────────────────────────────────────
 
 let generatedTests = [];
+let _genPollTimer  = null;
+let _genRunStart   = 0;
+let _lastAnalysis  = '';
 
 function toggleGenerate() {
   document.getElementById('generateForm').classList.toggle('open');
@@ -944,30 +998,27 @@ function toggleGenerate() {
 
 async function generateTests() {
   const prompt = document.getElementById('generate_prompt').value.trim();
-  const count = parseInt(document.getElementById('generate_count').value);
-  
-  if (!prompt) {
-    alert('Please enter a test scenario description');
-    return;
-  }
-  
+  const count  = parseInt(document.getElementById('generate_count').value);
+  const cat    = document.getElementById('generate_category').value;
+  if (!prompt) { alert('Please enter a test scenario description'); return; }
+
   const btn = document.getElementById('generateBtn');
   const btnText = document.getElementById('generateBtnText');
   btnText.textContent = 'Generating…';
   btn.disabled = true;
-  
+
   try {
-    const res = await fetch('/api/generate', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({prompt, count}),
+    const res  = await fetch('/api/generate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt, count, category: cat}),
     });
     const data = await res.json();
-    
     if (data.ok && data.cases) {
-      generatedTests = data.cases;
+      generatedTests = data.cases.map(t => ({...t, category: 'generated'}));
       renderGenerated();
       document.getElementById('generatedPreview').style.display = 'block';
+      document.getElementById('genAnalysisSection').style.display = 'none';
+      document.getElementById('genRunStatus').textContent = '';
       toast(`Generated ${data.cases.length} test cases`);
     } else {
       alert('Generation failed: ' + (data.error || 'Unknown error'));
@@ -983,46 +1034,179 @@ async function generateTests() {
 function renderGenerated() {
   const el = document.getElementById('generatedList');
   el.innerHTML = generatedTests.map((test, idx) => `
-    <div style="margin-bottom:12px;padding:10px;border:1px solid #e2e8f0;border-radius:6px;background:white;">
-      <div style="font-weight:600;margin-bottom:4px;color:#374151;">${esc(test.name)}</div>
-      <div style="font-size:0.85rem;color:#64748b;margin-bottom:6px;">
-        <span class="badge badge-cat">${test.category}</span>
-        <span class="badge badge-type">${test.type}</span>
-        ${test.expected_responses ? `<span style="color:#94a3b8">${test.expected_responses} responses expected</span>` : ''}
+    <div id="gen_card_${idx}" style="margin-bottom:12px;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:white;">
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">
+        <div style="font-weight:600;color:#374151;flex:1;">${esc(test.name)}</div>
+        <button class="btn" style="background:#7c3aed;color:white;padding:4px 10px;font-size:0.78rem;flex-shrink:0;"
+          id="genrunbtn_${idx}" onclick="runSingleGenerated(${idx})">▶ Run</button>
+      </div>
+      <div style="font-size:0.82rem;color:#64748b;margin-bottom:6px;">
+        <span class="badge badge-cat">generated</span>
+        <span class="badge badge-type">${esc(test.type)}</span>
+        <span style="color:#94a3b8;margin-left:4px;">${test.expected_responses||1} response(s) expected</span>
       </div>
       <div style="font-size:0.85rem;color:#374151;margin-bottom:4px;">
-        <strong>Message:</strong> ${esc(test.message || test.messages?.join(' → '))}
+        <strong>Message:</strong> ${esc(test.message || (test.messages||[]).join(' → '))}
       </div>
-      <div style="font-size:0.85rem;color:#64748b;">
-        <strong>Pass Criteria:</strong> ${esc(test.pass_criteria)}
+      <div style="font-size:0.82rem;color:#64748b;margin-bottom:6px;">
+        <strong>Criteria:</strong> ${esc(test.pass_criteria)}
       </div>
+      <div id="gen_result_${idx}" style="display:none;margin-top:8px;"></div>
     </div>
   `).join('');
 }
 
-function addGeneratedTests() {
-  if (generatedTests.length === 0) {
-    alert('No generated tests to add');
-    return;
-  }
-  
-  // Add generated tests to the main test list
-  tests.push(...generatedTests);
-  
-  // Clear generated tests
-  generatedTests = [];
-  document.getElementById('generatedPreview').style.display = 'none';
-  document.getElementById('generate_prompt').value = '';
-  
-  // Re-render the test list
+async function saveAndRunGenerated() {
+  if (generatedTests.length === 0) return;
+  const btn = document.getElementById('runGenBtn');
+  btn.disabled = true;
+  document.getElementById('genRunStatus').textContent = 'Saving tests…';
+
+  // Merge generated tests into main test list and save
+  const merged = tests.filter(t => t.category !== 'generated').concat(generatedTests);
+  try {
+    await fetch('/api/tests', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(merged)});
+  } catch(e) { alert('Save failed: ' + e.message); btn.disabled = false; return; }
+  tests = merged;
   render();
-  toast(`Added ${generatedTests.length} test cases to suite`);
+
+  // Trigger run for category "generated"
+  document.getElementById('genRunStatus').textContent = 'Queued for daemon…';
+  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({category:'generated'})});
+  const data = await res.json();
+  if (!data.ok) { alert('Run failed'); btn.disabled = false; return; }
+  if (!data.mac_online) document.getElementById('genRunStatus').textContent = '⚠ Daemon offline — waiting…';
+
+  _genRunStart = Date.now();
+  if (_genPollTimer) clearInterval(_genPollTimer);
+  _genPollTimer = setInterval(_pollGeneratedRun, 3000);
+}
+
+async function runSingleGenerated(idx) {
+  const test = generatedTests[idx];
+  const btn  = document.getElementById('genrunbtn_' + idx);
+  if (btn) btn.disabled = true;
+
+  // Upsert this single test into the main list and save
+  const without = tests.filter(t => t.id !== test.id);
+  const merged  = without.concat([test]);
+  try {
+    await fetch('/api/tests', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(merged)});
+    tests = merged;
+  } catch(e) { alert('Save failed'); if (btn) btn.disabled = false; return; }
+
+  const resultEl = document.getElementById('gen_result_' + idx);
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<span style="color:#7c3aed;font-size:0.82rem;">Sending to daemon…</span>';
+
+  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: test.id})});
+  const data = await res.json();
+  if (!data.ok) { resultEl.innerHTML = '<span style="color:red">Run failed</span>'; if (btn) btn.disabled = false; return; }
+
+  _genRunStart = Date.now();
+  if (_genPollTimer) clearInterval(_genPollTimer);
+  _genPollTimer = setInterval(() => _pollSingleGenRun(idx), 3000);
+}
+
+async function _pollGeneratedRun() {
+  try {
+    const res  = await fetch('/api/output');
+    const data = await res.json();
+    const secs = Math.round((Date.now() - _genRunStart) / 1000);
+    if (data.status === 'running') {
+      document.getElementById('genRunStatus').textContent = `Running… ${secs}s`;
+    } else if (data.status === 'done') {
+      clearInterval(_genPollTimer); _genPollTimer = null;
+      document.getElementById('genRunStatus').textContent = `Done in ${secs}s`;
+      document.getElementById('runGenBtn').disabled = false;
+      const results = data.results || [];
+      results.forEach(r => {
+        const idx = generatedTests.findIndex(t => t.id === r.id);
+        if (idx >= 0) _renderGenResult(idx, r);
+      });
+      if (results.length > 0) _fetchGenAnalysis(results);
+    }
+  } catch(e) {}
+}
+
+async function _pollSingleGenRun(idx) {
+  try {
+    const res  = await fetch('/api/output');
+    const data = await res.json();
+    const secs = Math.round((Date.now() - _genRunStart) / 1000);
+    const resultEl = document.getElementById('gen_result_' + idx);
+    if (data.status === 'running') {
+      if (resultEl) resultEl.innerHTML = `<span style="color:#7c3aed;font-size:0.82rem;">Running… ${secs}s</span>`;
+    } else if (data.status === 'done') {
+      clearInterval(_genPollTimer); _genPollTimer = null;
+      const btn = document.getElementById('genrunbtn_' + idx);
+      if (btn) btn.disabled = false;
+      const test = generatedTests[idx];
+      const r = (data.results || []).find(x => x.id === test.id);
+      if (r) _renderGenResult(idx, r);
+      else if (resultEl) resultEl.innerHTML = '<span style="color:#94a3b8;font-size:0.82rem;">No result returned</span>';
+      if (data.results && data.results.length > 0) _fetchGenAnalysis(data.results);
+    }
+  } catch(e) {}
+}
+
+function _renderGenResult(idx, r) {
+  const el = document.getElementById('gen_result_' + idx);
+  if (!el) return;
+  el.style.display = 'block';
+  const v    = (r.verdict||'UNCLEAR').toUpperCase();
+  const col  = v === 'PASS' ? '#16a34a' : v === 'FAIL' ? '#dc2626' : '#b45309';
+  const bg   = v === 'PASS' ? '#f0fdf4' : v === 'FAIL' ? '#fef2f2' : '#fffbeb';
+  const resps = (r.responses||[]).map((rsp,i) =>
+    `<div style="margin-top:4px;font-size:0.8rem;color:#374151;"><strong>Response ${i+1}:</strong> ${esc(rsp)}</div>`).join('');
+  el.innerHTML = `<div style="border-left:3px solid ${col};padding:8px 10px;background:${bg};border-radius:4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+      <span style="font-weight:700;color:${col};font-size:0.85rem;">${v}</span>
+      <span style="color:#64748b;font-size:0.8rem;">${esc(r.reason||'')}</span>
+    </div>
+    ${resps}
+  </div>`;
+}
+
+async function _fetchGenAnalysis(results) {
+  document.getElementById('genAnalysisSection').style.display = 'block';
+  document.getElementById('genAnalysisBox').textContent = 'Analyzing all results together…';
+  try {
+    const res  = await fetch('/api/analyze', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({results}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _lastAnalysis = data.analysis;
+      document.getElementById('genAnalysisBox').textContent = data.analysis;
+    } else {
+      document.getElementById('genAnalysisBox').textContent = 'Analysis failed: ' + data.error;
+    }
+  } catch(e) {
+    document.getElementById('genAnalysisBox').textContent = 'Analysis error: ' + e.message;
+  }
+}
+
+async function saveBehaviorAnalysis() {
+  if (!_lastAnalysis) { alert('No analysis to save'); return; }
+  try {
+    const res  = await fetch('/api/save-behavior', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({content: _lastAnalysis}),
+    });
+    const data = await res.json();
+    if (data.ok) toast('Saved to ASMI_BEHAVIOR_ANALYSIS.md');
+    else alert('Save failed: ' + data.error);
+  } catch(e) { alert('Save error: ' + e.message); }
 }
 
 function clearGenerated() {
   generatedTests = [];
+  if (_genPollTimer) { clearInterval(_genPollTimer); _genPollTimer = null; }
   document.getElementById('generatedPreview').style.display = 'none';
   document.getElementById('generate_prompt').value = '';
+  document.getElementById('genAnalysisSection').style.display = 'none';
 }
 
 load();
@@ -1116,6 +1300,29 @@ class Handler(BaseHTTPRequestHandler):
                 count = int(data.get("count", 3))
                 cases = generate_test_cases(prompt, count)
                 self._json({"ok": True, "cases": cases})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+        elif path == "/api/analyze":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data    = json.loads(body)
+                results = data.get("results", [])
+                analysis = analyze_behavior(results)
+                self._json({"ok": True, "analysis": analysis["text"]})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+        elif path == "/api/save-behavior":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data    = json.loads(body)
+                content = data.get("content", "")
+                path_md = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ASMI_BEHAVIOR_ANALYSIS.md")
+                header  = f"\n\n---\n## Analysis — {time.strftime('%Y-%m-%d %H:%M')}\n\n"
+                with open(path_md, "a") as f:
+                    f.write(header + content + "\n")
+                self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
 
