@@ -156,16 +156,20 @@ def main():
                 print(f"     [{r['id']}] {r['name']}")
                 print(f"       → {r['reason']}")
 
-    ts         = datetime.now().strftime("%Y%m%d_%H%M")
-    json_out   = f"results_rejudged_{ts}.json"
-    report_out = f"report_rejudged_{ts}.html"
+    import os as _os
+    _reports_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "reports")
+    _os.makedirs(_reports_dir, exist_ok=True)
+
+    ts         = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_out   = _os.path.join(_reports_dir, f"results_rejudged_{ts}.json")
+    report_out = _os.path.join(_reports_dir, f"report_rejudged_{ts}.html")
 
     with open(json_out, "w") as f:
         json.dump(merged, f, indent=2, default=str)
 
     generate(merged, output_path=report_out)
-    print(f"\n  💾 Results: {json_out}")
-    print(f"  🌐 Report:  open {report_out}\n")
+    print(f"\n  Results: {json_out}")
+    print(f"  Report:  open {report_out}\n")
 
 
 if __name__ == "__main__":

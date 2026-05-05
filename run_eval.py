@@ -79,18 +79,22 @@ def main():
                 print(f"       → {r['reason']}")
 
     # ── save JSON results ──────────────────────────────────────────────────────
-    ts          = datetime.now().strftime("%Y%m%d_%H%M")
-    json_path   = f"results_{ts}.json"
-    report_path = f"report_{ts}.html"
+    import sys as _sys
+    _reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
+    os.makedirs(_reports_dir, exist_ok=True)
+
+    ts          = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_path   = os.path.join(_reports_dir, f"results_{ts}.json")
+    report_path = os.path.join(_reports_dir, f"report_{ts}.html")
 
     with open(json_path, "w") as f:
         json.dump(results, f, indent=2, default=str)
-    print(f"\n  💾 Raw results: {json_path}")
+    print(f"\n  Raw results: {json_path}")
 
     # ── HTML report ────────────────────────────────────────────────────────────
     if not args.no_report:
         generate(results, output_path=report_path)
-        print(f"  🌐 Open report: open {report_path}\n")
+        print(f"  Open report: open {report_path}\n")
 
 
 if __name__ == "__main__":

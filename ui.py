@@ -631,15 +631,29 @@ async function _triggerRun(payload) {
 function _openOutput(label) {
   _runStart = Date.now();
   const panel = document.getElementById('outputPanel');
-  panel.style.display = 'block';
   document.getElementById('resultsTable').style.display = 'none';
   document.getElementById('resultsTable').innerHTML = '';
   document.getElementById('outputBodyText').textContent = '';
-  document.getElementById('outputStatus').textContent = label || 'Waiting for daemon…';
   document.getElementById('outputElapsed').textContent = '';
+  // For single-test runs, hide the top panel — result shows inline in card
+  if (_activeTestId) {
+    panel.style.display = 'none';
+  } else {
+    panel.style.display = 'block';
+    document.getElementById('outputStatus').textContent = label || 'Waiting for daemon…';
+    panel.scrollIntoView({behavior:'smooth', block:'start'});
+  }
   if (_pollTimer) clearInterval(_pollTimer);
   _pollTimer = setInterval(_pollOutput, 3000);
-  panel.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function _cleanOutput(text) {
+  // Strip the "Report: ..." trailing line from daemon output text
+  return (text || '')
+    .split('\\n')
+    .filter(l => !l.startsWith('Report:') && !l.startsWith('  Report:'))
+    .join('\\n')
+    .trim();
 }
 
 async function _pollOutput() {
@@ -647,10 +661,12 @@ async function _pollOutput() {
     const res  = await fetch('/api/output');
     const data = await res.json();
     const secs = Math.round((Date.now() - _runStart) / 1000);
-    document.getElementById('outputElapsed').textContent = `${secs}s elapsed`;
+    if (!_activeTestId)
+      document.getElementById('outputElapsed').textContent = `${secs}s elapsed`;
 
     if (data.status === 'running') {
-      document.getElementById('outputStatus').textContent = 'Running…';
+      if (!_activeTestId)
+        document.getElementById('outputStatus').textContent = 'Running…';
       // Update inline elapsed for active single test
       if (_activeTestId) {
         const inlineEl = document.getElementById('result_' + _activeTestId);
@@ -660,13 +676,16 @@ async function _pollOutput() {
     } else if (data.status === 'done') {
       clearInterval(_pollTimer);
       const secs2 = Math.round((Date.now() - _runStart) / 1000);
-      document.getElementById('outputStatus').textContent = 'Done';
-      document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
-      document.getElementById('outputBodyText').textContent = '';
 
       if (data.results && data.results.length > 0) {
-        _renderResults(data.results);
-        // Render inline for the specific test that was run
+        // Multi-test: show full results panel
+        if (!_activeTestId) {
+          document.getElementById('outputPanel').style.display = 'block';
+          document.getElementById('outputStatus').textContent = 'Done';
+          document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
+          _renderResults(data.results);
+        }
+        // Single-test: render inline in card
         if (_activeTestId) {
           const r = data.results.find(x => x.id === _activeTestId);
           if (r) _renderInlineResult(_activeTestId, r);
@@ -675,13 +694,26 @@ async function _pollOutput() {
           _activeTestId = null;
         }
       } else {
-        document.getElementById('outputBodyText').textContent = data.output || '(no output)';
+        // No structured results — show cleaned text
+        const cleaned = _cleanOutput(data.output);
         if (_activeTestId) {
           const inlineEl = document.getElementById('result_' + _activeTestId);
-          if (inlineEl) { inlineEl.className = 'inline-result running'; inlineEl.innerHTML = data.output || 'No result'; }
+          if (inlineEl) {
+            inlineEl.className = 'inline-result done';
+            inlineEl.innerHTML = `<div class="rt-card" style="border-left:4px solid #94a3b8">
+              <div class="rt-card-hdr"><span class="rt-tname" style="color:#64748b">Run complete</span>
+              <span class="rt-dur">${secs2}s</span></div>
+              <div class="rt-section"><div class="rt-slabel">Output</div>
+              <div class="rt-judge" style="font-family:monospace;white-space:pre-wrap">${esc(cleaned)}</div></div></div>`;
+          }
           const btn = document.getElementById('runbtn_' + _activeTestId);
           if (btn) btn.disabled = false;
           _activeTestId = null;
+        } else {
+          document.getElementById('outputPanel').style.display = 'block';
+          document.getElementById('outputStatus').textContent = 'Done';
+          document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
+          document.getElementById('outputBodyText').textContent = cleaned;
         }
       }
     }

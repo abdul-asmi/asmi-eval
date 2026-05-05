@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import (
     CHAT_DB, COMMAND_HANDLE, COMMAND_PREFIX,
-    DAEMON_POLL, ASMI_HANDLE, EVAL_DIR
+    DAEMON_POLL, ASMI_HANDLE, EVAL_DIR, REPORTS_DIR
 )
 try:
     from config import RAILWAY_URL
@@ -116,7 +116,7 @@ def _latest_results_json() -> list:
     """Read the exact results file written by the most recent run."""
     try:
         # Primary: read the pointer file written by commands.py after each run
-        pointer = os.path.join(EVAL_DIR, ".latest_results_path")
+        pointer = os.path.join(REPORTS_DIR, ".latest_results_path")
         chosen = None
         if os.path.exists(pointer):
             with open(pointer) as f:
@@ -125,11 +125,11 @@ def _latest_results_json() -> list:
                 chosen = candidate
                 print(f"  [results] using pointer → {os.path.basename(chosen)}")
 
-        # Fallback: newest file by mtime
+        # Fallback: newest file by mtime in reports/
         if not chosen:
-            files = glob.glob(os.path.join(EVAL_DIR, "results_*.json"))
+            files = glob.glob(os.path.join(REPORTS_DIR, "results_*.json"))
             if not files:
-                print("  [results] no results_*.json files found")
+                print("  [results] no results_*.json files found in reports/")
                 return []
             files.sort(key=os.path.getmtime, reverse=True)
             chosen = files[0]

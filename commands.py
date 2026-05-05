@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 import google.genai as genai
-from config import GEMINI_API_KEY, GEMINI_MODEL, EVAL_DIR
+from config import GEMINI_API_KEY, GEMINI_MODEL, EVAL_DIR, REPORTS_DIR
 
 _client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -101,11 +101,11 @@ def _run(arg: str) -> str:
         # Parse the exact results file path from run_eval.py's output and
         # write it to a pointer file so daemon.py reads the right file
         import re as _re
-        m = _re.search(r'Raw results:\s*(results_\S+\.json)', output)
+        m = _re.search(r'Raw results:\s*(\S+results_\S+\.json)', output)
         if m:
-            results_path = os.path.join(EVAL_DIR, m.group(1))
+            results_path = m.group(1)  # already absolute path from run_eval.py
             try:
-                with open(os.path.join(EVAL_DIR, '.latest_results_path'), 'w') as _f:
+                with open(os.path.join(REPORTS_DIR, '.latest_results_path'), 'w') as _f:
                     _f.write(results_path)
             except Exception:
                 pass
@@ -128,13 +128,13 @@ def _run(arg: str) -> str:
 def _rejudge() -> str:
     """Re-run Gemini judge on the latest results file."""
     results_files = sorted(
-        glob.glob(os.path.join(EVAL_DIR, "results_[0-9]*.json")),
-        reverse=True
+        glob.glob(os.path.join(REPORTS_DIR, "results_[0-9]*.json")),
+        key=os.path.getmtime, reverse=True
     )
     if not results_files:
-        return "❌ No results file found. Run tests first with !run all"
+        return "No results file found. Run tests first with !run all"
 
-    latest = os.path.basename(results_files[0])
+    latest = results_files[0]  # full path
     try:
         result = subprocess.run(
             [sys.executable, "rejudge.py", latest],
@@ -145,19 +145,19 @@ def _rejudge() -> str:
         summary = _extract_summary(output)
         report  = _latest_report(prefix="report_rejudged")
         return (
-            f"✅ Rejudge complete — {latest}\n"
+            f"Rejudge complete — {os.path.basename(latest)}\n"
             f"{summary}\n"
-            f"Report: {report or 'check eval folder'}"
+            f"Report: {report or 'check reports folder'}"
         )
     except Exception as e:
-        return f"❌ Rejudge failed: {e}"
+        return f"Rejudge failed: {e}"
 
 
 def _status() -> str:
     """Return summary of the most recent results file."""
     results_files = sorted(
-        glob.glob(os.path.join(EVAL_DIR, "results_*.json")),
-        reverse=True
+        glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+        key=os.path.getmtime, reverse=True
     )
     if not results_files:
         return "No results yet. Run !run all to start."
@@ -303,7 +303,7 @@ def _extract_summary(output: str) -> str:
 
 def _latest_report(prefix: str = "report") -> str:
     files = sorted(
-        glob.glob(os.path.join(EVAL_DIR, f"{prefix}_*.html")),
-        reverse=True
+        glob.glob(os.path.join(REPORTS_DIR, f"{prefix}_*.html")),
+        key=os.path.getmtime, reverse=True
     )
     return os.path.basename(files[0]) if files else None
