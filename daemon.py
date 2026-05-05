@@ -31,12 +31,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import (
     CHAT_DB, COMMAND_HANDLE, COMMAND_PREFIX,
-    DAEMON_POLL, ASMI_HANDLE, EVAL_DIR, REPORTS_DIR
+    DAEMON_POLL, ASMI_HANDLE, EVAL_DIR, REPORTS_DIR,
+    RAILWAY_URL, LOCAL_UI_URL,
 )
-try:
-    from config import RAILWAY_URL
-except ImportError:
-    RAILWAY_URL = ""
 from commands import handle
 from imessage import send_imessage
 
@@ -166,6 +163,28 @@ def _post_output_to_railway(output: str, status: str = "done"):
         print(f"  [railway output post error] {e}")
 
 
+def _post_output_to_local_ui(output: str, status: str = "done"):
+    """Send run output + results JSON back to a local UI server."""
+    if not LOCAL_UI_URL:
+        return
+    try:
+        results = _latest_results_json() if status == "done" else []
+        body = json.dumps({
+            "output":  output,
+            "status":  status,
+            "results": results,
+        }).encode()
+        req = urllib.request.Request(
+            f"{LOCAL_UI_URL}/api/output",
+            data=body, method="POST",
+        )
+        req.add_header("Content-Type", "application/json")
+        urllib.request.urlopen(req, timeout=15, context=_SSL_CTX)
+        print(f"  [local UI] posted output + {len(results)} results")
+    except Exception as e:
+        print(f"  [local UI output post error] {e}")
+
+
 def run():
     since_ns    = _mac_ts(datetime.now(timezone.utc))
     processed   = set()
@@ -228,6 +247,8 @@ def run():
                     response = f"❌ Error: {e}"
                 # Post full output + HTML report to Railway UI for display in browser
                 _post_output_to_railway(response, status="done")
+                # Also post results back to the local UI server so inline cards can render.
+                _post_output_to_local_ui(response, status="done")
 
         except KeyboardInterrupt:
             print("\n\n  Daemon stopped.")

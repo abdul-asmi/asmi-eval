@@ -51,7 +51,7 @@ def send_imessage(message: str, handle: str = ASMI_HANDLE) -> bool:
 
 # ─── Receive ──────────────────────────────────────────────────────────────────
 
-def _query_messages(handle: str, since_mac_ns: int, limit: int = 20) -> list[dict]:
+def _query_messages(handle: str, since_mac_ns: int, limit: int = 10) -> list[dict]:
     """
     Read messages from chat.db that:
       - came FROM the given handle (is_from_me = 0)
@@ -94,18 +94,21 @@ def wait_for_responses(
     count: int = 1,
     timeout: int = 150,
     handle: str = ASMI_HANDLE,
+    max_responses: int = 10,
 ) -> list[str]:
     """
     Wait up to `timeout` seconds for `count` responses from Asmi after `sent_at`.
+    Collect up to `max_responses` replies that arrive after the user message.
     Returns list of response texts (may be fewer than `count` if timeout reached).
     """
-    since_ns   = _mac_ts(sent_at)
-    deadline   = time.time() + timeout
-    collected  = []
+    since_ns      = _mac_ts(sent_at)
+    deadline      = time.time() + timeout
+    collected     = []
+    last_new_time = None
 
     print(f"  Waiting for {count} response(s) (timeout={timeout}s)…", end="", flush=True)
     while time.time() < deadline:
-        msgs = _query_messages(handle, since_ns, limit=count * 3)
+        msgs = _query_messages(handle, since_ns, limit=max_responses)
         # Deduplicate by timestamp
         seen_ts   = {m["timestamp"] for m in collected} if collected else set()
         new_msgs  = [m for m in msgs if m["timestamp"] not in seen_ts]
@@ -113,8 +116,12 @@ def wait_for_responses(
             for m in new_msgs:
                 collected.append(m)
                 print(f"\n  ✓ Got response [{len(collected)}/{count}]: {m['text'][:80]}…")
-        if len(collected) >= count:
+            last_new_time = time.time()
+        if len(collected) >= max_responses:
             break
+        if len(collected) >= count and last_new_time is not None:
+            if time.time() - last_new_time >= 2:
+                break
         print(".", end="", flush=True)
         time.sleep(POLL_INTERVAL)
 
@@ -123,7 +130,7 @@ def wait_for_responses(
     else:
         print()
 
-    return [m["text"] for m in collected]
+    return [m["text"] for m in collected[:max_responses]]
 
 
 def send_and_wait(
