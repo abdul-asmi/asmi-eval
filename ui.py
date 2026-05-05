@@ -404,6 +404,13 @@ textarea { resize: vertical; min-height: 70px; }
   </div>
   <div id="outputBodyText"></div>
   <div id="resultsTable"></div>
+  <div id="behaviorAnalysisPanel" style="display:none;padding:16px 24px 20px;border-top:1px solid #1e293b;">
+    <div style="font-weight:700;font-size:0.9rem;color:#c4b5fd;margin-bottom:10px;">🧠 Asmi Behavior Analysis</div>
+    <div id="behaviorAnalysisBox" style="background:#0f172a;color:#e2e8f0;border-radius:8px;padding:14px;font-family:monospace;font-size:0.78rem;white-space:pre-wrap;line-height:1.6;max-height:420px;overflow-y:auto;border:1px solid #1e293b;"></div>
+    <div style="margin-top:10px;">
+      <button onclick="saveBehaviorFromRun()" style="background:#22c55e;color:white;border:none;border-radius:6px;padding:7px 16px;font-size:0.82rem;font-weight:600;cursor:pointer;">💾 Save to ASMI_BEHAVIOR_ANALYSIS.md</button>
+    </div>
+  </div>
 </div>
 <div class="toolbar">
   <input type="text" id="search" placeholder="Search tests…" style="width:200px" oninput="filter()">
@@ -774,9 +781,10 @@ async function saveAll() {
   }
 }
 
-let _pollTimer    = null;
-let _runStart     = 0;
-let _activeTestId = null;
+let _pollTimer      = null;
+let _runStart       = 0;
+let _activeTestId   = null;
+let _lastRunAnalysis = '';
 
 async function runTests() {
   const cat = document.getElementById('runCat').value;
@@ -831,6 +839,9 @@ function _openOutput(label) {
   document.getElementById('resultsTable').innerHTML = '';
   document.getElementById('outputBodyText').textContent = '';
   document.getElementById('outputElapsed').textContent = '';
+  document.getElementById('behaviorAnalysisPanel').style.display = 'none';
+  document.getElementById('behaviorAnalysisBox').textContent = '';
+  _lastRunAnalysis = '';
   // For single-test runs, hide the top panel — result shows inline in card
   if (_activeTestId) {
     panel.style.display = 'none';
@@ -880,6 +891,7 @@ async function _pollOutput() {
           document.getElementById('outputStatus').textContent = 'Done';
           document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
           _renderResults(data.results);
+          if (data.results.length > 1) _runBehaviorAnalysis(data.results);
         }
         // Single-test: render inline in card
         if (_activeTestId) {
@@ -975,7 +987,49 @@ function _renderResults(results) {
 function clearOutput() {
   document.getElementById('outputPanel').style.display = 'none';
   document.getElementById('resultsTable').style.display = 'none';
+  document.getElementById('behaviorAnalysisPanel').style.display = 'none';
   if (_pollTimer) clearInterval(_pollTimer);
+}
+
+async function _runBehaviorAnalysis(results) {
+  const panel = document.getElementById('behaviorAnalysisPanel');
+  const box   = document.getElementById('behaviorAnalysisBox');
+  panel.style.display = 'block';
+  box.textContent = 'Analyzing all responses together…';
+  try {
+    const res  = await fetch('/api/analyze', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({results}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _lastRunAnalysis = data.analysis;
+      box.textContent  = data.analysis;
+      // Auto-save to ASMI_BEHAVIOR_ANALYSIS.md
+      await fetch('/api/save-behavior', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({content: data.analysis}),
+      });
+      toast('Behavior analysis saved to ASMI_BEHAVIOR_ANALYSIS.md');
+    } else {
+      box.textContent = 'Analysis failed: ' + data.error;
+    }
+  } catch(e) {
+    box.textContent = 'Analysis error: ' + e.message;
+  }
+}
+
+async function saveBehaviorFromRun() {
+  if (!_lastRunAnalysis) { alert('No analysis yet'); return; }
+  try {
+    const res  = await fetch('/api/save-behavior', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content: _lastRunAnalysis}),
+    });
+    const data = await res.json();
+    if (data.ok) toast('Saved to ASMI_BEHAVIOR_ANALYSIS.md');
+    else alert('Save failed: ' + data.error);
+  } catch(e) { alert('Save error: ' + e.message); }
 }
 
 function toast(msg) {
