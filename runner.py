@@ -6,7 +6,7 @@
 import time
 from datetime import datetime, timezone
 
-from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY
+from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, CMD_ONBOARD, CATEGORY_RUN_ORDER
 from imessage import send_and_wait, send_burst, send_sequence, send_imessage, wait_for_responses
 from judge import judge_with_context, judge_response_count
 
@@ -180,6 +180,12 @@ def _all_responses(results: list[dict]) -> list[str]:
 
 # ── Main entry point ───────────────────────────────────────────────────────────
 
+def _sort_by_priority(test_cases: list[dict]) -> list[dict]:
+    """Sort tests by CATEGORY_RUN_ORDER, preserving original order within each category."""
+    order = {cat: i for i, cat in enumerate(CATEGORY_RUN_ORDER)}
+    return sorted(test_cases, key=lambda t: order.get(t["category"], len(CATEGORY_RUN_ORDER)))
+
+
 def run_all(test_cases: list[dict], filter_category: str = None, filter_id: str = None) -> list[dict]:
     to_run = test_cases
     if filter_category:
@@ -187,15 +193,39 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_id: str 
     if filter_id:
         to_run = [t for t in to_run if t["id"] == filter_id]
 
+    # Apply priority ordering only for full runs (no category/id filter)
+    running_all = not filter_category and not filter_id
+    if running_all:
+        to_run = _sort_by_priority(list(to_run))
+
     print(f"\n{'═'*65}")
     print(f"  ASMI EVAL — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    if running_all:
+        print(f"  Priority order: {', '.join(CATEGORY_RUN_ORDER[:5])}…")
     print(f"  Phase 1: Sending {len(to_run)} test(s) via iMessage")
     print(f"  Phase 2: Batch judging at the end (Gemini free tier safe)")
     print(f"{'═'*65}")
 
     # Phase 1 — send all, collect responses
-    results = []
+    results      = []
+    last_category = None
     for tc in to_run:
+        cat = tc["category"]
+
+        # Before the first onboarding test in a full run, reset Asmi to fresh state
+        if running_all and cat == "onboarding" and last_category != "onboarding":
+            print(f"\n  ━━━ Sending cmd_onboard to reset Asmi state ━━━")
+            send_imessage(CMD_ONBOARD)
+            print(f"  Waiting 15s for Asmi to reset…")
+            time.sleep(15)
+
+        # Print a separator when switching categories
+        if cat != last_category:
+            print(f"\n{'─'*65}")
+            print(f"  CATEGORY: {cat.upper()}")
+            print(f"{'─'*65}")
+            last_category = cat
+
         r = collect(tc)
         results.append(r)
         time.sleep(5)  # brief pause between tests
