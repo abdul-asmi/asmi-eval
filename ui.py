@@ -124,7 +124,7 @@ HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Break me, Asmi 🧪</title>
+<title>Break me, Asmi</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -219,14 +219,14 @@ textarea { resize: vertical; min-height: 70px; }
     </svg>
   </div>
   <div class="header-text">
-    <div class="header-title">Break me, Asmi 🧪</div>
+    <div class="header-title">Break me, Asmi</div>
     <div class="header-sub" id="subtitle">Ready when you are.</div>
   </div>
 </header>
 
 <div id="outputPanel">
   <div id="outputHeader">
-    <span id="outputStatus">⏳ Running…</span>
+    <span id="outputStatus">Running…</span>
     <span id="outputElapsed" style="margin-left:auto;color:#64748b"></span>
     <button onclick="clearOutput()" style="background:#334155;color:#94a3b8;border:none;
             border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.75rem">✕ Close</button>
@@ -256,7 +256,7 @@ textarea { resize: vertical; min-height: 70px; }
     <option value="burst_with_setup">burst_with_setup</option>
   </select>
   <button class="btn btn-primary" onclick="toggleNew()">+ Add Test</button>
-  <button class="btn btn-success" id="saveBtn" onclick="saveAll()">💾 Save All</button>
+  <button class="btn btn-success" id="saveBtn" onclick="saveAll()">Save All</button>
   <select id="runCat" style="margin-left:12px">
     <option value="">All tests</option>
     <option value="sticky_message">Sticky Message</option>
@@ -343,7 +343,7 @@ async function load() {
     if (tests.error) throw new Error(tests.error);
     render();
   } catch(e) {
-    document.getElementById('subtitle').textContent = '❌ Load failed: ' + e.message;
+    document.getElementById('subtitle').textContent = 'Load failed: ' + e.message;
     document.getElementById('testList').innerHTML = '<p style="color:#ef4444;padding:20px">Failed to load test cases. Check GitHub env vars.</p>';
   }
 }
@@ -393,7 +393,7 @@ function render() {
 function renderCard(t) {
   const idx   = tests.indexOf(t);
   const msgs  = t.messages ? t.messages.join('\\n') : '';
-  const pre   = t.precondition ? `<span class="badge badge-warn">⚠ precondition</span>` : '';
+  const pre   = t.precondition ? `<span class="badge badge-warn">precondition</span>` : '';
   return `
   <div class="card" id="card_${t.id}">
     <div class="card-header" onclick="toggle('${t.id}')">
@@ -449,8 +449,8 @@ function renderCard(t) {
       </div>
       <div class="form-actions">
         <button class="btn btn-run" onclick="runById('${t.id}')">▶ Run this test</button>
-        <button class="btn btn-success" onclick="saveAll()">💾 Save to GitHub</button>
-        <button class="btn btn-danger" onclick="deleteTest(${idx})">🗑 Delete</button>
+        <button class="btn btn-success" onclick="saveAll()">Save to GitHub</button>
+        <button class="btn btn-danger" onclick="deleteTest(${idx})">Delete</button>
       </div>
     </div>
   </div>`;
@@ -522,7 +522,7 @@ function deleteTest(idx) {
 
 async function saveAll() {
   const btn = document.getElementById('saveBtn');
-  btn.textContent = '⏳ Saving…';
+  btn.textContent = 'Saving…';
   btn.classList.add('saving');
   try {
     const res = await fetch('/api/tests', {
@@ -531,12 +531,12 @@ async function saveAll() {
       body: JSON.stringify(tests),
     });
     const data = await res.json();
-    if (data.ok) toast('✅ Saved successfully');
+    if (data.ok) toast('Saved');
     else alert('Save failed: ' + data.error);
   } catch(e) {
     alert('Save failed: ' + e.message);
   } finally {
-    btn.textContent = '💾 Save All';
+    btn.textContent = 'Save All';
     btn.classList.remove('saving');
   }
 }
@@ -568,13 +568,13 @@ async function _triggerRun(payload) {
     });
     const data = await res.json();
     if (data.mac_online) {
-      toast(`✅ Running ${label}…`);
+      toast(`Running ${label}…`);
       _openOutput(`Running ${label}…`);
     } else {
-      toast('⚠️ Mac is offline — daemon not running');
+      toast('Mac is offline — daemon not running');
     }
   } catch(e) {
-    toast('❌ Failed to queue run: ' + e.message);
+    toast('Failed to queue run: ' + e.message);
   }
 }
 
@@ -584,7 +584,7 @@ function _openOutput(label) {
   panel.style.display = 'block';
   document.getElementById('reportFrame').style.display = 'none';
   document.getElementById('outputBodyText').textContent = '';
-  document.getElementById('outputStatus').textContent = `⏳ ${label || 'Waiting for daemon…'}`;
+  document.getElementById('outputStatus').textContent = label || 'Waiting for daemon…';
   document.getElementById('outputElapsed').textContent = '';
   if (_pollTimer) clearInterval(_pollTimer);
   _pollTimer = setInterval(_pollOutput, 3000);
@@ -599,7 +599,7 @@ async function _pollOutput() {
     document.getElementById('outputElapsed').textContent = `${secs}s elapsed`;
 
     if (data.status === 'running') {
-      document.getElementById('outputStatus').textContent = '⏳ Running…';
+      document.getElementById('outputStatus').textContent = 'Running…';
       if (data.output) {
         const el = document.getElementById('outputBodyText');
         el.textContent = data.output;
@@ -607,7 +607,7 @@ async function _pollOutput() {
     } else if (data.status === 'done') {
       clearInterval(_pollTimer);
       const secs2 = Math.round((Date.now() - _runStart) / 1000);
-      document.getElementById('outputStatus').textContent = '✅ Done';
+      document.getElementById('outputStatus').textContent = 'Done';
       document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
       if (data.has_report) {
         // Embed the full HTML report in an iframe
