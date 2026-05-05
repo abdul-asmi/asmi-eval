@@ -113,20 +113,31 @@ def _poll_railway() -> dict | None:
 
 
 def _latest_results_json() -> list:
-    """Read the most recently *written* results_*.json from the eval folder."""
+    """Read the exact results file written by the most recent run."""
     try:
-        files = glob.glob(os.path.join(EVAL_DIR, "results_*.json"))
-        if not files:
-            print("  [results] no results_*.json files found")
-            return []
-        # Sort by actual mtime so same-minute runs don't collide
-        files.sort(key=os.path.getmtime, reverse=True)
-        chosen = files[0]
-        print(f"  [results] reading {os.path.basename(chosen)} "
-              f"(mtime {datetime.fromtimestamp(os.path.getmtime(chosen)).strftime('%H:%M:%S')})")
+        # Primary: read the pointer file written by commands.py after each run
+        pointer = os.path.join(EVAL_DIR, ".latest_results_path")
+        chosen = None
+        if os.path.exists(pointer):
+            with open(pointer) as f:
+                candidate = f.read().strip()
+            if os.path.exists(candidate):
+                chosen = candidate
+                print(f"  [results] using pointer → {os.path.basename(chosen)}")
+
+        # Fallback: newest file by mtime
+        if not chosen:
+            files = glob.glob(os.path.join(EVAL_DIR, "results_*.json"))
+            if not files:
+                print("  [results] no results_*.json files found")
+                return []
+            files.sort(key=os.path.getmtime, reverse=True)
+            chosen = files[0]
+            print(f"  [results] fallback mtime → {os.path.basename(chosen)}")
+
         with open(chosen, "r", encoding="utf-8") as f:
             data = json.load(f)
-        print(f"  [results] loaded {len(data)} entries")
+        print(f"  [results] loaded {len(data)} entries from {os.path.basename(chosen)}")
         return data
     except Exception as e:
         print(f"  [results read error] {e}")

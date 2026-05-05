@@ -98,12 +98,24 @@ def _run(arg: str) -> str:
         )
         output = result.stdout + result.stderr
 
+        # Parse the exact results file path from run_eval.py's output and
+        # write it to a pointer file so daemon.py reads the right file
+        import re as _re
+        m = _re.search(r'Raw results:\s*(results_\S+\.json)', output)
+        if m:
+            results_path = os.path.join(EVAL_DIR, m.group(1))
+            try:
+                with open(os.path.join(EVAL_DIR, '.latest_results_path'), 'w') as _f:
+                    _f.write(results_path)
+            except Exception:
+                pass
+
         # Extract summary line from output
         summary = _extract_summary(output)
         report  = _latest_report()
 
         return (
-            f"✅ Run complete — {label}\n"
+            f"Run complete — {label}\n"
             f"{summary}\n"
             f"Report: {report or 'check eval folder'}"
         )

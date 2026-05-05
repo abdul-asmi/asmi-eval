@@ -204,24 +204,45 @@ textarea { resize: vertical; min-height: 70px; }
                 background:#1e293b; color:#94a3b8; font-size:0.8rem; }
 #outputHeader strong { color:#e2e8f0; }
 #outputBody { padding:0; }
-#outputBodyText { padding:10px 24px 12px; white-space:pre-wrap; line-height:1.5;
+#outputBodyText { padding:10px 24px 8px; white-space:pre-wrap; line-height:1.5;
                   font-family:monospace; font-size:0.78rem; color:#94a3b8; }
-#resultsTable { display:none; background:white; padding:20px 24px; }
-.rt-summary { font-size:0.9rem; font-weight:600; color:#1e293b; margin-bottom:14px;
+#resultsTable { display:none; background:white; padding:16px 24px 20px; }
+.rt-summary { font-size:0.9rem; font-weight:600; color:#1e293b; margin-bottom:16px;
               display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
-.rt-pass { color:#16a34a; } .rt-fail { color:#dc2626; } .rt-unclear { color:#b45309; }
-.rt-pct  { font-size:1.5rem; font-weight:800; }
-table.results { width:100%; border-collapse:collapse; font-size:0.85rem; }
-table.results th { text-align:left; padding:6px 10px; font-size:0.72rem; font-weight:700;
-                   text-transform:uppercase; letter-spacing:.04em; color:#64748b;
-                   border-bottom:2px solid #e2e8f0; }
-table.results td { padding:9px 10px; border-bottom:1px solid #f1f5f9; color:#374151;
-                   vertical-align:top; }
-table.results tr:last-child td { border-bottom:none; }
-.verdict-pass { color:#16a34a; font-weight:700; }
-.verdict-fail { color:#dc2626; font-weight:700; }
-.verdict-unclear { color:#b45309; font-weight:600; }
-.reason-cell { color:#64748b; font-size:0.82rem; max-width:380px; }
+.rt-pass { color:#16a34a; font-weight:700; }
+.rt-fail { color:#dc2626; font-weight:700; }
+.rt-unclear { color:#b45309; font-weight:700; }
+.rt-pct  { font-size:1.6rem; font-weight:800; }
+/* Rich result cards */
+.rt-card { border-radius:8px; margin-bottom:10px; overflow:hidden;
+           border:1px solid #e2e8f0; }
+.rt-card.rt-pass  { border-left:4px solid #22c55e; }
+.rt-card.rt-fail  { border-left:4px solid #ef4444; }
+.rt-card.rt-unclear { border-left:4px solid #f59e0b; }
+.rt-card-hdr { display:flex; align-items:center; gap:10px; padding:10px 14px;
+               background:#f8fafc; flex-wrap:wrap; }
+.rt-tid  { font-family:monospace; font-size:0.78rem; color:#94a3b8; flex-shrink:0; }
+.rt-tname { font-weight:600; font-size:0.9rem; flex:1; }
+.rt-badge { font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:99px; }
+.rt-badge.rt-pass   { background:#dcfce7; color:#16a34a; }
+.rt-badge.rt-fail   { background:#fee2e2; color:#dc2626; }
+.rt-badge.rt-unclear{ background:#fef3c7; color:#b45309; }
+.rt-dur { font-size:0.75rem; color:#94a3b8; margin-left:auto; flex-shrink:0; }
+.rt-section { padding:10px 14px; border-top:1px solid #f1f5f9; }
+.rt-slabel { font-size:0.68rem; font-weight:700; text-transform:uppercase;
+             letter-spacing:.06em; color:#94a3b8; margin-bottom:6px; }
+.rt-msg  { font-size:0.85rem; color:#374151; padding:7px 10px; background:#f8fafc;
+           border-radius:5px; margin-bottom:4px; border:1px solid #f1f5f9; }
+.rt-resp-num { font-size:0.7rem; font-weight:700; color:#64748b; margin-right:6px; }
+.rt-judge { font-size:0.85rem; color:#64748b; line-height:1.55; }
+/* Inline result inside test card */
+.inline-result { display:none; margin-top:14px; border-radius:8px; overflow:hidden;
+                 border:1px solid #e2e8f0; font-size:0.85rem; }
+.inline-result.running { display:block; padding:12px 14px; color:#7c3aed;
+                          font-weight:600; background:#faf5ff; border-color:#e9d5ff; }
+.inline-result.done { display:block; }
+.inline-running-dots::after { content:'...'; animation:dots 1.2s steps(4,end) infinite; }
+@keyframes dots { 0%,20%{content:'.'} 40%{content:'..'} 60%,100%{content:'...'} }
 </style>
 </head>
 <body>
@@ -463,10 +484,11 @@ function renderCard(t) {
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-run" onclick="runById('${t.id}')">▶ Run this test</button>
+        <button class="btn btn-run" id="runbtn_${t.id}" onclick="runById('${t.id}')">▶ Run this test</button>
         <button class="btn btn-success" onclick="saveAll()">Save</button>
         <button class="btn btn-danger" onclick="deleteTest(${idx})">Delete</button>
       </div>
+      <div class="inline-result" id="result_${t.id}"></div>
     </div>
   </div>`;
 }
@@ -556,8 +578,9 @@ async function saveAll() {
   }
 }
 
-let _pollTimer = null;
-let _runStart  = 0;
+let _pollTimer    = null;
+let _runStart     = 0;
+let _activeTestId = null;
 
 async function runTests() {
   const cat = document.getElementById('runCat').value;
@@ -565,6 +588,18 @@ async function runTests() {
 }
 
 async function runById(id) {
+  _activeTestId = id;
+  // Open the card body so inline result is visible
+  const body = document.getElementById('body_' + id);
+  if (body && !body.classList.contains('open')) body.classList.add('open');
+  // Show running indicator inline
+  const inlineEl = document.getElementById('result_' + id);
+  if (inlineEl) {
+    inlineEl.className = 'inline-result running';
+    inlineEl.innerHTML = '<span class="inline-running-dots">Running</span>';
+  }
+  const btn = document.getElementById('runbtn_' + id);
+  if (btn) btn.disabled = true;
   await _triggerRun({id});
 }
 
@@ -616,20 +651,74 @@ async function _pollOutput() {
 
     if (data.status === 'running') {
       document.getElementById('outputStatus').textContent = 'Running…';
+      // Update inline elapsed for active single test
+      if (_activeTestId) {
+        const inlineEl = document.getElementById('result_' + _activeTestId);
+        if (inlineEl && inlineEl.classList.contains('running'))
+          inlineEl.innerHTML = `<span class="inline-running-dots">Running</span> <span style="color:#94a3b8;font-size:0.78rem">${secs}s</span>`;
+      }
     } else if (data.status === 'done') {
       clearInterval(_pollTimer);
       const secs2 = Math.round((Date.now() - _runStart) / 1000);
+      document.getElementById('outputStatus').textContent = 'Done';
       document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
+      document.getElementById('outputBodyText').textContent = '';
+
       if (data.results && data.results.length > 0) {
-        document.getElementById('outputStatus').textContent = 'Done';
-        document.getElementById('outputBodyText').textContent = '';
         _renderResults(data.results);
+        // Render inline for the specific test that was run
+        if (_activeTestId) {
+          const r = data.results.find(x => x.id === _activeTestId);
+          if (r) _renderInlineResult(_activeTestId, r);
+          const btn = document.getElementById('runbtn_' + _activeTestId);
+          if (btn) btn.disabled = false;
+          _activeTestId = null;
+        }
       } else {
-        document.getElementById('outputStatus').textContent = 'Done';
         document.getElementById('outputBodyText').textContent = data.output || '(no output)';
+        if (_activeTestId) {
+          const inlineEl = document.getElementById('result_' + _activeTestId);
+          if (inlineEl) { inlineEl.className = 'inline-result running'; inlineEl.innerHTML = data.output || 'No result'; }
+          const btn = document.getElementById('runbtn_' + _activeTestId);
+          if (btn) btn.disabled = false;
+          _activeTestId = null;
+        }
       }
     }
   } catch(e) {}
+}
+
+function _resultCard(r) {
+  const v    = (r.verdict || 'UNCLEAR').toUpperCase();
+  const vcls = v === 'PASS' ? 'rt-pass' : v === 'FAIL' ? 'rt-fail' : 'rt-unclear';
+
+  const started  = r.started_at  ? new Date(r.started_at)  : null;
+  const finished = r.finished_at ? new Date(r.finished_at) : null;
+  const dur = started && finished ? Math.round((finished - started) / 1000) + 's' : '';
+
+  const tasks = (r.tasks_sent || []).map(t =>
+    `<div class="rt-msg">${esc(t)}</div>`).join('');
+  const resps = (r.responses || []).map((rsp, i) =>
+    `<div class="rt-msg"><span class="rt-resp-num">Response ${i+1}</span>${esc(rsp)}</div>`).join('');
+
+  return `<div class="rt-card ${vcls}">
+    <div class="rt-card-hdr">
+      <span class="rt-tid">[${esc(r.id||'')}]</span>
+      <span class="rt-tname">${esc(r.name||'')}</span>
+      <span class="rt-badge ${vcls}">${v}</span>
+      ${dur ? `<span class="rt-dur">${dur}</span>` : ''}
+    </div>
+    ${tasks ? `<div class="rt-section"><div class="rt-slabel">Task sent</div>${tasks}</div>` : ''}
+    ${resps ? `<div class="rt-section"><div class="rt-slabel">Responses (${(r.responses||[]).length})</div>${resps}</div>` : ''}
+    ${r.reason ? `<div class="rt-section"><div class="rt-slabel">Judge</div><div class="rt-judge">${esc(r.reason)}</div></div>` : ''}
+  </div>`;
+}
+
+function _renderInlineResult(id, r) {
+  const inlineEl = document.getElementById('result_' + id);
+  if (!inlineEl) return;
+  inlineEl.className = 'inline-result done';
+  inlineEl.innerHTML = _resultCard(r);
 }
 
 function _renderResults(results) {
@@ -638,20 +727,9 @@ function _renderResults(results) {
   const failed  = results.filter(r => r.verdict === 'FAIL').length;
   const unclear = total - passed - failed;
   const pct     = total ? Math.round(passed / total * 100) : 0;
-
   const pctColor = pct === 100 ? '#16a34a' : pct >= 70 ? '#b45309' : '#dc2626';
 
-  let rows = results.map(r => {
-    const vc = r.verdict === 'PASS' ? 'verdict-pass' :
-               r.verdict === 'FAIL' ? 'verdict-fail' : 'verdict-unclear';
-    const reason = esc(r.reason || r.notes || '');
-    return `<tr>
-      <td style="font-family:monospace;font-size:0.8rem;color:#64748b">${esc(r.id||'')}</td>
-      <td>${esc(r.name||'')}</td>
-      <td class="${vc}">${esc(r.verdict||'—')}</td>
-      <td class="reason-cell">${reason}</td>
-    </tr>`;
-  }).join('');
+  const cards = results.map(_resultCard).join('');
 
   const el = document.getElementById('resultsTable');
   el.style.display = 'block';
@@ -663,12 +741,7 @@ function _renderResults(results) {
       ${unclear ? `<span class="rt-unclear">${unclear} unclear</span>` : ''}
       <span style="color:#94a3b8;font-weight:400">${total} total</span>
     </div>
-    <table class="results">
-      <thead><tr>
-        <th>ID</th><th>Test</th><th>Verdict</th><th>Reason</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+    ${cards}`;
 }
 
 function clearOutput() {
