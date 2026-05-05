@@ -28,6 +28,7 @@ _run_output      = ""     # captured stdout from last run
 _run_status      = "idle" # "idle" | "running" | "done"
 _run_started     = 0.0    # epoch time when run started
 _run_report_html = ""     # full HTML of latest report (posted by daemon)
+_run_results     = []     # list of result dicts from results_*.json
 
 PORT      = int(os.environ.get("PORT", 8765))
 GH_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
@@ -203,10 +204,24 @@ textarea { resize: vertical; min-height: 70px; }
                 background:#1e293b; color:#94a3b8; font-size:0.8rem; }
 #outputHeader strong { color:#e2e8f0; }
 #outputBody { padding:0; }
-#outputBodyText { padding:12px 24px 16px; max-height:300px; overflow-y:auto;
-                  white-space:pre-wrap; line-height:1.5; font-family:monospace; font-size:0.78rem; }
-#reportFrame { display:none; width:100%; height:72vh; border:none;
-               background:white; border-radius:0 0 4px 4px; }
+#outputBodyText { padding:10px 24px 12px; white-space:pre-wrap; line-height:1.5;
+                  font-family:monospace; font-size:0.78rem; color:#94a3b8; }
+#resultsTable { display:none; background:white; padding:20px 24px; }
+.rt-summary { font-size:0.9rem; font-weight:600; color:#1e293b; margin-bottom:14px;
+              display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+.rt-pass { color:#16a34a; } .rt-fail { color:#dc2626; } .rt-unclear { color:#b45309; }
+.rt-pct  { font-size:1.5rem; font-weight:800; }
+table.results { width:100%; border-collapse:collapse; font-size:0.85rem; }
+table.results th { text-align:left; padding:6px 10px; font-size:0.72rem; font-weight:700;
+                   text-transform:uppercase; letter-spacing:.04em; color:#64748b;
+                   border-bottom:2px solid #e2e8f0; }
+table.results td { padding:9px 10px; border-bottom:1px solid #f1f5f9; color:#374151;
+                   vertical-align:top; }
+table.results tr:last-child td { border-bottom:none; }
+.verdict-pass { color:#16a34a; font-weight:700; }
+.verdict-fail { color:#dc2626; font-weight:700; }
+.verdict-unclear { color:#b45309; font-weight:600; }
+.reason-cell { color:#64748b; font-size:0.82rem; max-width:380px; }
 </style>
 </head>
 <body>
@@ -232,7 +247,7 @@ textarea { resize: vertical; min-height: 70px; }
             border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.75rem">✕ Close</button>
   </div>
   <div id="outputBodyText"></div>
-  <iframe id="reportFrame" title="Eval Report"></iframe>
+  <div id="resultsTable"></div>
 </div>
 <div class="toolbar">
   <input type="text" id="search" placeholder="Search tests…" style="width:200px" oninput="filter()">
@@ -336,7 +351,7 @@ textarea { resize: vertical; min-height: 70px; }
 let tests = [];
 
 async function load() {
-  document.getElementById('subtitle').textContent = 'Loading from GitHub…';
+  document.getElementById('subtitle').textContent = 'Loading…';
   try {
     const res = await fetch('/api/tests');
     tests = await res.json();
@@ -361,7 +376,7 @@ function render() {
   );
 
   document.getElementById('countBadge').textContent = `${filtered.length} / ${tests.length} tests`;
-  document.getElementById('subtitle').textContent   = `${tests.length} tests · GitHub`;
+  document.getElementById('subtitle').textContent   = `${tests.length} tests`;
 
   const bycat = {};
   filtered.forEach(t => {
@@ -449,7 +464,7 @@ function renderCard(t) {
       </div>
       <div class="form-actions">
         <button class="btn btn-run" onclick="runById('${t.id}')">▶ Run this test</button>
-        <button class="btn btn-success" onclick="saveAll()">Save to GitHub</button>
+        <button class="btn btn-success" onclick="saveAll()">Save</button>
         <button class="btn btn-danger" onclick="deleteTest(${idx})">Delete</button>
       </div>
     </div>
@@ -582,7 +597,8 @@ function _openOutput(label) {
   _runStart = Date.now();
   const panel = document.getElementById('outputPanel');
   panel.style.display = 'block';
-  document.getElementById('reportFrame').style.display = 'none';
+  document.getElementById('resultsTable').style.display = 'none';
+  document.getElementById('resultsTable').innerHTML = '';
   document.getElementById('outputBodyText').textContent = '';
   document.getElementById('outputStatus').textContent = label || 'Waiting for daemon…';
   document.getElementById('outputElapsed').textContent = '';
@@ -600,32 +616,64 @@ async function _pollOutput() {
 
     if (data.status === 'running') {
       document.getElementById('outputStatus').textContent = 'Running…';
-      if (data.output) {
-        const el = document.getElementById('outputBodyText');
-        el.textContent = data.output;
-      }
     } else if (data.status === 'done') {
       clearInterval(_pollTimer);
       const secs2 = Math.round((Date.now() - _runStart) / 1000);
-      document.getElementById('outputStatus').textContent = 'Done';
       document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
-      if (data.has_report) {
-        // Embed the full HTML report in an iframe
-        document.getElementById('outputBodyText').textContent = data.output || '';
-        const frame = document.getElementById('reportFrame');
-        frame.src = '/api/report?t=' + Date.now();
-        frame.style.display = 'block';
+      if (data.results && data.results.length > 0) {
+        document.getElementById('outputStatus').textContent = 'Done';
+        document.getElementById('outputBodyText').textContent = '';
+        _renderResults(data.results);
       } else {
+        document.getElementById('outputStatus').textContent = 'Done';
         document.getElementById('outputBodyText').textContent = data.output || '(no output)';
       }
     }
   } catch(e) {}
 }
 
+function _renderResults(results) {
+  const total   = results.length;
+  const passed  = results.filter(r => r.verdict === 'PASS').length;
+  const failed  = results.filter(r => r.verdict === 'FAIL').length;
+  const unclear = total - passed - failed;
+  const pct     = total ? Math.round(passed / total * 100) : 0;
+
+  const pctColor = pct === 100 ? '#16a34a' : pct >= 70 ? '#b45309' : '#dc2626';
+
+  let rows = results.map(r => {
+    const vc = r.verdict === 'PASS' ? 'verdict-pass' :
+               r.verdict === 'FAIL' ? 'verdict-fail' : 'verdict-unclear';
+    const reason = esc(r.reason || r.notes || '');
+    return `<tr>
+      <td style="font-family:monospace;font-size:0.8rem;color:#64748b">${esc(r.id||'')}</td>
+      <td>${esc(r.name||'')}</td>
+      <td class="${vc}">${esc(r.verdict||'—')}</td>
+      <td class="reason-cell">${reason}</td>
+    </tr>`;
+  }).join('');
+
+  const el = document.getElementById('resultsTable');
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="rt-summary">
+      <span class="rt-pct" style="color:${pctColor}">${pct}%</span>
+      <span class="rt-pass">${passed} passed</span>
+      <span class="rt-fail">${failed} failed</span>
+      ${unclear ? `<span class="rt-unclear">${unclear} unclear</span>` : ''}
+      <span style="color:#94a3b8;font-weight:400">${total} total</span>
+    </div>
+    <table class="results">
+      <thead><tr>
+        <th>ID</th><th>Test</th><th>Verdict</th><th>Reason</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function clearOutput() {
   document.getElementById('outputPanel').style.display = 'none';
-  document.getElementById('reportFrame').style.display = 'none';
-  document.getElementById('reportFrame').src = '';
+  document.getElementById('resultsTable').style.display = 'none';
   if (_pollTimer) clearInterval(_pollTimer);
 }
 
@@ -666,26 +714,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"run": run})
         elif path == "/api/output":
             self._json({
-                "status":     _run_status,
-                "output":     _run_output,
-                "has_report": bool(_run_report_html),
-                "elapsed":    int(time.time() - _run_started) if _run_started else 0,
+                "status":  _run_status,
+                "output":  _run_output,
+                "results": _run_results,
+                "elapsed": int(time.time() - _run_started) if _run_started else 0,
             })
-        elif path == "/api/report":
-            if _run_report_html:
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(_run_report_html.encode())
-            else:
-                self._json({"error": "no report available"})
         elif path == "/health":
             self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
         else:
             self._html(HTML)
 
     def do_POST(self):
-        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html
+        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results
         path = urlparse(self.path).path
         if path == "/api/tests":
             length = int(self.headers.get("Content-Length", 0))
@@ -711,6 +751,7 @@ class Handler(BaseHTTPRequestHandler):
             _run_output  = ""
             _run_status  = "running"
             _run_started = time.time()
+            _run_results = []
             mac_online = (time.time() - _last_heartbeat) < 90
             self._json({"ok": True, "mac_online": mac_online})
         elif path == "/api/output":
@@ -721,6 +762,7 @@ class Handler(BaseHTTPRequestHandler):
                 _run_output      = data.get("output", "")
                 _run_status      = data.get("status", "done")
                 _run_report_html = data.get("report_html", "")
+                _run_results     = data.get("results", [])
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})

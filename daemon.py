@@ -112,43 +112,40 @@ def _poll_railway() -> dict | None:
         return None
 
 
-def _latest_report_html() -> str:
-    """Read the most recent report_*.html from the eval folder, or ''."""
+def _latest_results_json() -> list:
+    """Read the most recent results_*.json from the eval folder."""
     try:
         files = sorted(
-            glob.glob(os.path.join(EVAL_DIR, "report_*.html")),
+            glob.glob(os.path.join(EVAL_DIR, "results_*.json")),
             reverse=True
         )
         if not files:
-            return ""
-        with open(files[0], "r", encoding="utf-8", errors="replace") as f:
-            return f.read()
+            return []
+        with open(files[0], "r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception as e:
-        print(f"  [report read error] {e}")
-        return ""
+        print(f"  [results read error] {e}")
+        return []
 
 
 def _post_output_to_railway(output: str, status: str = "done"):
-    """Send run output (+ latest HTML report) back to Railway UI."""
+    """Send run output + results JSON back to Railway UI."""
     if not RAILWAY_URL:
         return
     try:
-        report_html = _latest_report_html() if status == "done" else ""
+        results = _latest_results_json() if status == "done" else []
         body = json.dumps({
-            "output":      output,
-            "status":      status,
-            "report_html": report_html,
+            "output":  output,
+            "status":  status,
+            "results": results,
         }).encode()
         req = urllib.request.Request(
             f"{RAILWAY_URL}/api/output",
             data=body, method="POST",
         )
         req.add_header("Content-Type", "application/json")
-        urllib.request.urlopen(req, timeout=30, context=_SSL_CTX)
-        if report_html:
-            print(f"  [railway] posted output + report ({len(report_html)//1024}KB)")
-        else:
-            print(f"  [railway] posted output (no report file found)")
+        urllib.request.urlopen(req, timeout=15, context=_SSL_CTX)
+        print(f"  [railway] posted output + {len(results)} results")
     except Exception as e:
         print(f"  [railway output post error] {e}")
 
@@ -166,17 +163,10 @@ def run():
   Ctrl+C to stop
 ╚══════════════════════════════════════════════════════╝
 """)
-    print(f"  Tip: iMessage abdulgaffoor1729@gmail.com from your iPhone with:")
+    print(f"  Commands via iMessage to {COMMAND_HANDLE}:")
     print(f"    {COMMAND_PREFIX}help       → see all commands")
     print(f"    {COMMAND_PREFIX}run all    → run full test suite")
-    print(f"    {COMMAND_PREFIX}status     → last run summary")
-    print(f"  All replies will appear in your Messages thread.\n")
-
-    # Send startup notification to yourself
-    _send_reply(
-        f"🤖 Eval daemon started\n"
-        f"Send me {COMMAND_PREFIX}help to see available commands."
-    )
+    print(f"    {COMMAND_PREFIX}status     → last run summary\n")
 
     while True:
         try:
@@ -206,8 +196,7 @@ def run():
                 except Exception as e:
                     response = f"❌ Error executing command: {e}"
 
-                print(f"  → Sending reply ({len(response)} chars)")
-                _send_reply(response)
+                print(f"  → Reply ({len(response)} chars): {response[:120]}")
 
             # Check Railway UI for run requests triggered from the browser
             pending = _poll_railway()
@@ -226,7 +215,6 @@ def run():
 
         except KeyboardInterrupt:
             print("\n\n  Daemon stopped.")
-            _send_reply("🛑 Eval daemon stopped.")
             break
         except Exception as e:
             print(f"  [daemon error] {e}")
