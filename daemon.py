@@ -113,16 +113,21 @@ def _poll_railway() -> dict | None:
 
 
 def _latest_results_json() -> list:
-    """Read the most recent results_*.json from the eval folder."""
+    """Read the most recently *written* results_*.json from the eval folder."""
     try:
-        files = sorted(
-            glob.glob(os.path.join(EVAL_DIR, "results_*.json")),
-            reverse=True
-        )
+        files = glob.glob(os.path.join(EVAL_DIR, "results_*.json"))
         if not files:
+            print("  [results] no results_*.json files found")
             return []
-        with open(files[0], "r", encoding="utf-8") as f:
-            return json.load(f)
+        # Sort by actual mtime so same-minute runs don't collide
+        files.sort(key=os.path.getmtime, reverse=True)
+        chosen = files[0]
+        print(f"  [results] reading {os.path.basename(chosen)} "
+              f"(mtime {datetime.fromtimestamp(os.path.getmtime(chosen)).strftime('%H:%M:%S')})")
+        with open(chosen, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        print(f"  [results] loaded {len(data)} entries")
+        return data
     except Exception as e:
         print(f"  [results read error] {e}")
         return []
