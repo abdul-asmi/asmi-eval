@@ -28,7 +28,7 @@ HELP_TEXT = """
 !status               → summary of last run
 !list                 → list all test IDs
 !add test [describe]  → add a new test case with Gemini
-!help                 → show this message
+!menu                 → show this message
 
 Categories:
   sticky_message · call_dedup · call_summary · language_pref
@@ -49,7 +49,7 @@ def handle(text: str) -> str:
     text  = text.strip()
     lower = text.lower().lstrip("!")
 
-    if lower in ["help", "commands"]:
+    if lower in ["help", "commands", "menu"]:
         return HELP_TEXT
 
     if lower in ["status", "results", "last run", "last results"]:
