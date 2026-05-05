@@ -217,7 +217,7 @@ TEST_CASES = [
         'messages': ['Hi', 'What can you help me with?', 'Can you make phone calls?', 'How do I get started?'],
         'burst_delay': 1,
         'wait': 120,
-        'expected_responses': 10,
+        'expected_responses': 4,
         'pass_criteria': 'All 4 messages receive responses. No dropped messages. No doubled replies. Onboarding flow is not broken by the burst.',
         'precondition': 'Fresh account in pre-onboarding state.',
     },
