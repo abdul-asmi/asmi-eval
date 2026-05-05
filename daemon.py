@@ -12,14 +12,20 @@
 # To run in background:  nohup python daemon.py > daemon.log 2>&1 &
 # To stop:               pkill -f daemon.py
 
+import glob
 import json
 import os
 import sqlite3
+import ssl
 import sys
 import time
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone, timedelta
+
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -94,28 +100,55 @@ def _send_reply(text: str):
 def _poll_railway() -> dict | None:
     """Check Railway UI for a pending run request. Returns run dict or None."""
     if not RAILWAY_URL:
+        print("  [railway] RAILWAY_URL not set — skipping poll")
         return None
     try:
         req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=5, context=_SSL_CTX) as resp:
             data = json.loads(resp.read())
             return data.get("run")
-    except Exception:
+    except Exception as e:
+        print(f"  [railway poll error] {e}")
         return None
 
 
+def _latest_report_html() -> str:
+    """Read the most recent report_*.html from the eval folder, or ''."""
+    try:
+        files = sorted(
+            glob.glob(os.path.join(EVAL_DIR, "report_*.html")),
+            reverse=True
+        )
+        if not files:
+            return ""
+        with open(files[0], "r", encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except Exception as e:
+        print(f"  [report read error] {e}")
+        return ""
+
+
 def _post_output_to_railway(output: str, status: str = "done"):
-    """Send run output back to Railway UI so it shows in the browser."""
+    """Send run output (+ latest HTML report) back to Railway UI."""
     if not RAILWAY_URL:
         return
     try:
-        body = json.dumps({"output": output, "status": status}).encode()
-        req  = urllib.request.Request(
+        report_html = _latest_report_html() if status == "done" else ""
+        body = json.dumps({
+            "output":      output,
+            "status":      status,
+            "report_html": report_html,
+        }).encode()
+        req = urllib.request.Request(
             f"{RAILWAY_URL}/api/output",
             data=body, method="POST",
         )
         req.add_header("Content-Type", "application/json")
-        urllib.request.urlopen(req, timeout=10)
+        urllib.request.urlopen(req, timeout=30, context=_SSL_CTX)
+        if report_html:
+            print(f"  [railway] posted output + report ({len(report_html)//1024}KB)")
+        else:
+            print(f"  [railway] posted output (no report file found)")
     except Exception as e:
         print(f"  [railway output post error] {e}")
 
@@ -188,9 +221,8 @@ def run():
                     response = handle(cmd)
                 except Exception as e:
                     response = f"❌ Error: {e}"
-                # Post full output to Railway UI for display in browser
+                # Post full output + HTML report to Railway UI for display in browser
                 _post_output_to_railway(response, status="done")
-                _send_reply(f"🖥 Run triggered from UI\n{response}")
 
         except KeyboardInterrupt:
             print("\n\n  Daemon stopped.")

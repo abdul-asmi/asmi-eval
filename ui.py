@@ -22,11 +22,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 # ── Run queue (in-memory) ──────────────────────────────────────────────────────
-_pending_run    = None   # dict {category, id} or None
-_last_heartbeat = 0.0    # epoch time of last daemon poll
-_run_output     = ""     # captured stdout from last run
-_run_status     = "idle" # "idle" | "running" | "done"
-_run_started    = 0.0    # epoch time when run started
+_pending_run     = None   # dict {category, id} or None
+_last_heartbeat  = 0.0    # epoch time of last daemon poll
+_run_output      = ""     # captured stdout from last run
+_run_status      = "idle" # "idle" | "running" | "done"
+_run_started     = 0.0    # epoch time when run started
+_run_report_html = ""     # full HTML of latest report (posted by daemon)
 
 PORT      = int(os.environ.get("PORT", 8765))
 GH_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
@@ -123,15 +124,22 @@ HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Asmi Eval — Test Case Editor</title>
+<title>Break me, Asmi 🧪</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
        background: #f1f5f9; color: #1e293b; }
-header { background: #0f172a; color: white; padding: 16px 24px;
+header { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 55%, #4c1d95 100%);
+         color: white; padding: 16px 24px;
          display: flex; align-items: center; gap: 16px; }
-header h1 { font-size: 1.1rem; font-weight: 600; }
-header span { color: #94a3b8; font-size: 0.85rem; }
+.logo { width:38px; height:38px; border-radius:10px; flex-shrink:0;
+        background: linear-gradient(135deg,#c084fc,#7c3aed);
+        display:flex; align-items:center; justify-content:center;
+        box-shadow: 0 0 0 2px rgba(255,255,255,.15), 0 4px 12px rgba(124,58,237,.5); }
+.logo svg { display:block; }
+.header-text { display:flex; flex-direction:column; gap:2px; }
+.header-title { font-size: 1.15rem; font-weight: 700; letter-spacing:-.01em; }
+.header-sub { color: #c4b5fd; font-size: 0.82rem; }
 .toolbar { background: white; border-bottom: 1px solid #e2e8f0;
            padding: 12px 24px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .toolbar select, .toolbar input { padding: 6px 10px; border: 1px solid #e2e8f0;
@@ -194,15 +202,26 @@ textarea { resize: vertical; min-height: 70px; }
 #outputHeader { display:flex; align-items:center; gap:12px; padding:10px 24px;
                 background:#1e293b; color:#94a3b8; font-size:0.8rem; }
 #outputHeader strong { color:#e2e8f0; }
-#outputBody { padding:12px 24px 16px; max-height:420px; overflow-y:auto;
-              white-space:pre-wrap; line-height:1.5; }
+#outputBody { padding:0; }
+#outputBodyText { padding:12px 24px 16px; max-height:300px; overflow-y:auto;
+                  white-space:pre-wrap; line-height:1.5; font-family:monospace; font-size:0.78rem; }
+#reportFrame { display:none; width:100%; height:72vh; border:none;
+               background:white; border-radius:0 0 4px 4px; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>🧪 Asmi Eval — Test Case Editor</h1>
-  <span id="subtitle">Loading…</span>
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M11 2L13.8 8.6H20.4L15 12.8L17.2 19.4L11 15.2L4.8 19.4L7 12.8L1.6 8.6H8.2L11 2Z"
+            fill="white" fill-opacity="0.95"/>
+    </svg>
+  </div>
+  <div class="header-text">
+    <div class="header-title">Break me, Asmi 🧪</div>
+    <div class="header-sub" id="subtitle">Ready when you are.</div>
+  </div>
 </header>
 
 <div id="outputPanel">
@@ -212,7 +231,8 @@ textarea { resize: vertical; min-height: 70px; }
     <button onclick="clearOutput()" style="background:#334155;color:#94a3b8;border:none;
             border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.75rem">✕ Close</button>
   </div>
-  <div id="outputBody"></div>
+  <div id="outputBodyText"></div>
+  <iframe id="reportFrame" title="Eval Report"></iframe>
 </div>
 <div class="toolbar">
   <input type="text" id="search" placeholder="Search tests…" style="width:200px" oninput="filter()">
@@ -560,12 +580,15 @@ async function _triggerRun(payload) {
 
 function _openOutput(label) {
   _runStart = Date.now();
-  document.getElementById('outputPanel').style.display = 'block';
-  document.getElementById('outputBody').textContent = '';
+  const panel = document.getElementById('outputPanel');
+  panel.style.display = 'block';
+  document.getElementById('reportFrame').style.display = 'none';
+  document.getElementById('outputBodyText').textContent = '';
   document.getElementById('outputStatus').textContent = `⏳ ${label || 'Waiting for daemon…'}`;
   document.getElementById('outputElapsed').textContent = '';
   if (_pollTimer) clearInterval(_pollTimer);
   _pollTimer = setInterval(_pollOutput, 3000);
+  panel.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 async function _pollOutput() {
@@ -577,21 +600,32 @@ async function _pollOutput() {
 
     if (data.status === 'running') {
       document.getElementById('outputStatus').textContent = '⏳ Running…';
+      if (data.output) {
+        const el = document.getElementById('outputBodyText');
+        el.textContent = data.output;
+      }
     } else if (data.status === 'done') {
-      document.getElementById('outputStatus').textContent = '✅ Done';
       clearInterval(_pollTimer);
-    }
-
-    if (data.output) {
-      const el = document.getElementById('outputBody');
-      el.textContent = data.output;
-      el.scrollTop = el.scrollHeight;
+      const secs2 = Math.round((Date.now() - _runStart) / 1000);
+      document.getElementById('outputStatus').textContent = '✅ Done';
+      document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
+      if (data.has_report) {
+        // Embed the full HTML report in an iframe
+        document.getElementById('outputBodyText').textContent = data.output || '';
+        const frame = document.getElementById('reportFrame');
+        frame.src = '/api/report?t=' + Date.now();
+        frame.style.display = 'block';
+      } else {
+        document.getElementById('outputBodyText').textContent = data.output || '(no output)';
+      }
     }
   } catch(e) {}
 }
 
 function clearOutput() {
   document.getElementById('outputPanel').style.display = 'none';
+  document.getElementById('reportFrame').style.display = 'none';
+  document.getElementById('reportFrame').src = '';
   if (_pollTimer) clearInterval(_pollTimer);
 }
 
@@ -632,17 +666,26 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"run": run})
         elif path == "/api/output":
             self._json({
-                "status":  _run_status,
-                "output":  _run_output,
-                "elapsed": int(time.time() - _run_started) if _run_started else 0,
+                "status":     _run_status,
+                "output":     _run_output,
+                "has_report": bool(_run_report_html),
+                "elapsed":    int(time.time() - _run_started) if _run_started else 0,
             })
+        elif path == "/api/report":
+            if _run_report_html:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(_run_report_html.encode())
+            else:
+                self._json({"error": "no report available"})
         elif path == "/health":
             self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
         else:
             self._html(HTML)
 
     def do_POST(self):
-        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started
+        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html
         path = urlparse(self.path).path
         if path == "/api/tests":
             length = int(self.headers.get("Content-Length", 0))
@@ -675,8 +718,9 @@ class Handler(BaseHTTPRequestHandler):
             body   = self.rfile.read(length)
             try:
                 data = json.loads(body)
-                _run_output = data.get("output", "")
-                _run_status = data.get("status", "done")
+                _run_output      = data.get("output", "")
+                _run_status      = data.get("status", "done")
+                _run_report_html = data.get("report_html", "")
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
