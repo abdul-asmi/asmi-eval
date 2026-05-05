@@ -3,3 +3,6 @@ results_*.json
 report_*.html
 daemon.log
 __pycache__/
+.DS_Store
+.claude/
+reports/.latest_results_path
