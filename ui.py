@@ -1323,7 +1323,7 @@ class Handler(BaseHTTPRequestHandler):
             self._html(HTML)
 
     def do_POST(self):
-        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results
+        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _stop_requested
         path = urlparse(self.path).path
         if path == "/api/tests":
             length = int(self.headers.get("Content-Length", 0))
@@ -1399,7 +1399,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
         elif path == "/api/stop":
-            global _stop_requested, _run_status
             _stop_requested = True
             _run_status     = "stopped"
             self._json({"ok": True})
