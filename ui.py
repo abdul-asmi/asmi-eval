@@ -143,7 +143,7 @@ Return ONLY valid Python list of dicts, no other text.
 """
 
     if not _client:
-        return None, "GEMINI_API_KEY not set"
+        raise RuntimeError("GEMINI_API_KEY not configured")
 
     try:
         response = _client.models.generate_content(
@@ -173,14 +173,14 @@ Return ONLY valid Python list of dicts, no other text.
                 
             # Ensure required fields
             validated_case = {
-                'id': case.get('id', f'gen_{i+1:02d}'),
-                'name': case.get('name', f'Generated test {i+1}'),
-                'category': case.get('category', 'capability') if case.get('category') in CATEGORIES else 'capability',
-                'type': case.get('type', 'single') if case.get('type') in TYPES else 'single',
-                'message': case.get('message', 'Test message'),
-                'wait': int(case.get('wait', 60)),
-                'pass_criteria': case.get('pass_criteria', 'Test passes if Asmi responds appropriately'),
-                'expected_responses': int(case.get('expected_responses', 1))
+                'id': case.get('id') or f'gen_{i+1:02d}',
+                'name': case.get('name') or f'Generated test {i+1}',
+                'category': case.get('category') if case.get('category') in CATEGORIES else 'capability',
+                'type': case.get('type') if case.get('type') in TYPES else 'single',
+                'message': case.get('message') or case.get('messages', ['Test message'])[0],
+                'wait': int(case.get('wait') or 60),
+                'pass_criteria': case.get('pass_criteria') or 'Test passes if Asmi responds appropriately',
+                'expected_responses': int(case.get('expected_responses') or 1)
             }
             validated_cases.append(validated_case)
         
