@@ -96,17 +96,99 @@ def _send_reply(text: str):
 
 def _poll_railway() -> dict | None:
     """Check Railway UI for a pending run request. Returns run dict or None."""
+    return _poll_railway_full().get("run")
+
+
+def _poll_railway_full() -> dict:
+    """Poll Railway /api/poll. Returns full response dict (run, stop, ...)."""
     if not RAILWAY_URL:
-        print("  [railway] RAILWAY_URL not set — skipping poll")
-        return None
+        return {}
     try:
         req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
         with urllib.request.urlopen(req, timeout=5, context=_SSL_CTX) as resp:
-            data = json.loads(resp.read())
-            return data.get("run")
+            return json.loads(resp.read())
     except Exception as e:
         print(f"  [railway poll error] {e}")
-        return None
+        return {}
+
+
+def _check_stop() -> bool:
+    """Return True if the server has a stop signal pending."""
+    data = _poll_railway_full()
+    return bool(data.get("stop"))
+
+
+def _run_with_stop(cmd: str) -> str:
+    """
+    Run an eval command via subprocess, polling for a stop signal every 5s.
+    Kills the process and returns a ⏹ message if stop is requested.
+    """
+    import subprocess, sys, re as _re
+    from config import EVAL_DIR, REPORTS_DIR
+    from commands import CATEGORIES
+
+    arg = cmd.strip().removeprefix("run").strip()
+    if not arg or arg == "all":
+        proc_cmd = [sys.executable, "run_eval.py"]
+        label = "full suite"
+    elif arg in CATEGORIES:
+        proc_cmd = [sys.executable, "run_eval.py", "--category", arg]
+        label = f"category: {arg}"
+    else:
+        proc_cmd = [sys.executable, "run_eval.py", "--id", arg]
+        label = f"test: {arg}"
+
+    proc = subprocess.Popen(
+        proc_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, cwd=EVAL_DIR,
+    )
+
+    output_lines = []
+    while True:
+        # Read available output without blocking
+        try:
+            line = proc.stdout.readline()
+            if line:
+                output_lines.append(line)
+                print(line, end="", flush=True)
+        except Exception:
+            pass
+
+        if proc.poll() is not None:
+            # Process finished — read remaining output
+            remaining = proc.stdout.read()
+            if remaining:
+                output_lines.append(remaining)
+            break
+
+        if _check_stop():
+            print(f"\n  [stop] killing run_eval.py (pid={proc.pid})")
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            return f"⏹ Run stopped by user — {label}"
+
+        time.sleep(5)
+
+    output = "".join(output_lines)
+    m = _re.search(r'Raw results:\s*(\S+results_\S+\.json)', output)
+    if m:
+        try:
+            with open(os.path.join(REPORTS_DIR, '.latest_results_path'), 'w') as f:
+                f.write(m.group(1))
+        except Exception:
+            pass
+
+    from commands import _extract_summary, _latest_report
+    summary = _extract_summary(output)
+    report  = _latest_report()
+    return (
+        f"Run complete — {label}\n"
+        f"{summary}\n"
+        f"Report: {report or 'check eval folder'}"
+    )
 
 
 def _latest_results_json() -> list:
@@ -234,7 +316,10 @@ def run():
                 print(f"  → Reply ({len(response)} chars): {response[:120]}")
 
             # Check Railway UI for run requests triggered from the browser
-            pending = _poll_railway()
+            poll_data = _poll_railway_full()
+            if poll_data.get("stop"):
+                pass  # already cleared by server; nothing running here
+            pending = poll_data.get("run")
             if pending:
                 cat = pending.get("category")
                 rid = pending.get("id")
@@ -242,13 +327,14 @@ def run():
                 ts  = datetime.now().strftime("%H:%M:%S")
                 print(f"\n  [{ts}] UI run request: {cmd}")
                 try:
-                    response = handle(cmd)
+                    response = _run_with_stop(cmd)
                 except Exception as e:
                     response = f"❌ Error: {e}"
                 # Post full output + HTML report to Railway UI for display in browser
-                _post_output_to_railway(response, status="done")
+                final_status = "stopped" if response.startswith("⏹") else "done"
+                _post_output_to_railway(response, status=final_status)
                 # Also post results back to the local UI server so inline cards can render.
-                _post_output_to_local_ui(response, status="done")
+                _post_output_to_local_ui(response, status=final_status)
 
         except KeyboardInterrupt:
             print("\n\n  Daemon stopped.")

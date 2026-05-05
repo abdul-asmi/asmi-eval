@@ -35,6 +35,7 @@ _run_status      = "idle" # "idle" | "running" | "done"
 _run_started     = 0.0    # epoch time when run started
 _run_report_html = ""     # full HTML of latest report (posted by daemon)
 _run_results     = []     # list of result dicts from results_*.json
+_stop_requested  = False  # True when the user clicks Stop
 
 PORT      = int(os.environ.get("PORT", 8765))
 GH_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
@@ -399,8 +400,10 @@ textarea { resize: vertical; min-height: 70px; }
   <div id="outputHeader">
     <span id="outputStatus">Running…</span>
     <span id="outputElapsed" style="margin-left:auto;color:#64748b"></span>
+    <button id="stopBtn" onclick="stopRun()" style="background:#dc2626;color:white;border:none;
+            border-radius:4px;padding:3px 12px;cursor:pointer;font-size:0.75rem;font-weight:600;display:none">⏹ Stop</button>
     <button onclick="clearOutput()" style="background:#334155;color:#94a3b8;border:none;
-            border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.75rem">✕ Close</button>
+            border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.75rem;margin-left:6px">✕ Close</button>
   </div>
   <div id="outputBodyText"></div>
   <div id="resultsTable"></div>
@@ -842,6 +845,7 @@ function _openOutput(label) {
   document.getElementById('behaviorAnalysisPanel').style.display = 'none';
   document.getElementById('behaviorAnalysisBox').textContent = '';
   _lastRunAnalysis = '';
+  document.getElementById('stopBtn').style.display = 'inline-block';
   // For single-test runs, hide the top panel — result shows inline in card
   if (_activeTestId) {
     panel.style.display = 'none';
@@ -852,6 +856,13 @@ function _openOutput(label) {
   }
   if (_pollTimer) clearInterval(_pollTimer);
   _pollTimer = setInterval(_pollOutput, 3000);
+}
+
+async function stopRun() {
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('outputStatus').textContent = 'Stopping…';
+  try { await fetch('/api/stop', {method:'POST'}); } catch(e) {}
+  toast('Stop signal sent — daemon will halt after current test');
 }
 
 function _cleanOutput(text) {
@@ -880,9 +891,14 @@ async function _pollOutput() {
         if (inlineEl && inlineEl.classList.contains('running'))
           inlineEl.innerHTML = `<span class="inline-running-dots">Running</span> <span style="color:#94a3b8;font-size:0.78rem">${secs}s</span>`;
       }
-    } else if (data.status === 'done') {
+    } else if (data.status === 'done' || data.status === 'stopped') {
       clearInterval(_pollTimer);
+      document.getElementById('stopBtn').style.display = 'none';
       const secs2 = Math.round((Date.now() - _runStart) / 1000);
+      if (data.status === 'stopped') {
+        document.getElementById('outputStatus').textContent = 'Stopped';
+        document.getElementById('outputElapsed').textContent = `${secs2}s`;
+      }
 
       if (data.results && data.results.length > 0) {
         // Multi-test: show full results panel
@@ -988,6 +1004,7 @@ function clearOutput() {
   document.getElementById('outputPanel').style.display = 'none';
   document.getElementById('resultsTable').style.display = 'none';
   document.getElementById('behaviorAnalysisPanel').style.display = 'none';
+  document.getElementById('stopBtn').style.display = 'none';
   if (_pollTimer) clearInterval(_pollTimer);
 }
 
@@ -1277,7 +1294,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        global _pending_run, _last_heartbeat
+        global _pending_run, _last_heartbeat, _stop_requested
         path = urlparse(self.path).path
         if path == "/api/tests":
             try:
@@ -1290,7 +1307,9 @@ class Handler(BaseHTTPRequestHandler):
             _last_heartbeat = time.time()
             run = _pending_run
             _pending_run = None
-            self._json({"run": run})
+            stop = _stop_requested
+            _stop_requested = False  # clear after daemon picks it up
+            self._json({"run": run, "stop": stop})
         elif path == "/api/output":
             self._json({
                 "status":  _run_status,
@@ -1379,6 +1398,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
+        elif path == "/api/stop":
+            global _stop_requested, _run_status
+            _stop_requested = True
+            _run_status     = "stopped"
+            self._json({"ok": True})
 
     def _html(self, body):
         self.send_response(200)
