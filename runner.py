@@ -129,7 +129,10 @@ def collect(tc: dict) -> dict:
         auto_continue = _interactive_auto_continue(tc)
         wait = tc.get("wait", RESPONSE_TIMEOUT)
         max_turns = int(tc.get("max_turns") or max(2, len(followups) + 1))
+        max_responses = int(tc.get("max_responses") or 10)
         transcript = []
+        session_start = None
+        seen_responses = set()
 
         def _hit_stop(text: str) -> bool:
             if not stop_when:
@@ -144,9 +147,25 @@ def collect(tc: dict) -> dict:
                 break
 
             sent_at = datetime.now(timezone.utc)
+            if session_start is None:
+                session_start = sent_at
             send_imessage(current_user)
-            responses = wait_for_responses(sent_at, count=1, timeout=wait, max_responses=10)
-            responses = [r for r in responses if r]
+            poll = wait_for_responses(
+                session_start,
+                count=1,
+                timeout=wait,
+                max_responses=max_responses,
+                drain_all=True,
+                return_raw=True,
+            )
+            new_msgs = []
+            for msg in poll:
+                key = (msg["timestamp"].isoformat(), msg["text"])
+                if key in seen_responses:
+                    continue
+                seen_responses.add(key)
+                new_msgs.append(msg)
+            responses = [m["text"] for m in new_msgs if m.get("text")]
 
             result["tasks_sent"].append(current_user)
             result["responses"].extend(responses)
@@ -179,6 +198,7 @@ def collect(tc: dict) -> dict:
         result["transcript"] = transcript
         result["auto_continue"] = auto_continue
         result["max_turns"] = max_turns
+        result["max_responses"] = max_responses
 
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
     resp_count = len([r for r in result["responses"] if r])

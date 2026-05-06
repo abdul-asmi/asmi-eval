@@ -95,6 +95,9 @@ def wait_for_responses(
     timeout: int = 150,
     handle: str = ASMI_HANDLE,
     max_responses: int = 10,
+    drain_all: bool = False,
+    return_raw: bool = False,
+    silence_after: float = 2.0,
 ) -> list[str]:
     """
     Wait up to `timeout` seconds for `count` responses from Asmi after `sent_at`.
@@ -105,13 +108,18 @@ def wait_for_responses(
     deadline      = time.time() + timeout
     collected     = []
     last_new_time = None
+    seen_keys     = set()
 
     print(f"  Waiting for {count} response(s) (timeout={timeout}s)…", end="", flush=True)
     while time.time() < deadline:
         msgs = _query_messages(handle, since_ns, limit=max_responses)
-        # Deduplicate by timestamp
-        seen_ts   = {m["timestamp"] for m in collected} if collected else set()
-        new_msgs  = [m for m in msgs if m["timestamp"] not in seen_ts]
+        new_msgs  = []
+        for m in msgs:
+            key = (m["timestamp"].isoformat(), m["text"])
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            new_msgs.append(m)
         if new_msgs:
             for m in new_msgs:
                 collected.append(m)
@@ -119,8 +127,8 @@ def wait_for_responses(
             last_new_time = time.time()
         if len(collected) >= max_responses:
             break
-        if len(collected) >= count and last_new_time is not None:
-            if time.time() - last_new_time >= 2:
+        if last_new_time is not None and time.time() - last_new_time >= silence_after:
+            if drain_all or len(collected) >= count:
                 break
         print(".", end="", flush=True)
         time.sleep(POLL_INTERVAL)
@@ -130,6 +138,8 @@ def wait_for_responses(
     else:
         print()
 
+    if return_raw:
+        return collected[:max_responses]
     return [m["text"] for m in collected[:max_responses]]
 
 
