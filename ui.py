@@ -2441,6 +2441,7 @@ class Handler(BaseHTTPRequestHandler):
                             "name": r.get("name"),
                             "tasks_sent": r.get("tasks_sent", []),
                             "responses": r.get("responses", []),
+                            "transcript": r.get("transcript", []),
                         })
                         total_responses += len(r.get("responses", []))
                     responses.append({
@@ -2459,6 +2460,7 @@ class Handler(BaseHTTPRequestHandler):
                         "name": r.get("name"),
                         "tasks_sent": r.get("tasks_sent", []),
                         "responses": r.get("responses", []),
+                        "transcript": r.get("transcript", []),
                     })
                     total_responses += len(r.get("responses", []))
                 responses.insert(0, {
