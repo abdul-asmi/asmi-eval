@@ -157,6 +157,7 @@ def collect(tc: dict) -> dict:
                 max_responses=max_responses,
                 drain_all=True,
                 return_raw=True,
+                silence_after=8.0,
             )
             new_msgs = []
             for msg in poll:
