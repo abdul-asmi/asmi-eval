@@ -742,13 +742,13 @@ textarea { resize: vertical; min-height: 70px; }
 </div>
 <div class="toolbar">
   <div class="toolbar-row tabs">
-    <button class="tab-btn tab-tests" id="tabMain" onclick="showTab('main')">Tests</button>
+    <button class="tab-btn tab-tests active" id="tabMain" onclick="showTab('main')">Tests</button>
     <button class="tab-btn tab-reports" id="tabHistory" onclick="showTab('history')">Reports</button>
     <button class="tab-btn tab-responses" id="tabResponses" onclick="showTab('responses')">Responses</button>
     <button class="tab-btn tab-analysis" id="tabAnalysis" onclick="showTab('analysis')">Analysis</button>
   </div>
 
-  <div class="tab-menu" id="menuMain">
+  <div class="tab-menu" id="menuMain" style="display:flex;">
     <button class="btn btn-outline" onclick="toggleGenerate()" style="font-size:0.75rem;padding:3px 8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;white-space:nowrap">Generate Test Cases with AI</button>
     <button class="btn btn-primary" onclick="toggleNew()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">+ Add a test case</button>
     <input type="text" id="search" placeholder="Search tests…" oninput="filter()">
@@ -903,7 +903,9 @@ textarea { resize: vertical; min-height: 70px; }
   </div>
 
   <div id="mainSection">
-    <div id="testList"></div>
+    <div id="testList">
+      <p style="color:#94a3b8;padding:20px">Loading test cases…</p>
+    </div>
   </div>
 
   <div id="historySection" style="display:none; padding:16px;">
