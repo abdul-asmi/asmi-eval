@@ -372,3 +372,260 @@
   [results] using pointer → results_20260505_161003.json
   [results] loaded 1 entries from results_20260505_161003.json
   [railway] posted output + 1 results
+
+╔══════════════════════════════════════════════════════╗
+  Asmi Eval Daemon — running
+  Listening on: +14125922094
+  Command prefix: "!"
+  Poll interval: 5s
+  Ctrl+C to stop
+╚══════════════════════════════════════════════════════╝
+
+  Commands via iMessage to +14125922094:
+    !help       → see all commands
+    !run all    → run full test suite
+    !status     → last run summary
+
+
+  [16:41:39] UI run request: run sticky_01
+  [results] using pointer → results_20260505_164208.json
+  [results] loaded 1 entries from results_20260505_164208.json
+  [railway] posted output + 1 results
+  [results] using pointer → results_20260505_164208.json
+  [results] loaded 1 entries from results_20260505_164208.json
+  [local UI output post error] <urlopen error [Errno 61] Connection refused>
+
+  [16:42:19] UI run request: run sticky_01
+  [results] using pointer → results_20260505_164244.json
+  [results] loaded 1 entries from results_20260505_164244.json
+  [railway] posted output + 1 results
+  [results] using pointer → results_20260505_164244.json
+  [results] loaded 1 entries from results_20260505_164244.json
+  [local UI output post error] <urlopen error [Errno 61] Connection refused>
+
+  [16:43:37] UI run request: run sticky_03
+  [results] using pointer → results_20260505_164429.json
+  [results] loaded 1 entries from results_20260505_164429.json
+  [railway] posted output + 1 results
+  [results] using pointer → results_20260505_164429.json
+  [results] loaded 1 entries from results_20260505_164429.json
+  [local UI output post error] <urlopen error [Errno 61] Connection refused>
+
+  [17:13:49] UI run request: run sticky_01
+  [results] using pointer → results_20260505_171416.json
+  [results] loaded 1 entries from results_20260505_171416.json
+  [railway] posted output + 1 results
+  [results] using pointer → results_20260505_171416.json
+  [results] loaded 1 entries from results_20260505_171416.json
+  [local UI] posted output + 1 results
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] HTTP Error 502: Bad Gateway
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+  [railway poll error] The read operation timed out
+
+  [19:10:31] UI run request: run all
+  [results] using pointer → results_20260505_173547.json
+  [results] loaded 1 entries from results_20260505_173547.json
+  [railway] posted output + 1 results
+  [results] using pointer → results_20260505_173547.json
+  [results] loaded 1 entries from results_20260505_173547.json
+  [local UI] posted output + 1 results
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error timed out>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error timed out>
+  [railway poll error] <urlopen error timed out>
+  [railway poll error] <urlopen error timed out>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>
+  [railway poll error] <urlopen error [Errno 8] nodename nor servname provided, or not known>

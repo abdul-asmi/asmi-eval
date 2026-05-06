@@ -12,5 +12,8 @@ add run xx times total option for each run to stress test it
 update the ui to like monday ui so the individual test cases can be tweaked easily
 
 
+run emotional analysis on asmi and give ht e prism representation of emotions the cycle and also the cpabiltiies
 
 
+
+when runnin the test the status bar should show which promprt id it is running [DONE]
