@@ -2210,21 +2210,8 @@ function formatTimestamp(stem) {
   const hour = parseInt(match[4], 10);
   const min = parseInt(match[5], 10);
   const sec = parseInt(match[6] || '0', 10);
-  const utc = new Date(Date.UTC(year, month - 1, day, hour, min, sec));
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).formatToParts(utc).reduce((acc, part) => {
-    if (part.type !== 'literal') acc[part.type] = part.value;
-    return acc;
-  }, {});
-  return `${parts.month}/${parts.day}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second} ET`;
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(month)}/${pad(day)}/${year} ${pad(hour)}:${pad(min)}:${pad(sec)} ET`;
 }
 
 async function loadResponses() {
