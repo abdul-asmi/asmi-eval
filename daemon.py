@@ -100,16 +100,7 @@ def _poll_railway() -> dict | None:
 
 
 def _poll_railway_full() -> dict:
-    """Poll /api/poll — tries local UI first, falls back to Railway."""
-    # Prefer local UI so browser selections on localhost are always authoritative.
-    if LOCAL_UI_URL:
-        try:
-            req = urllib.request.Request(f"{LOCAL_UI_URL}/api/poll", method="GET")
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                return json.loads(resp.read())
-        except Exception:
-            pass
-    # Fall back to Railway
+    """Poll /api/poll — tries Railway first, then falls back to local UI."""
     if RAILWAY_URL:
         try:
             req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
@@ -117,6 +108,13 @@ def _poll_railway_full() -> dict:
                 return json.loads(resp.read())
         except Exception as e:
             print(f"  [railway poll error] {e}")
+    if LOCAL_UI_URL:
+        try:
+            req = urllib.request.Request(f"{LOCAL_UI_URL}/api/poll", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                return json.loads(resp.read())
+        except Exception:
+            pass
     return {}
 
 
