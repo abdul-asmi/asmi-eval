@@ -100,16 +100,24 @@ def _poll_railway() -> dict | None:
 
 
 def _poll_railway_full() -> dict:
-    """Poll Railway /api/poll. Returns full response dict (run, stop, ...)."""
-    if not RAILWAY_URL:
-        return {}
-    try:
-        req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
-        with urllib.request.urlopen(req, timeout=5, context=_SSL_CTX) as resp:
-            return json.loads(resp.read())
-    except Exception as e:
-        print(f"  [railway poll error] {e}")
-        return {}
+    """Poll /api/poll — tries Railway first, falls back to local UI."""
+    # Try Railway
+    if RAILWAY_URL:
+        try:
+            req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
+            with urllib.request.urlopen(req, timeout=5, context=_SSL_CTX) as resp:
+                return json.loads(resp.read())
+        except Exception as e:
+            print(f"  [railway poll error] {e}")
+    # Fall back to local UI
+    if LOCAL_UI_URL:
+        try:
+            req = urllib.request.Request(f"{LOCAL_UI_URL}/api/poll", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                return json.loads(resp.read())
+        except Exception:
+            pass
+    return {}
 
 
 def _check_stop() -> bool:
@@ -118,12 +126,73 @@ def _check_stop() -> bool:
     return bool(data.get("stop"))
 
 
+# Track progress state across calls
+_progress_state = {"current_test": None, "current_category": None, "completed": 0, "total": 0}
+
+# Build test_id → category map once at startup
+try:
+    from test_cases import TEST_CASES as _TC
+    _TC_MAP = {t["id"]: t["category"] for t in _TC}
+except Exception:
+    _TC_MAP = {}
+
+import re as _re_mod
+
+
+def _parse_progress_line(line: str, total: int):
+    """Detect test start lines (format: '  [test_id] Name') and post progress."""
+    global _progress_state
+    # Match lines like "  [sticky_01] Single research task…"
+    # Must be a word_number pattern, not [1/28] judge lines
+    m = _re_mod.match(r'^\s+\[([a-z][a-z0-9_]+)\]\s+\S', line)
+    if not m:
+        return
+    test_id = m.group(1)
+    # Skip judge lines like [1/28]
+    if '/' in test_id:
+        return
+    category = _TC_MAP.get(test_id, "")
+    _progress_state["current_test"]     = test_id
+    _progress_state["current_category"] = category
+    _progress_state["total"]            = total
+    # completed = tests we've *started* so far (updated after each "✓ Collected")
+    _post_progress()
+
+
+def _mark_test_done(line: str):
+    """Increment completed count when a test finishes."""
+    if "✓ Collected" in line or "⚠ Timeout" in line:
+        _progress_state["completed"] = _progress_state.get("completed", 0) + 1
+        _post_progress()
+
+
+def _post_progress():
+    """Post current progress dict to Railway and local UI."""
+    payload = json.dumps({
+        "current_test":     _progress_state.get("current_test"),
+        "current_category": _progress_state.get("current_category"),
+        "completed":        _progress_state.get("completed", 0),
+        "total":            _progress_state.get("total", 0),
+    }).encode()
+
+    for url in filter(None, [RAILWAY_URL, LOCAL_UI_URL]):
+        try:
+            req = urllib.request.Request(
+                f"{url}/api/progress", data=payload, method="POST",
+            )
+            req.add_header("Content-Type", "application/json")
+            ctx = _SSL_CTX if url.startswith("https") else None
+            urllib.request.urlopen(req, timeout=4, context=ctx)
+        except Exception:
+            pass
+
+
 def _run_with_stop(cmd: str) -> str:
     """
     Run an eval command via subprocess, polling for a stop signal every 5s.
     Kills the process and returns a ⏹ message if stop is requested.
     """
-    import subprocess, sys, re as _re
+    import subprocess, sys, re as _re, threading
     from config import EVAL_DIR, REPORTS_DIR
     from commands import CATEGORIES
 
@@ -138,39 +207,64 @@ def _run_with_stop(cmd: str) -> str:
         proc_cmd = [sys.executable, "run_eval.py", "--id", arg]
         label = f"test: {arg}"
 
+    # Count total tests for progress reporting
+    try:
+        from test_cases import TEST_CASES as _all_tc
+        if not arg or arg == "all":
+            total_count = len(_all_tc)
+        elif arg in CATEGORIES:
+            total_count = len([t for t in _all_tc if t["category"] == arg])
+        else:
+            total_count = 1
+    except Exception:
+        total_count = 0
+
+    # Reset progress state for this run
+    global _progress_state
+    _progress_state = {"current_test": None, "current_category": None, "completed": 0, "total": total_count}
+    _post_progress()
+
     proc = subprocess.Popen(
         proc_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, cwd=EVAL_DIR,
+        text=True, bufsize=1, cwd=EVAL_DIR,
     )
 
     output_lines = []
-    while True:
-        # Read available output without blocking
-        try:
-            line = proc.stdout.readline()
-            if line:
-                output_lines.append(line)
-                print(line, end="", flush=True)
-        except Exception:
-            pass
+    stop_flag = False
 
-        if proc.poll() is not None:
-            # Process finished — read remaining output
-            remaining = proc.stdout.read()
-            if remaining:
-                output_lines.append(remaining)
-            break
+    def check_stop_periodically():
+        """Background thread: check for stop signal every 5s."""
+        nonlocal stop_flag
+        while not stop_flag:
+            if _check_stop():
+                print(f"\n  [stop] killing run_eval.py (pid={proc.pid})")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                stop_flag = True
+                break
+            time.sleep(5)
 
-        if _check_stop():
-            print(f"\n  [stop] killing run_eval.py (pid={proc.pid})")
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-            return f"⏹ Run stopped by user — {label}"
+    # Start background thread for stop checking
+    stop_thread = threading.Thread(target=check_stop_periodically, daemon=True)
+    stop_thread.start()
 
-        time.sleep(5)
+    # Read output continuously without blocking delays
+    try:
+        for line in proc.stdout:
+            if stop_flag:
+                break
+            output_lines.append(line)
+            print(line, end="", flush=True)
+            _parse_progress_line(line, total_count)
+            _mark_test_done(line)
+    except Exception as e:
+        print(f"  [read error] {e}")
+    finally:
+        stop_flag = True
+        proc.wait()
 
     output = "".join(output_lines)
     m = _re.search(r'Raw results:\s*(\S+results_\S+\.json)', output)

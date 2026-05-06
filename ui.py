@@ -36,6 +36,7 @@ _run_started     = 0.0    # epoch time when run started
 _run_report_html = ""     # full HTML of latest report (posted by daemon)
 _run_results     = []     # list of result dicts from results_*.json
 _stop_requested  = False  # True when the user clicks Stop
+_run_progress    = {}     # dict {current_test, current_category, completed, total}
 
 PORT      = int(os.environ.get("PORT", 8765))
 GH_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
@@ -419,6 +420,15 @@ textarea { resize: vertical; min-height: 70px; }
             border-radius:4px;padding:3px 12px;cursor:pointer;font-size:0.75rem;font-weight:600;display:none">⏹ Stop</button>
     <button onclick="clearOutput()" style="background:#334155;color:#94a3b8;border:none;
             border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.75rem;margin-left:6px">✕ Close</button>
+  </div>
+  <div id="progressBar" style="display:none;padding:8px 24px 10px;background:#1e293b;border-top:1px solid #334155">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:5px">
+      <span id="progressLabel" style="font-size:0.75rem;color:#c4b5fd;font-family:monospace;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <span id="progressPct" style="font-size:0.75rem;color:#94a3b8;flex-shrink:0"></span>
+    </div>
+    <div style="background:#334155;border-radius:99px;height:5px;overflow:hidden">
+      <div id="progressFill" style="background:#7c3aed;height:100%;width:0%;transition:width .4s ease;border-radius:99px"></div>
+    </div>
   </div>
   <div id="outputBodyText"></div>
   <div id="resultsTable"></div>
@@ -954,9 +964,20 @@ async function _pollOutput() {
         if (inlineEl && inlineEl.classList.contains('running'))
           inlineEl.innerHTML = `<span class="inline-running-dots">Running</span> <span style="color:#94a3b8;font-size:0.78rem">${secs}s</span>`;
       }
+      // Update progress bar
+      if (!_activeTestId && data.progress && data.progress.total > 0) {
+        const p = data.progress;
+        const pct = Math.round(p.completed / p.total * 100);
+        document.getElementById('progressBar').style.display = 'block';
+        document.getElementById('progressLabel').textContent =
+          p.current_test ? `[${p.current_test}]${p.current_category ? '  ' + p.current_category : ''}` : 'Starting…';
+        document.getElementById('progressPct').textContent = `${p.completed} / ${p.total}  (${pct}%)`;
+        document.getElementById('progressFill').style.width = pct + '%';
+      }
     } else if (data.status === 'done' || data.status === 'stopped') {
       clearInterval(_pollTimer);
       document.getElementById('stopBtn').style.display = 'none';
+      document.getElementById('progressBar').style.display = 'none';
       const secs2 = Math.round((Date.now() - _runStart) / 1000);
       if (data.status === 'stopped') {
         document.getElementById('outputStatus').textContent = 'Stopped';
@@ -1068,6 +1089,7 @@ function clearOutput() {
   document.getElementById('resultsTable').style.display = 'none';
   document.getElementById('behaviorAnalysisPanel').style.display = 'none';
   document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('progressBar').style.display = 'none';
   if (_pollTimer) clearInterval(_pollTimer);
 }
 
@@ -1375,18 +1397,21 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"run": run, "stop": stop})
         elif path == "/api/output":
             self._json({
-                "status":  _run_status,
-                "output":  _run_output,
-                "results": _run_results,
-                "elapsed": int(time.time() - _run_started) if _run_started else 0,
+                "status":   _run_status,
+                "output":   _run_output,
+                "results":  _run_results,
+                "elapsed":  int(time.time() - _run_started) if _run_started else 0,
+                "progress": _run_progress,
             })
+        elif path == "/api/progress":
+            self._json(_run_progress)
         elif path == "/health":
             self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
         else:
             self._html(HTML)
 
     def do_POST(self):
-        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _stop_requested
+        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _stop_requested, _run_progress
         path = urlparse(self.path).path
         if path == "/api/tests":
             length = int(self.headers.get("Content-Length", 0))
@@ -1458,6 +1483,20 @@ class Handler(BaseHTTPRequestHandler):
                 header  = f"\n\n---\n## Analysis — {time.strftime('%Y-%m-%d %H:%M')}\n\n"
                 with open(path_md, "a") as f:
                     f.write(header + content + "\n")
+                self._json({"ok": True})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+        elif path == "/api/progress":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body)
+                _run_progress = {
+                    "current_test": data.get("current_test"),
+                    "current_category": data.get("current_category"),
+                    "completed": data.get("completed", 0),
+                    "total": data.get("total", 0),
+                }
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
