@@ -200,28 +200,56 @@ def send_sequence(
     Returns list of all responses in order.
     """
     all_responses = []
+    session_start = None
+    seen_keys = set()
     for i, msg in enumerate(messages):
         print(f"\n  → Step [{i+1}/{len(messages)}]: {msg[:70]}")
         sent_at = datetime.now(timezone.utc)
+        if session_start is None:
+            session_start = sent_at
         ok = send_imessage(msg, handle)
         if not ok:
             all_responses.append(None)
             continue
         if i == len(messages) - 1:
-            responses = wait_for_responses(
-                sent_at,
+            msgs = wait_for_responses(
+                session_start,
                 count=1,
                 timeout=timeout_per,
                 handle=handle,
                 max_responses=10,
+                drain_all=True,
+                return_raw=True,
             )
-            if responses:
-                all_responses.extend(responses)
+            new_msgs = []
+            for m in msgs:
+                key = (m["timestamp"].isoformat(), m["text"])
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                new_msgs.append(m)
+            if new_msgs:
+                all_responses.extend(m["text"] for m in new_msgs)
             else:
                 all_responses.append(None)
         else:
-            responses = wait_for_responses(sent_at, count=1, timeout=timeout_per, handle=handle)
-            all_responses.append(responses[0] if responses else None)
+            msgs = wait_for_responses(
+                session_start,
+                count=1,
+                timeout=timeout_per,
+                handle=handle,
+                max_responses=10,
+                drain_all=True,
+                return_raw=True,
+            )
+            new_msgs = []
+            for m in msgs:
+                key = (m["timestamp"].isoformat(), m["text"])
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                new_msgs.append(m)
+            all_responses.extend(m["text"] for m in new_msgs)
         if i < len(messages) - 1:
             print(f"  (waiting {sequence_delay}s before next message…)")
             time.sleep(sequence_delay)
