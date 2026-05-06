@@ -2412,7 +2412,7 @@ function _normalizeTranscriptTurns(test, runStem) {
   if (tasks.length <= 1 && resps.length <= 1) {
     return [{
       turn: 1,
-      user: tasks.join('\n'),
+      user: tasks.join('\\n'),
       responses: resps,
       started_at: startedAt,
       finished_at: finishedAt,
@@ -2485,7 +2485,7 @@ function _flattenConversationRows(data) {
             testId: test.id || '',
             testName: test.name || '',
             side: 'you',
-            text: (test.tasks_sent || []).join('\n'),
+            text: (test.tasks_sent || []).join('\\n'),
           });
         }
         if ((test.responses || []).length) {
@@ -2495,7 +2495,7 @@ function _flattenConversationRows(data) {
             testId: test.id || '',
             testName: test.name || '',
             side: 'asmi',
-            text: (test.responses || []).join('\n'),
+            text: (test.responses || []).join('\\n'),
           });
         }
         return;
