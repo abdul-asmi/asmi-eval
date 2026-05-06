@@ -16,6 +16,7 @@ _client = genai.Client(api_key=GEMINI_API_KEY)
 CATEGORIES = [
     "sticky_message", "call_dedup", "call_summary", "language_pref",
     "location_memory", "onboarding", "capability", "threep_nudge",
+    "interactive",
 ]
 
 HELP_TEXT = """
@@ -32,7 +33,7 @@ HELP_TEXT = """
 
 Categories:
   sticky_message · call_dedup · call_summary · language_pref
-  location_memory · onboarding · capability · threep_nudge
+  location_memory · onboarding · capability · threep_nudge · interactive
 
 Examples:
   !run call_dedup

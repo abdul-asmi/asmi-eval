@@ -5,12 +5,30 @@
 
 import time
 from datetime import datetime, timezone
+import os
 
 from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, CMD_ONBOARD, CATEGORY_RUN_ORDER
 from imessage import send_and_wait, send_burst, send_sequence, send_imessage, wait_for_responses
 from judge import judge_with_context, judge_response_count
 
 JUDGE_DELAY = 4  # seconds between Gemini calls (free tier safe)
+
+
+def _interactive_auto_continue(tc: dict) -> bool:
+    env = os.environ.get("ASMI_INTERACTIVE_AUTO_CONTINUE")
+    if env is not None:
+        return env.strip().lower() not in {"0", "false", "no", "off"}
+    return bool(tc.get("auto_continue", True))
+
+
+def _split_lines(val) -> list[str]:
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return [str(v).strip() for v in val if str(v).strip()]
+    if isinstance(val, str):
+        return [s.strip() for s in val.splitlines() if s.strip()]
+    return [str(val).strip()] if str(val).strip() else []
 
 
 # ── Phase 1: collect responses ─────────────────────────────────────────────────
@@ -103,6 +121,64 @@ def collect(tc: dict) -> dict:
             result["count_verdict"] = {"verdict": "FAIL", "reason": "No response received."}
         else:
             result["count_verdict"] = {"verdict": "PASS", "reason": f"Got {actual}/{expected} response(s)."}
+
+    elif test_type in {"interactive", "conversation"}:
+        start_message = tc.get("start_message") or tc.get("message") or ""
+        followups = _split_lines(tc.get("followups") or tc.get("messages") or tc.get("replies"))
+        stop_when = _split_lines(tc.get("stop_when"))
+        auto_continue = _interactive_auto_continue(tc)
+        wait = tc.get("wait", RESPONSE_TIMEOUT)
+        max_turns = int(tc.get("max_turns") or max(2, len(followups) + 1))
+        transcript = []
+
+        def _hit_stop(text: str) -> bool:
+            if not stop_when:
+                return False
+            hay = (text or "").lower()
+            return any(term.lower() in hay for term in stop_when)
+
+        print(f"  → Start: {start_message[:80]}")
+        current_user = start_message
+        for turn_idx in range(max_turns):
+            if not current_user:
+                break
+
+            sent_at = datetime.now(timezone.utc)
+            send_imessage(current_user)
+            responses = wait_for_responses(sent_at, count=1, timeout=wait, max_responses=10)
+            responses = [r for r in responses if r]
+
+            result["tasks_sent"].append(current_user)
+            result["responses"].extend(responses)
+            transcript.append({
+                "turn": turn_idx + 1,
+                "user": current_user,
+                "responses": responses,
+                "started_at": sent_at.isoformat(),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+            latest = " ".join(responses[-2:]) if responses else ""
+            if _hit_stop(latest):
+                result["verdict"] = "PASS"
+                result["reason"] = "Interactive conversation reached the stop condition."
+                break
+
+            if not auto_continue:
+                result["verdict"] = "UNCLEAR"
+                result["reason"] = "Interactive run paused with auto-continue off."
+                break
+
+            if turn_idx >= len(followups):
+                result["verdict"] = "UNCLEAR"
+                result["reason"] = "Interactive follow-up script ended before the conversation naturally closed."
+                break
+
+            current_user = followups[turn_idx]
+
+        result["transcript"] = transcript
+        result["auto_continue"] = auto_continue
+        result["max_turns"] = max_turns
 
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
     resp_count = len([r for r in result["responses"] if r])

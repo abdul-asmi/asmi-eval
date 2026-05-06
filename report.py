@@ -1,6 +1,7 @@
 # ─── HTML Report Generator ────────────────────────────────────────────────────
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from collections import defaultdict
 
 
@@ -16,6 +17,7 @@ CATEGORIES = {
     "onboarding":      "Onboarding Reactions",
     "capability":      "Capability Prompts",
     "threep_nudge":    "3P Call Nudge",
+    "interactive":     "Interactive Conversations",
 }
 
 
@@ -46,6 +48,19 @@ def generate(results: list[dict], output_path: str = "report.html"):
             resps  = ""
             for i, resp in enumerate(r.get("responses", [])):
                 resps += f'<div class="resp">Response {i+1}: {resp or "<em>no response</em>"}</div>'
+            transcript = ""
+            for turn in r.get("transcript", []) or []:
+                turn_resps = "".join(
+                    f'<div class="resp">Asmi {i+1}: {rsp or "<em>no response</em>"}</div>'
+                    for i, rsp in enumerate(turn.get("responses", []))
+                )
+                transcript += f"""
+                <div class="turn">
+                  <div class="turn-head">Turn {turn.get('turn', '')}</div>
+                  <div class="resp user">You: {turn.get('user', '')}</div>
+                  {turn_resps}
+                </div>
+                """
 
             manual = ""
             if r.get("manual_check"):
@@ -74,6 +89,7 @@ def generate(results: list[dict], output_path: str = "report.html"):
                     <div class="tasks">{tasks}</div>
                     <div class="section-label">Responses ({len(r.get("responses",[]))})</div>
                     {resps if resps else '<em>No responses captured</em>'}
+                    {f'<div class="section-label">Transcript</div>{transcript}' if transcript else ''}
                     <div class="section-label">Judge</div>
                     <div class="reason">{r.get("reason","")}</div>
                     {count_info}
@@ -96,7 +112,7 @@ def generate(results: list[dict], output_path: str = "report.html"):
         </div>
         """
 
-    run_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+    run_time = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M ET")
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,6 +156,9 @@ def generate(results: list[dict], output_path: str = "report.html"):
                  border-radius: 4px; margin: 2px 0; font-size: 0.82rem; white-space: pre-wrap; }}
   .resp  {{ background: #f8fafc; padding: 6px 10px; border-radius: 4px;
             margin: 2px 0; font-size: 0.82rem; white-space: pre-wrap; border-left: 3px solid #cbd5e1; }}
+  .turn  {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-top: 8px; }}
+  .turn-head {{ font-weight: 700; color: #334155; margin-bottom: 6px; }}
+  .resp.user {{ border-left-color: #3b82f6; background: #eef2ff; }}
   .reason {{ color: #374151; }}
   .manual {{ color: #7c3aed; font-weight: 500; }}
   .note   {{ color: #0369a1; }}
@@ -165,6 +184,8 @@ def generate(results: list[dict], output_path: str = "report.html"):
 
 </body>
 </html>"""
+
+    html = "\n".join(line.rstrip() for line in html.splitlines()) + "\n"
 
     with open(output_path, "w") as f:
         f.write(html)

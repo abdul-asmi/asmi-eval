@@ -26,6 +26,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Auto-sync test cases from GitHub before every run
 subprocess.run(["git", "pull", "--quiet"], cwd=os.path.dirname(os.path.abspath(__file__)))
@@ -93,7 +94,7 @@ def main():
     _reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
     os.makedirs(_reports_dir, exist_ok=True)
 
-    ts          = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts          = datetime.now(ZoneInfo("America/New_York")).strftime("%Y%m%d_%H%M%S")
     json_path   = os.path.join(_reports_dir, f"results_{ts}.json")
     report_path = os.path.join(_reports_dir, f"report_{ts}.html")
 

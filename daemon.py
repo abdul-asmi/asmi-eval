@@ -217,7 +217,7 @@ def _post_progress():
             pass
 
 
-def _run_with_stop(cmd: str) -> str:
+def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
     """
     Run an eval command via subprocess, polling for a stop signal every 5s.
     Kills the process and returns a ⏹ message if stop is requested.
@@ -268,9 +268,13 @@ def _run_with_stop(cmd: str) -> str:
     _progress_state = {"current_test": None, "current_category": None, "completed": 0, "total": total_count}
     _post_progress()
 
+    env = os.environ.copy()
+    if extra_env:
+        env.update({k: str(v) for k, v in extra_env.items() if v is not None})
+
     proc = subprocess.Popen(
         proc_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, bufsize=1, cwd=EVAL_DIR,
+        text=True, bufsize=1, cwd=EVAL_DIR, env=env,
     )
 
     output_lines = []
@@ -469,7 +473,9 @@ def run():
                 print(f"\n  [{ts}] UI run request: {cmd}")
                 _ack_run_to_server(pending)
                 try:
-                    response = _run_with_stop(cmd)
+                    response = _run_with_stop(cmd, extra_env={
+                        "ASMI_INTERACTIVE_AUTO_CONTINUE": pending.get("interactive_auto_continue", "1"),
+                    })
                 except Exception as e:
                     response = f"❌ Error: {e}"
                 # Post full output + HTML report to Railway UI for display in browser

@@ -16,12 +16,15 @@ import glob
 import json
 import os
 import re
+import subprocess
 import time
 from collections import Counter
+from datetime import datetime
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import google.genai as genai
 from report import generate as generate_report
@@ -55,9 +58,9 @@ USE_GITHUB = bool(GH_TOKEN and GH_REPO)
 
 CATEGORIES = [
     "sticky_message","call_dedup","call_summary","language_pref",
-    "location_memory","onboarding","capability","threep_nudge","generated",
+    "location_memory","onboarding","capability","threep_nudge","interactive","generated",
 ]
-TYPES = ["single","burst","sequence","dedup","burst_with_setup"]
+TYPES = ["single","burst","sequence","dedup","burst_with_setup","interactive"]
 
 
 # ── GitHub API helpers ─────────────────────────────────────────────────────────
@@ -116,6 +119,10 @@ def _write_text(path: str, content: str):
 
 def _write_json(path: str, payload):
     _write_text(path, json.dumps(payload, indent=2, default=str))
+
+
+def _et_now_str(fmt: str) -> str:
+    return datetime.now(ZoneInfo("America/New_York")).strftime(fmt)
 
 
 # ── Test case load/save ────────────────────────────────────────────────────────
@@ -308,7 +315,7 @@ def _build_analysis_payload() -> dict:
         os.makedirs(REPORTS_DIR, exist_ok=True)
         with open(OVERALL_ANALYSIS_FILE, "w") as fp:
             json.dump({
-                "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "updated_at": _et_now_str("%Y-%m-%d %H:%M:%S ET"),
                 "source_run_count": run_count,
                 "latest_stem": latest_stem,
                 "text": overall_text,
@@ -343,7 +350,7 @@ def _persist_run_artifacts(stem: str, results: list[dict], report_html: str = ""
 
     analysis = _build_analysis_payload()
     analysis_path = {
-        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": _et_now_str("%Y-%m-%d %H:%M:%S ET"),
         "source_run_count": len(analysis.get("runs", [])),
         "latest_stem": analysis.get("runs", [{}])[0].get("stem", stem) if analysis.get("runs") else stem,
         "text": analysis.get("overall_analysis", ""),
@@ -679,6 +686,9 @@ textarea { resize: vertical; min-height: 70px; }
              letter-spacing:.06em; color:#94a3b8; margin-bottom:6px; }
 .rt-msg  { font-size:0.85rem; color:#374151; padding:7px 10px; background:#f8fafc;
            border-radius:5px; margin-bottom:4px; border:1px solid #f1f5f9; }
+.rt-turn { background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+.rt-turn-head { font-weight:700; color:#334155; margin-bottom:6px; font-size:0.8rem; }
+.rt-user { border-left:3px solid #3b82f6 !important; background:#eef2ff !important; }
 .rt-resp-num { font-size:0.7rem; font-weight:700; color:#64748b; margin-right:6px; }
 .rt-judge { font-size:0.85rem; color:#64748b; line-height:1.55; }
 /* Inline result inside test card */
@@ -742,6 +752,7 @@ textarea { resize: vertical; min-height: 70px; }
     <input type="text" id="search" placeholder="Search tests…" oninput="filter()">
     <button class="btn btn-outline" id="collapseAllBtn" onclick="collapseAll()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">Collapse all</button>
     <button class="btn btn-outline" id="expandAllBtn" onclick="expandAll()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">Expand all</button>
+    <button class="btn btn-outline" id="interactiveAutoBtn" onclick="toggleInteractiveAutoContinue()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">Auto-continue: On</button>
     <span id="selectedBadge" class="count" style="background:#fef3c7;color:#92400e;">0 selected</span>
     <button class="btn btn-run" id="runBtn" onclick="runSelected()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">▶ Run selected</button>
   </div>
@@ -782,6 +793,7 @@ textarea { resize: vertical; min-height: 70px; }
           <option value="sequence">sequence</option>
           <option value="dedup">dedup</option>
           <option value="burst_with_setup">burst_with_setup</option>
+          <option value="interactive">interactive</option>
         </select>
       </div>
       <div class="form-full" id="new_msg_wrap">
@@ -791,6 +803,27 @@ textarea { resize: vertical; min-height: 70px; }
       <div class="form-full" id="new_msgs_wrap" style="display:none">
         <label>Messages (one per line)</label>
         <textarea id="new_messages" placeholder="Message 1&#10;Message 2&#10;Message 3"></textarea>
+      </div>
+      <div class="form-full" id="new_interactive_wrap" style="display:none">
+        <label>Follow-up Replies (one per line)</label>
+        <textarea id="new_followups" placeholder="Reply 1&#10;Reply 2&#10;Reply 3"></textarea>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px;">
+          <div>
+            <label>Auto continue</label>
+            <select id="new_auto_continue">
+              <option value="true" selected>On</option>
+              <option value="false">Off</option>
+            </select>
+          </div>
+          <div>
+            <label>Max turns</label>
+            <input type="text" id="new_max_turns" placeholder="3">
+          </div>
+          <div>
+            <label>Stop when</label>
+            <input type="text" id="new_stop_when" placeholder="comma or line separated phrases">
+          </div>
+        </div>
       </div>
       <div id="new_wait_wrap" style="display:none">
         <label>Response Speed</label>
@@ -914,6 +947,7 @@ const CAT_META = {
   checklist:          {label:'Checklist',          color:'#166534', bg:'#dcfce7'},
   chat_brevity:       {label:'Chat Brevity',       color:'#9d174d', bg:'#fdf2f8'},
   chat_flow:          {label:'Chat Flow',          color:'#831843', bg:'#fce7f3'},
+  interactive:        {label:'Interactive',        color:'#4c1d95', bg:'#f5f3ff'},
   personalization:    {label:'Personalization',    color:'#3730a3', bg:'#eef2ff'},
   reengagement:       {label:'Reengagement',       color:'#7e22ce', bg:'#faf5ff'},
   guardrails:         {label:'Guardrails',         color:'#991b1b', bg:'#fee2e2'},
@@ -923,6 +957,7 @@ const CAT_ORDER = [
   'onboarding','capability','sticky_message','call_dedup','cadence_control',
   'call_summary','voicemail','task_reliability','task_specific_call','threep_nudge',
   'location_memory','language_pref','timezone','checklist','chat_brevity','chat_flow',
+  'interactive',
   'personalization','reengagement','guardrails','generated',
 ];
 
@@ -1036,6 +1071,8 @@ function render() {
   let filtered = tests.filter(t =>
     (!search || t.id.includes(search) || t.name.toLowerCase().includes(search) ||
      (t.message||'').toLowerCase().includes(search) ||
+     (t.start_message||'').toLowerCase().includes(search) ||
+     (Array.isArray(t.followups) ? t.followups.join(' ') : (t.followups||'')).toLowerCase().includes(search) ||
      (t.pass_criteria||'').toLowerCase().includes(search)) &&
     (!catF  || t.category === catF) &&
     (!typeF || t.type === typeF)
@@ -1100,7 +1137,9 @@ function renderRow(t, cat) {
   const idx      = tests.indexOf(t);
   const m        = CAT_META[t.category] || {label:t.category, color:'#334155', bg:'#f8fafc'};
   const msgs     = t.messages ? t.messages.join('\\n') : '';
-  const preview  = esc((t.message || (t.messages||[]).join(' · ') || '').substring(0, 80));
+  const followups = t.followups ? t.followups.join('\\n') : '';
+  const previewSrc = t.start_message || t.message || (t.messages||[]).join(' · ') || '';
+  const preview  = esc((previewSrc || '').substring(0, 80));
   const preWarn  = t.precondition ? ' ⚠' : '';
   const checked   = selectedTestIds.has(t.id) ? 'checked' : '';
 
@@ -1129,11 +1168,30 @@ function renderRow(t, cat) {
           </div>
           <div><label>Type</label>
             <select onchange="update(${idx},'type',this.value)">
-              ${['single','burst','sequence','dedup','burst_with_setup']
+              ${['single','burst','sequence','dedup','burst_with_setup','interactive']
                 .map(tp=>`<option value="${tp}" ${t.type===tp?'selected':''}>${tp}</option>`).join('')}
             </select>
           </div>
-          ${t.message !== undefined ? `
+          ${t.start_message !== undefined || t.type === 'interactive' ? `
+          <div class="form-full"><label>Start Message</label>
+            <input type="text" value="${esc(t.start_message || t.message || '')}" onchange="update(${idx},'start_message',this.value||undefined)">
+          </div>
+          <div class="form-full"><label>Follow-up Replies (one per line)</label>
+            <textarea onchange="updateInteractiveFollowups(${idx},this.value)">${esc(followups)}</textarea>
+          </div>
+          <div><label>Auto Continue</label>
+            <select onchange="update(${idx},'auto_continue',this.value==='true')">
+              <option value="true" ${(t.auto_continue !== false) ? 'selected' : ''}>On</option>
+              <option value="false" ${t.auto_continue === false ? 'selected' : ''}>Off</option>
+            </select>
+          </div>
+          <div><label>Max Turns</label>
+            <input type="text" value="${t.max_turns || ''}" onchange="update(${idx},'max_turns',parseInt(this.value)||undefined)">
+          </div>
+          <div class="form-full"><label>Stop When</label>
+            <input type="text" value="${esc(Array.isArray(t.stop_when) ? t.stop_when.join('\\n') : (t.stop_when || ''))}" onchange="update(${idx},'stop_when',this.value||undefined)">
+          </div>` : ''}
+          ${t.message !== undefined && t.type !== 'interactive' ? `
           <div class="form-full"><label>Message</label>
             <input type="text" value="${esc(t.message||'')}" onchange="update(${idx},'message',this.value)">
           </div>` : ''}
@@ -1264,6 +1322,10 @@ function updateMsgs(idx, val) {
   tests[idx].messages = val.split('\\n').map(s=>s.trim()).filter(Boolean);
 }
 
+function updateInteractiveFollowups(idx, val) {
+  tests[idx].followups = val.split('\\n').map(s=>s.trim()).filter(Boolean);
+}
+
 function toggleNew() {
   const form = document.getElementById('newForm');
   const isOpening = !form.classList.contains('open');
@@ -1272,10 +1334,14 @@ function toggleNew() {
     document.getElementById('new_name').value = '';
     document.getElementById('new_message').value = '';
     document.getElementById('new_messages').value = '';
+    document.getElementById('new_followups').value = '';
     document.getElementById('new_pass_criteria').value = '';
     document.getElementById('new_precondition').value = '';
     document.getElementById('new_manual_check').value = '';
     document.getElementById('new_type').value = 'single';
+    document.getElementById('new_auto_continue').value = 'true';
+    document.getElementById('new_max_turns').value = '';
+    document.getElementById('new_stop_when').value = '';
     _initCatDropdowns();
     toggleNewMsgFields();
   }
@@ -1284,9 +1350,13 @@ function toggleNew() {
 function toggleNewMsgFields() {
   const type = document.getElementById('new_type').value;
   const multi = ['burst','sequence','burst_with_setup'].includes(type);
+  const interactive = type === 'interactive';
+  const msgInput = document.getElementById('new_message');
   document.getElementById('new_msg_wrap').style.display  = multi ? 'none' : '';
   document.getElementById('new_msgs_wrap').style.display = multi ? '' : 'none';
-  document.getElementById('new_wait_wrap').style.display = multi ? '' : 'none';
+  document.getElementById('new_interactive_wrap').style.display = interactive ? '' : 'none';
+  document.getElementById('new_wait_wrap').style.display = (multi || interactive) ? '' : 'none';
+  if (msgInput) msgInput.placeholder = interactive ? 'Start message' : 'Exact iMessage to send to Asmi';
 }
 
 function addNew() {
@@ -1302,6 +1372,15 @@ function addNew() {
     tc.messages = document.getElementById('new_messages').value.split('\\n').map(s=>s.trim()).filter(Boolean);
     const waitVal = document.getElementById('new_wait_preset').value;
     if (waitVal) tc.wait = parseInt(waitVal);
+  } else if (type === 'interactive') {
+    tc.start_message = document.getElementById('new_message').value.trim();
+    tc.followups = document.getElementById('new_followups').value.split('\\n').map(s=>s.trim()).filter(Boolean);
+    const ac = document.getElementById('new_auto_continue').value;
+    tc.auto_continue = ac !== 'false';
+    const mt = parseInt(document.getElementById('new_max_turns').value);
+    if (mt) tc.max_turns = mt;
+    const sw = document.getElementById('new_stop_when').value.trim();
+    if (sw) tc.stop_when = sw.split(',').map(s => s.trim()).filter(Boolean);
   } else {
     tc.message = document.getElementById('new_message').value.trim();
   }
@@ -1359,6 +1438,7 @@ let _activeTestId   = null;
 let _lastRunAnalysis = '';
 let _historyRefreshTimer = null;
 let selectedTestIds = new Set();
+let interactiveAutoContinue = true;
 
 async function runSelected() {
   const ids = Array.from(selectedTestIds);
@@ -1367,10 +1447,17 @@ async function runSelected() {
     return;
   }
   if (ids.length === 1) {
-    await _triggerRun({id: ids[0]});
+    await _triggerRun({id: ids[0], interactive_auto_continue: interactiveAutoContinue});
   } else {
-    await _triggerRun({ids});
+    await _triggerRun({ids, interactive_auto_continue: interactiveAutoContinue});
   }
+}
+
+function toggleInteractiveAutoContinue() {
+  interactiveAutoContinue = !interactiveAutoContinue;
+  const btn = document.getElementById('interactiveAutoBtn');
+  if (btn) btn.textContent = interactiveAutoContinue ? 'Auto-continue: On' : 'Auto-continue: Off';
+  toast(interactiveAutoContinue ? 'Interactive auto-continue enabled' : 'Interactive auto-continue paused');
 }
 
 function updateSelectionControls(visibleTests = tests) {
@@ -1407,6 +1494,8 @@ function _visibleTests() {
   return tests.filter(t =>
     (!search || t.id.includes(search) || t.name.toLowerCase().includes(search) ||
      (t.message||'').toLowerCase().includes(search) ||
+     (t.start_message||'').toLowerCase().includes(search) ||
+     (Array.isArray(t.followups) ? t.followups.join(' ') : (t.followups||'')).toLowerCase().includes(search) ||
      (t.pass_criteria||'').toLowerCase().includes(search)) &&
     (!catF  || t.category === catF) &&
     (!typeF || t.type === typeF)
@@ -1481,14 +1570,15 @@ async function runById(id) {
   }
   const btn = document.getElementById('runbtn_' + id);
   if (btn) btn.disabled = true;
-  await _triggerRun({id});
+  await _triggerRun({id, interactive_auto_continue: interactiveAutoContinue});
 }
 
 async function runByCategory(cat) {
-  await _triggerRun({category: cat});
+  await _triggerRun({category: cat, interactive_auto_continue: interactiveAutoContinue});
 }
 
 async function _triggerRun(payload) {
+  payload = {...payload, interactive_auto_continue: payload.interactive_auto_continue ?? interactiveAutoContinue};
   const label = payload.id ? `test: ${payload.id}` :
                 payload.ids ? `${payload.ids.length} selected tests` :
                 payload.category ? `category: ${payload.category}` :
@@ -1661,6 +1751,15 @@ function _resultCard(r) {
     `<div class="rt-msg">${esc(t)}</div>`).join('');
   const resps = (r.responses || []).map((rsp, i) =>
     `<div class="rt-msg"><span class="rt-resp-num">Response ${i+1}</span>${esc(rsp)}</div>`).join('');
+  const transcript = (r.transcript || []).map(turn => {
+    const turnResps = (turn.responses || []).map((rsp, i) =>
+      `<div class="rt-msg"><span class="rt-resp-num">Asmi ${i+1}</span>${esc(rsp)}</div>`).join('');
+    return `<div class="rt-turn">
+      <div class="rt-turn-head">Turn ${turn.turn || ''}</div>
+      <div class="rt-msg rt-user"><span class="rt-resp-num">You</span>${esc(turn.user || '')}</div>
+      ${turnResps}
+    </div>`;
+  }).join('');
 
   return `<div class="rt-card ${vcls}">
     <div class="rt-card-hdr">
@@ -1671,6 +1770,7 @@ function _resultCard(r) {
     </div>
     ${tasks ? `<div class="rt-section"><div class="rt-slabel">Task sent</div>${tasks}</div>` : ''}
     ${resps ? `<div class="rt-section"><div class="rt-slabel">Responses (${(r.responses||[]).length})</div>${resps}</div>` : ''}
+    ${transcript ? `<div class="rt-section"><div class="rt-slabel">Transcript</div>${transcript}</div>` : ''}
     ${r.reason ? `<div class="rt-section"><div class="rt-slabel">Judge</div><div class="rt-judge">${esc(r.reason)}</div></div>` : ''}
   </div>`;
 }
@@ -2139,6 +2239,21 @@ async function loadResponses() {
              <div style="font-size:0.85rem;font-weight:700;color:#166534;margin-bottom:4px;">Response ${idx+1}</div>
              <div style="color:#14532d;font-size:0.9rem;white-space:pre-wrap;">${esc(rsp)}</div>
            </div>`).join('');
+        const transcript = (test.transcript || []).map(turn => {
+          const turnResponses = (turn.responses || []).map((rsp, ridx) =>
+            `<div style="background:#f8fafc;border-left:4px solid #94a3b8;padding:10px 12px;border-radius:8px;margin-bottom:6px;">
+               <div style="font-size:0.84rem;font-weight:700;color:#334155;margin-bottom:4px;">Asmi ${ridx+1}</div>
+               <div style="color:#0f172a;font-size:0.9rem;white-space:pre-wrap;">${esc(rsp)}</div>
+             </div>`).join('');
+          return `<div style="border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin-bottom:10px;background:#ffffff;">
+            <div style="font-weight:700;color:#0f172a;margin-bottom:8px;">Turn ${turn.turn || ''}</div>
+            <div style="background:#eef2ff;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:8px;margin-bottom:8px;">
+              <div style="font-size:0.84rem;font-weight:700;color:#1e3a8a;margin-bottom:4px;">You</div>
+              <div style="color:#0f172a;font-size:0.9rem;white-space:pre-wrap;">${esc(turn.user || '')}</div>
+            </div>
+            ${turnResponses}
+          </div>`;
+        }).join('');
         runTests += `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#ffffff;">
           <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
             <span style="font-weight:700;color:#0f172a;">${esc(test.id)}: ${esc(test.name)}</span>
@@ -2147,6 +2262,7 @@ async function loadResponses() {
           </div>
           ${tasks || '<div style="color:#64748b;font-size:0.85rem;margin-bottom:6px;">No task messages recorded.</div>'}
           ${responses || '<div style="color:#64748b;font-size:0.85rem;">No responses recorded.</div>'}
+          ${transcript ? `<div style="margin-top:12px;"><div style="font-weight:700;color:#0f172a;margin-bottom:8px;">Transcript</div>${transcript}</div>` : ''}
         </div>`;
       });
       html += `<div style="border:1px solid #e2e8f0;border-radius:14px;padding:18px;background:#f8fafc;">
@@ -2400,6 +2516,7 @@ class Handler(BaseHTTPRequestHandler):
                 "categories": cats,
                 "id":       rid,
                 "ids":      ids,
+                "interactive_auto_continue": bool(data.get("interactive_auto_continue", True)),
                 "ts":       time.time(),
             }
             _run_output  = ""
@@ -2419,7 +2536,7 @@ class Handler(BaseHTTPRequestHandler):
                 _run_report_html = data.get("report_html", "")
                 _run_results     = data.get("results", [])
                 m = re.search(r"Raw results:\s*\S*results_(\d{8}_?\d{4,6})\.json", _run_output)
-                _run_result_stem = m.group(1) if m else time.strftime("%Y%m%d_%H%M%S")
+                _run_result_stem = m.group(1) if m else _et_now_str("%Y%m%d_%H%M%S")
                 if _run_status == "done" and _run_results:
                     _persist_run_artifacts(_run_result_stem, _run_results, _run_report_html)
                 self._json({"ok": True})
@@ -2453,7 +2570,7 @@ class Handler(BaseHTTPRequestHandler):
                 data    = json.loads(body)
                 content = data.get("content", "")
                 path_md = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ASMI_BEHAVIOR_ANALYSIS.md")
-                header  = f"\n\n---\n## Analysis — {time.strftime('%Y-%m-%d %H:%M')}\n\n"
+                header  = f"\n\n---\n## Analysis — {_et_now_str('%Y-%m-%d %H:%M ET')}\n\n"
                 with open(path_md, "a") as f:
                     f.write(header + content + "\n")
                 self._json({"ok": True})

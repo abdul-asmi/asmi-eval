@@ -68,7 +68,7 @@
 
         <div class="category">
             <div class="cat-header">
-                <span class="cat-name">chat_flow</span>
+                <span class="cat-name">timezone</span>
                 <span class="cat-score">0/1</span>
                 <div class="bar-track">
                     <div class="bar-fill" style="width:0%;background:#ef4444"></div>
@@ -78,18 +78,18 @@
             <details class="test-row" style="background:#fef2f2;border-left:4px solid #ef4444">
                 <summary>
                     <span class="badge" style="background:#ef444422;color:#ef4444">FAIL</span>
-                    <strong>[chat_03]</strong> Chat flow: Asmi ends conversation cleanly — doesn't keep re-opening it
+                    <strong>[tz_01]</strong> Timezone: Captured naturally during task with location
                 </summary>
                 <div class="test-detail">
 
                     <div class="section-label">Tasks sent</div>
-                    <div class="tasks"><code>Find me the top pizza places in Pittsburgh</code><br><code>Thanks, that's enough</code></div>
-                    <div class="section-label">Responses (3)</div>
-                    <div class="resp">Response 1: Pittsburgh pizza is a whole mood. I’ll find you the gems.</div><div class="resp">Response 2: Fair enough.</div><div class="resp">Response 3: But spill—what do you actually do for work? I need to know who I'm dealing with.</div>
+                    <div class="tasks"><code>Call a restaurant in Los Angeles and ask what time they close today</code></div>
+                    <div class="section-label">Responses (2)</div>
+                    <div class="resp">Response 1: I'll handle the phone tag for you. Which restaurant are we checking on?</div><div class="resp">Response 2: Also, what do you do for work? Need to know how much life I'm saving you from.</div>
 
                     <div class="section-label">Judge</div>
-                    <div class="reason">Although Asmi acknowledged the end of the request with "Fair enough," it immediately violated the criteria by opening a new, irrelevant topic with a personal question.</div>
-                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 3/2 responses.</small>
+                    <div class="reason">Asmi did not perform the task or demonstrate awareness of the Los Angeles timezone, instead stalling to ask for the restaurant name.</div>
+
 
 
                 </div>

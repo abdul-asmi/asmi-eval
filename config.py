@@ -50,8 +50,9 @@ CATEGORY_RUN_ORDER = [
     "checklist",            # 11. Task management
     "chat_brevity",         # 12. UX
     "chat_flow",            # 13. UX
-    "personalization",      # 14. Personalization
-    "reengagement",         # 15. Retention (slowest)
-    "guardrails",           # 16. Safety
-    "timezone",             # 17. Misc
+    "interactive",          # 14. Multi-turn interactive conversations
+    "personalization",      # 15. Personalization
+    "reengagement",         # 16. Retention (slowest)
+    "guardrails",           # 17. Safety
+    "timezone",             # 18. Misc
 ]
