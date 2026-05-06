@@ -63,6 +63,8 @@ pkill -f daemon.py   # to stop
 
 ## Architecture
 
+For the fuller run lifecycle, UI state rules, server restart notes, and current context, read `SYSTEM_ARCHITECTURE.md` first. For a plain-English product map, read `PRODUCT_MANAGER_ARCHITECTURE.md`.
+
 ```
 run_eval.py     CLI entry point — parses args, calls runner, saves JSON + HTML
 runner.py       Orchestrates test types (single/burst/sequence/dedup), calls imessage + judge

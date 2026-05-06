@@ -38,7 +38,9 @@ from report import generate
 def main():
     parser = argparse.ArgumentParser(description="Asmi iMessage Eval Runner")
     parser.add_argument("--category", help="Only run tests in this category")
+    parser.add_argument("--categories", help="Only run tests in these categories (comma-separated)")
     parser.add_argument("--id",       help="Only run the test with this ID")
+    parser.add_argument("--ids",      help="Only run these test IDs (comma-separated)")
     parser.add_argument("--list",     action="store_true", help="List all tests and exit")
     parser.add_argument("--no-report",action="store_true", help="Skip HTML report generation")
     args = parser.parse_args()
@@ -54,10 +56,18 @@ def main():
         return
 
     # ── run ───────────────────────────────────────────────────────────────────
+    categories = None
+    if args.categories:
+        categories = [c.strip() for c in args.categories.split(',') if c.strip()]
+    ids = None
+    if args.ids:
+        ids = [i.strip() for i in args.ids.split(',') if i.strip()]
     results = run_all(
         TEST_CASES,
         filter_category=args.category,
+        filter_categories=categories,
         filter_id=args.id,
+        filter_ids=ids,
     )
 
     # ── summary ───────────────────────────────────────────────────────────────

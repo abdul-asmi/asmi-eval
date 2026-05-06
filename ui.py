@@ -162,6 +162,17 @@ def _result_summary(results: list[dict]) -> dict:
     }
 
 
+def _stem_sort_value(stem: str) -> int:
+    """Sort run stems newest-first using the numeric timestamp embedded in the filename."""
+    if not stem:
+        return 0
+    digits = "".join(ch for ch in stem if ch.isdigit())
+    try:
+        return int(digits)
+    except Exception:
+        return 0
+
+
 def _build_overall_analysis_text(test_rows: list[dict], summary: dict) -> str:
     if not test_rows:
         return "No analysis yet. Run tests to populate cumulative insights."
@@ -215,7 +226,7 @@ def _build_overall_analysis_text(test_rows: list[dict], summary: dict) -> str:
 def _build_analysis_payload() -> dict:
     files = sorted(
         glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
-        key=os.path.getmtime,
+        key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
         reverse=True,
     )
 
@@ -2247,8 +2258,11 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/health":
             self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
         elif path == "/api/history":
-            files = sorted(glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
-                           key=os.path.getmtime, reverse=True)
+            files = sorted(
+                glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+                key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
+                reverse=True,
+            )
             history = []
             for f in files:
                 stem = os.path.basename(f).replace("results_", "").replace(".json", "")
@@ -2284,8 +2298,11 @@ class Handler(BaseHTTPRequestHandler):
                 })
             self._json(history)
         elif path == "/api/responses":
-            files = sorted(glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
-                           key=os.path.getmtime, reverse=True)
+            files = sorted(
+                glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+                key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
+                reverse=True,
+            )
             responses = []
             for f in files:
                 stem = os.path.basename(f).replace("results_", "").replace(".json", "")

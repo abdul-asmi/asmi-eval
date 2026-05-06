@@ -186,15 +186,19 @@ def _sort_by_priority(test_cases: list[dict]) -> list[dict]:
     return sorted(test_cases, key=lambda t: order.get(t["category"], len(CATEGORY_RUN_ORDER)))
 
 
-def run_all(test_cases: list[dict], filter_category: str = None, filter_id: str = None) -> list[dict]:
+def run_all(test_cases: list[dict], filter_category: str = None, filter_categories: list[str] = None, filter_id: str = None, filter_ids: list[str] = None) -> list[dict]:
     to_run = test_cases
+    if filter_categories:
+        to_run = [t for t in to_run if t["category"] in filter_categories]
     if filter_category:
         to_run = [t for t in to_run if t["category"] == filter_category]
     if filter_id:
         to_run = [t for t in to_run if t["id"] == filter_id]
+    if filter_ids:
+        to_run = [t for t in to_run if t["id"] in filter_ids]
 
     # Apply priority ordering only for full runs (no category/id filter)
-    running_all = not filter_category and not filter_id
+    running_all = not filter_category and not filter_id and not filter_categories and not filter_ids
     if running_all:
         to_run = _sort_by_priority(list(to_run))
 

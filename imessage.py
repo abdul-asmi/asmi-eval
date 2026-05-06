@@ -145,7 +145,7 @@ def send_and_wait(
     if not ok:
         print(f"  [!] Failed to send: {message[:60]}")
         return []
-    return wait_for_responses(sent_at, count=count, timeout=timeout, handle=handle)
+    return wait_for_responses(sent_at, count=count, timeout=timeout, handle=handle, max_responses=10)
 
 
 def send_burst(
@@ -175,6 +175,7 @@ def send_burst(
         count=expected_responses,
         timeout=timeout,
         handle=handle,
+        max_responses=10,
     )
 
 
@@ -196,8 +197,21 @@ def send_sequence(
         if not ok:
             all_responses.append(None)
             continue
-        responses = wait_for_responses(sent_at, count=1, timeout=timeout_per, handle=handle)
-        all_responses.append(responses[0] if responses else None)
+        if i == len(messages) - 1:
+            responses = wait_for_responses(
+                sent_at,
+                count=1,
+                timeout=timeout_per,
+                handle=handle,
+                max_responses=10,
+            )
+            if responses:
+                all_responses.extend(responses)
+            else:
+                all_responses.append(None)
+        else:
+            responses = wait_for_responses(sent_at, count=1, timeout=timeout_per, handle=handle)
+            all_responses.append(responses[0] if responses else None)
         if i < len(messages) - 1:
             print(f"  (waiting {sequence_delay}s before next message…)")
             time.sleep(sequence_delay)
