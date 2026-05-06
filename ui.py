@@ -2647,85 +2647,110 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         global _pending_run, _last_heartbeat, _stop_requested
         path = urlparse(self.path).path
-        if path == "/api/tests":
-            try:
-                cases = load_test_cases()
-                self._json(cases)
-            except Exception as e:
-                self._json({"error": str(e)})
-        elif path == "/api/poll":
-            _last_heartbeat = time.time()
-            run = _pending_run
-            stop = _stop_requested
-            _stop_requested = False
-            self._json({"run": run, "stop": stop})
-        elif path == "/api/output":
-            self._json({
-                "status":   _run_status,
-                "output":   _run_output,
-                "results":  _run_results,
-                "elapsed":  int(time.time() - _run_started) if _run_started else 0,
-                "progress": _run_progress,
-            })
-        elif path == "/api/progress":
-            self._json(_run_progress)
-        elif path == "/health":
-            self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
-        elif path == "/api/history":
-            files = sorted(
-                glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
-                key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
-                reverse=True,
-            )
-            history = []
-            for f in files:
-                stem = os.path.basename(f).replace("results_", "").replace(".json", "")
+        try:
+            if path == "/api/tests":
                 try:
-                    with open(f) as fp:
-                        data = json.load(fp)
-                    passed  = sum(1 for r in data if r.get("verdict") == "PASS")
-                    failed  = sum(1 for r in data if r.get("verdict") == "FAIL")
-                    unclear = sum(1 for r in data if r.get("verdict") == "UNCLEAR")
-                    history.append({
-                        "stem":    stem,
-                        "ts":      stem,
-                        "total":   len(data),
-                        "passed":  passed,
-                        "failed":  failed,
-                        "unclear": unclear,
-                        "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{stem}.html")),
-                    })
-                except Exception:
-                    pass
-            if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in history):
-                passed  = sum(1 for r in _run_results if r.get("verdict") == "PASS")
-                failed  = sum(1 for r in _run_results if r.get("verdict") == "FAIL")
-                unclear = sum(1 for r in _run_results if r.get("verdict") == "UNCLEAR")
-                history.insert(0, {
-                    "stem": _run_result_stem,
-                    "ts": _run_result_stem,
-                    "total": len(_run_results),
-                    "passed": passed,
-                    "failed": failed,
-                    "unclear": unclear,
-                    "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{_run_result_stem}.html")),
+                    cases = load_test_cases()
+                    self._json(cases)
+                except Exception as e:
+                    self._json({"error": str(e)})
+            elif path == "/api/poll":
+                _last_heartbeat = time.time()
+                run = _pending_run
+                stop = _stop_requested
+                _stop_requested = False
+                self._json({"run": run, "stop": stop})
+            elif path == "/api/output":
+                self._json({
+                    "status":   _run_status,
+                    "output":   _run_output,
+                    "results":  _run_results,
+                    "elapsed":  int(time.time() - _run_started) if _run_started else 0,
+                    "progress": _run_progress,
                 })
-            self._json(history)
-        elif path == "/api/responses":
-            files = sorted(
-                glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
-                key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
-                reverse=True,
-            )
-            responses = []
-            for f in files:
-                stem = os.path.basename(f).replace("results_", "").replace(".json", "")
-                try:
-                    with open(f) as fp:
-                        data = json.load(fp)
+            elif path == "/api/progress":
+                self._json(_run_progress)
+            elif path == "/health":
+                self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
+            elif path == "/api/history":
+                files = sorted(
+                    glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+                    key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
+                    reverse=True,
+                )
+                history = []
+                for f in files:
+                    stem = os.path.basename(f).replace("results_", "").replace(".json", "")
+                    try:
+                        with open(f) as fp:
+                            data = json.load(fp)
+                        passed  = sum(1 for r in data if r.get("verdict") == "PASS")
+                        failed  = sum(1 for r in data if r.get("verdict") == "FAIL")
+                        unclear = sum(1 for r in data if r.get("verdict") == "UNCLEAR")
+                        history.append({
+                            "stem":    stem,
+                            "ts":      stem,
+                            "total":   len(data),
+                            "passed":  passed,
+                            "failed":  failed,
+                            "unclear": unclear,
+                            "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{stem}.html")),
+                        })
+                    except Exception:
+                        pass
+                if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in history):
+                    passed  = sum(1 for r in _run_results if r.get("verdict") == "PASS")
+                    failed  = sum(1 for r in _run_results if r.get("verdict") == "FAIL")
+                    unclear = sum(1 for r in _run_results if r.get("verdict") == "UNCLEAR")
+                    history.insert(0, {
+                        "stem": _run_result_stem,
+                        "ts": _run_result_stem,
+                        "total": len(_run_results),
+                        "passed": passed,
+                        "failed": failed,
+                        "unclear": unclear,
+                        "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{_run_result_stem}.html")),
+                    })
+                self._json(history)
+            elif path == "/api/responses":
+                files = sorted(
+                    glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+                    key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
+                    reverse=True,
+                )
+                responses = []
+                for f in files:
+                    stem = os.path.basename(f).replace("results_", "").replace(".json", "")
+                    try:
+                        with open(f) as fp:
+                            data = json.load(fp)
+                        tests = []
+                        total_responses = 0
+                        for r in data:
+                            tests.append({
+                                "id": r.get("id"),
+                                "name": r.get("name"),
+                                "category": r.get("category"),
+                                "verdict": r.get("verdict"),
+                                "reason": r.get("reason"),
+                                "started_at": r.get("started_at"),
+                                "finished_at": r.get("finished_at"),
+                                "tasks_sent": r.get("tasks_sent", []),
+                                "responses": r.get("responses", []),
+                                "transcript": r.get("transcript", []),
+                            })
+                            total_responses += len(r.get("responses", []))
+                        responses.append({
+                            "stem": stem,
+                            "tests": tests,
+                            "totalResponses": total_responses,
+                        })
+                    except Exception:
+                        pass
+                if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in responses):
                     tests = []
                     total_responses = 0
-                    for r in data:
+                    for r in _run_results:
                         tests.append({
                             "id": r.get("id"),
                             "name": r.get("name"),
@@ -2739,57 +2764,35 @@ class Handler(BaseHTTPRequestHandler):
                             "transcript": r.get("transcript", []),
                         })
                         total_responses += len(r.get("responses", []))
-                    responses.append({
-                        "stem": stem,
+                    responses.insert(0, {
+                        "stem": _run_result_stem,
                         "tests": tests,
                         "totalResponses": total_responses,
                     })
-                except Exception:
-                    pass
-            if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in responses):
-                tests = []
-                total_responses = 0
-                for r in _run_results:
-                    tests.append({
-                        "id": r.get("id"),
-                        "name": r.get("name"),
-                        "category": r.get("category"),
-                        "verdict": r.get("verdict"),
-                        "reason": r.get("reason"),
-                        "started_at": r.get("started_at"),
-                        "finished_at": r.get("finished_at"),
-                        "tasks_sent": r.get("tasks_sent", []),
-                        "responses": r.get("responses", []),
-                        "transcript": r.get("transcript", []),
-                    })
-                    total_responses += len(r.get("responses", []))
-                responses.insert(0, {
-                    "stem": _run_result_stem,
-                    "tests": tests,
-                    "totalResponses": total_responses,
-                })
-            self._json(responses)
-        elif path == "/api/analysis":
-            self._json(_build_analysis_payload())
-        elif path.startswith("/api/report/"):
-            stem     = path.removeprefix("/api/report/")
-            filepath = os.path.join(REPORTS_DIR, f"report_{stem}.html")
-            qs       = urlparse(self.path).query
-            download = "dl=1" in qs
-            if not os.path.exists(filepath):
-                self.send_response(404)
+                self._json(responses)
+            elif path == "/api/analysis":
+                self._json(_build_analysis_payload())
+            elif path.startswith("/api/report/"):
+                stem     = path.removeprefix("/api/report/")
+                filepath = os.path.join(REPORTS_DIR, f"report_{stem}.html")
+                qs       = urlparse(self.path).query
+                download = "dl=1" in qs
+                if not os.path.exists(filepath):
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                with open(filepath, "rb") as fp:
+                    content = fp.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                if download:
+                    self.send_header("Content-Disposition", f'attachment; filename="report_{stem}.html"')
                 self.end_headers()
-                return
-            with open(filepath, "rb") as fp:
-                content = fp.read()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            if download:
-                self.send_header("Content-Disposition", f'attachment; filename="report_{stem}.html"')
-            self.end_headers()
-            self.wfile.write(content)
-        else:
-            self._html(HTML)
+                self.wfile.write(content)
+            else:
+                self._html(HTML)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
 
     def do_POST(self):
         global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _run_result_stem, _stop_requested, _run_progress
@@ -2920,7 +2923,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
         self.end_headers()
-        self.wfile.write(body.encode())
+        try:
+            self.wfile.write(body.encode())
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
 
     def _json(self, data):
         body = json.dumps(data, default=str).encode()
@@ -2931,7 +2937,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
 
 
 if __name__ == "__main__":
