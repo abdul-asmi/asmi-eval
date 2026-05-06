@@ -79,6 +79,25 @@ def _get_new_commands(since_ns: int) -> list[dict]:
         return []
 
 
+def _get_new_commands_safe(since_ns: int, timeout_s: float = 1.0) -> list[dict]:
+    """Best-effort inbox poll that cannot stall the daemon loop."""
+    import threading
+
+    result = {"rows": []}
+    done = threading.Event()
+
+    def worker():
+        try:
+            result["rows"] = _get_new_commands(since_ns)
+        finally:
+            done.set()
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    done.wait(timeout_s)
+    return result["rows"] if done.is_set() else []
+
+
 def _is_command(text: str) -> bool:
     """Check if a message looks like a command."""
     t = text.strip().lower()
@@ -122,6 +141,19 @@ def _check_stop() -> bool:
     """Return True if the server has a stop signal pending."""
     data = _poll_railway_full()
     return bool(data.get("stop"))
+
+
+def _ack_run_to_server(run: dict):
+    """Tell the UI server that the daemon has claimed the pending run."""
+    payload = json.dumps(run).encode()
+    for url in filter(None, [RAILWAY_URL, LOCAL_UI_URL]):
+        try:
+            req = urllib.request.Request(f"{url}/api/ack-run", data=payload, method="POST")
+            req.add_header("Content-Type", "application/json")
+            ctx = _SSL_CTX if url.startswith("https") else None
+            urllib.request.urlopen(req, timeout=4, context=ctx)
+        except Exception:
+            pass
 
 
 # Track progress state across calls
@@ -413,7 +445,40 @@ def run():
                 has_run = bool(poll_data.get("run"))
                 print(f"  [poll #{poll_count}] UI poll ok, pending_run={has_run}")
 
-            messages = _get_new_commands(since_ns)
+            # Check for run requests triggered from the browser
+            if poll_data.get("stop"):
+                pass  # already cleared by server; nothing running here
+            pending = poll_data.get("run")
+            if pending:
+                ids = pending.get("ids")
+                cats = pending.get("categories")
+                cat = pending.get("category")
+                rid = pending.get("id")
+                if not (ids or cats or cat or rid):
+                    print("\n  [ui run request skipped] empty selection payload")
+                    _post_output_to_local_ui("No tests selected. Please select at least one test and run again.", status="done")
+                    time.sleep(DAEMON_POLL)
+                    continue
+                if ids:
+                    cmd = f"run {','.join(ids)}"
+                elif cats:
+                    cmd = f"run {','.join(cats)}"
+                else:
+                    cmd = f"run {rid or cat or 'all'}"
+                ts  = datetime.now().strftime("%H:%M:%S")
+                print(f"\n  [{ts}] UI run request: {cmd}")
+                _ack_run_to_server(pending)
+                try:
+                    response = _run_with_stop(cmd)
+                except Exception as e:
+                    response = f"❌ Error: {e}"
+                # Post full output + HTML report to Railway UI for display in browser
+                final_status = "stopped" if response.startswith("⏹") else "done"
+                _post_output_to_railway(response, status=final_status)
+                # Also post results back to the local UI server so inline cards can render.
+                _post_output_to_local_ui(response, status=final_status)
+
+            messages = _get_new_commands_safe(since_ns)
 
             for msg in messages:
                 guid = msg["guid"]
@@ -440,38 +505,6 @@ def run():
                     response = f"❌ Error executing command: {e}"
 
                 print(f"  → Reply ({len(response)} chars): {response[:120]}")
-
-            # Check for run requests triggered from the browser
-            if poll_data.get("stop"):
-                pass  # already cleared by server; nothing running here
-            pending = poll_data.get("run")
-            if pending:
-                ids = pending.get("ids")
-                cats = pending.get("categories")
-                cat = pending.get("category")
-                rid = pending.get("id")
-                if not (ids or cats or cat or rid):
-                    print("\n  [ui run request skipped] empty selection payload")
-                    _post_output_to_local_ui("No tests selected. Please select at least one test and run again.", status="done")
-                    time.sleep(DAEMON_POLL)
-                    continue
-                if ids:
-                    cmd = f"run {','.join(ids)}"
-                elif cats:
-                    cmd = f"run {','.join(cats)}"
-                else:
-                    cmd = f"run {rid or cat or 'all'}"
-                ts  = datetime.now().strftime("%H:%M:%S")
-                print(f"\n  [{ts}] UI run request: {cmd}")
-                try:
-                    response = _run_with_stop(cmd)
-                except Exception as e:
-                    response = f"❌ Error: {e}"
-                # Post full output + HTML report to Railway UI for display in browser
-                final_status = "stopped" if response.startswith("⏹") else "done"
-                _post_output_to_railway(response, status=final_status)
-                # Also post results back to the local UI server so inline cards can render.
-                _post_output_to_local_ui(response, status=final_status)
 
         except KeyboardInterrupt:
             print("\n\n  Daemon stopped.")

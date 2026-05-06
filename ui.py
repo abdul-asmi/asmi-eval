@@ -2237,7 +2237,6 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/poll":
             _last_heartbeat = time.time()
             run = _pending_run
-            _pending_run = None
             stop = _stop_requested
             _stop_requested = False
             self._json({"run": run, "stop": stop})
@@ -2477,6 +2476,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/stop":
             _stop_requested = True
             _run_status     = "stopped"
+            self._json({"ok": True})
+        elif path == "/api/ack-run":
+            _pending_run = None
             self._json({"ok": True})
 
     def _html(self, body):
