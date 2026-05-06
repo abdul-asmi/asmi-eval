@@ -50,6 +50,8 @@ GEMINI_MODEL   = "models/gemini-3.1-flash-lite-preview"
 COMMAND_HANDLE = "abdulgaffoor1729@gmail.com" # Your Apple ID (for daemon)
 ```
 
+`RAILWAY_URL` is now read from the environment and defaults to the deployed Railway app URL, so completed runs can sync back to the hosted UI automatically. Set `RAILWAY_URL=""` if you want to disable that remote sync for a local-only session.
+
 ---
 
 ## Running Evals from Terminal
@@ -154,6 +156,13 @@ python ui.py
 ```
 
 Then open: **http://localhost:8765**
+
+If you want the UI server to restart automatically when `ui.py` changes, run:
+
+```bash
+cd /Users/yaybeedee/Desktop/asmi/eval
+python watch_ui.py
+```
 
 ### What you can do in the UI
 

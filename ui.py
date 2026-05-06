@@ -24,6 +24,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 import google.genai as genai
+from report import generate as generate_report
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-preview")
 
@@ -89,6 +90,32 @@ def _gh_put_file(content: str, sha: str, message: str = "Update test cases via e
         "content": encoded,
         "sha": sha,
     })
+
+
+def _gh_upsert_text_file(path: str, content: str, message: str):
+    """Create or update a text file in the repo via GitHub Contents API."""
+    body = {
+        "message": message,
+        "content": base64.b64encode(content.encode()).decode(),
+    }
+    try:
+        existing = _gh_request("GET", path)
+        body["sha"] = existing["sha"]
+    except Exception:
+        pass
+    _gh_request("PUT", path, body)
+
+
+def _write_text(path: str, content: str):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    os.replace(tmp_path, path)
+
+
+def _write_json(path: str, payload):
+    _write_text(path, json.dumps(payload, indent=2, default=str))
 
 
 # ── Test case load/save ────────────────────────────────────────────────────────
@@ -282,6 +309,64 @@ def _build_analysis_payload() -> dict:
         "tests": tests,
         "runs": runs,
     }
+
+
+def _persist_run_artifacts(stem: str, results: list[dict], report_html: str = ""):
+    """Persist the latest run locally and sync it to GitHub when configured."""
+    if not stem or not results:
+        return
+
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    results_name = f"results_{stem}.json"
+    report_name = f"report_{stem}.html"
+    results_path = os.path.join(REPORTS_DIR, results_name)
+    report_path = os.path.join(REPORTS_DIR, report_name)
+    pointer_path = os.path.join(REPORTS_DIR, ".latest_results_path")
+
+    _write_json(results_path, results)
+    if report_html:
+        _write_text(report_path, report_html)
+    else:
+        generate_report(results, output_path=report_path)
+    _write_text(pointer_path, results_name)
+
+    analysis = _build_analysis_payload()
+    analysis_path = {
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "source_run_count": len(analysis.get("runs", [])),
+        "latest_stem": analysis.get("runs", [{}])[0].get("stem", stem) if analysis.get("runs") else stem,
+        "text": analysis.get("overall_analysis", ""),
+    }
+    _write_json(OVERALL_ANALYSIS_FILE, analysis_path)
+
+    if USE_GITHUB:
+        try:
+            with open(report_path, encoding="utf-8") as f:
+                report_content = f.read()
+            with open(OVERALL_ANALYSIS_FILE, encoding="utf-8") as f:
+                analysis_content = f.read()
+            _gh_upsert_text_file(
+                f"reports/{results_name}",
+                json.dumps(results, indent=2, default=str),
+                f"Sync eval results {stem}",
+            )
+            _gh_upsert_text_file(
+                f"reports/{report_name}",
+                report_content,
+                f"Sync eval report {stem}",
+            )
+            _gh_upsert_text_file(
+                "reports/.latest_results_path",
+                results_name,
+                f"Sync latest report pointer {stem}",
+            )
+            _gh_upsert_text_file(
+                "reports/overall_analysis.json",
+                analysis_content,
+                f"Sync cumulative analysis {stem}",
+            )
+        except Exception as e:
+            print(f"  [report sync error] {e}")
 
 # ── Test case generation with LLM ─────────────────────────────────────────────
 
@@ -2323,6 +2408,8 @@ class Handler(BaseHTTPRequestHandler):
                 _run_results     = data.get("results", [])
                 m = re.search(r"Raw results:\s*\S*results_(\d{8}_?\d{4,6})\.json", _run_output)
                 _run_result_stem = m.group(1) if m else time.strftime("%Y%m%d_%H%M%S")
+                if _run_status == "done" and _run_results:
+                    _persist_run_artifacts(_run_result_stem, _run_results, _run_report_html)
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})

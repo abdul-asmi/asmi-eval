@@ -87,6 +87,8 @@ For each run, it shows:
 
 This is where you inspect what Asmi actually said, not just the pass/fail score.
 
+When a run finishes, the UI also writes the newest report artifacts into `reports/` on the server side, so the Railway site can show fresh data right after refresh. If GitHub sync is configured, those same files are pushed back to the repo too.
+
 ## The Big Flow
 
 Here is what happens when you click Run selected:
@@ -116,7 +118,7 @@ Gemini judges whether each test passed
 System saves results and report files
         |
         v
-UI updates live output, History, and Responses
+UI updates live output, History, and Responses, then persists the latest run for Railway refreshes
 ```
 
 ## APIs Involved

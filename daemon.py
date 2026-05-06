@@ -308,9 +308,21 @@ def _latest_results_json() -> list:
         if os.path.exists(pointer):
             with open(pointer) as f:
                 candidate = f.read().strip()
-            if os.path.exists(candidate):
-                chosen = candidate
-                print(f"  [results] using pointer → {os.path.basename(chosen)}")
+            if candidate:
+                candidates = []
+                if os.path.isabs(candidate):
+                    candidates.append(candidate)
+                else:
+                    candidates.extend([
+                        candidate,
+                        os.path.join(REPORTS_DIR, candidate),
+                        os.path.join(EVAL_DIR, candidate),
+                    ])
+                for path in candidates:
+                    if os.path.exists(path):
+                        chosen = path
+                        print(f"  [results] using pointer → {os.path.basename(chosen)}")
+                        break
 
         # Fallback: newest file by mtime in reports/
         if not chosen:

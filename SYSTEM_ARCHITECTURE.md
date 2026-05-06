@@ -47,7 +47,7 @@ The UI does not run tests directly. It queues a run. The daemon picks up that qu
    - `reports/results_YYYYMMDD_HHMMSS.json`
    - `reports/report_YYYYMMDD_HHMMSS.html`
 8. `daemon.py` posts final output and parsed results to `POST /api/output`.
-9. `ui.py` exposes the latest run through `/api/output`, `/api/history`, and `/api/responses`.
+9. `ui.py` persists the latest run back into `reports/` on the server side, and then exposes it through `/api/output`, `/api/history`, and `/api/responses`.
 
 ### From Terminal
 
@@ -168,7 +168,10 @@ Primary persisted artifacts live in `reports/`:
 
 - `results_*.json`: machine-readable result list
 - `report_*.html`: human report
-- `.latest_results_path`: pointer used by the daemon when available
+- `.latest_results_path`: portable latest-run pointer used by the daemon when available
+- `overall_analysis.json`: cumulative analysis summary
+
+The UI now writes completed runs into `reports/` when `/api/output` arrives, so the Railway deployment can show fresh results on refresh without waiting for a redeploy. When GitHub is configured, the same artifacts are synced back to the repo too.
 
 The UI also keeps the latest posted run in memory so History/Responses can show it immediately even if file scanning is slightly behind.
 
