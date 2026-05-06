@@ -1,0 +1,22 @@
+[
+  {
+    "id": "cap_01",
+    "name": "What can you do: calling clearly mentioned",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "What can you help me with?"
+    ],
+    "responses": [
+      "I'm here to handle the logistics you don't want to."
+    ],
+    "verdict": "FAIL",
+    "reason": "The response is vague and fails to mention phone calling or describe the types of calls the assistant can make.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-05T18:20:19.824232+00:00",
+    "finished_at": "2026-05-05T18:21:08.046726+00:00",
+    "matched_responses": "I'm here to handle the logistics you don't want to."
+  }
+]

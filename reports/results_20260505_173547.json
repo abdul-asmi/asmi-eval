@@ -1,0 +1,22 @@
+[
+  {
+    "id": "sticky_01",
+    "name": "Single research task arrives unprompted",
+    "category": "sticky_message",
+    "type": "single",
+    "tasks_sent": [
+      "Find me the top 3 Italian restaurants in Pittsburgh with their hours and ratings"
+    ],
+    "responses": [
+      "Finding the best Italian spots in Pittsburgh for you now."
+    ],
+    "verdict": "FAIL",
+    "reason": "The response is merely an acknowledgment that research is starting and does not provide the requested restaurant recommendations, hours, or ratings.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-05T21:35:26.305459+00:00",
+    "finished_at": "2026-05-05T21:35:41.468675+00:00",
+    "matched_responses": "Finding the best Italian spots in Pittsburgh for you now."
+  }
+]

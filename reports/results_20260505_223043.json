@@ -1,0 +1,23 @@
+[
+  {
+    "id": "sticky_01",
+    "name": "Single research task arrives unprompted",
+    "category": "sticky_message",
+    "type": "single",
+    "tasks_sent": [
+      "Find me the top 3 Italian restaurants in Pittsburgh with their hours and ratings"
+    ],
+    "responses": [
+      "Got you, Abdul. Digging up the best spots in Pittsburgh now.",
+      "Btw, what do you do for a living? Want to make sure I'm matching your vibe."
+    ],
+    "verdict": "FAIL",
+    "reason": "Asmi only provided an acknowledgement of the task and a follow-up question, failing to provide the requested restaurant information.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-06T02:30:07.783587+00:00",
+    "finished_at": "2026-05-06T02:30:22.944959+00:00",
+    "matched_responses": "none found"
+  }
+]

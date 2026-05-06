@@ -1,0 +1,22 @@
+[
+  {
+    "id": "nudge_01",
+    "name": "First call includes 3P nudge",
+    "category": "threep_nudge",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local Italian restaurant in Pittsburgh and ask if they take reservations"
+    ],
+    "responses": [
+      "I can do that."
+    ],
+    "verdict": "FAIL",
+    "reason": "The response does not contain the required 3P nudge framing (e.g., \"I'll call them for you\") to indicate the AI is making a call on behalf of the user.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-05T17:53:36.536399+00:00",
+    "finished_at": "2026-05-05T17:53:48.712482+00:00",
+    "matched_responses": "\"I can do that.\""
+  }
+]

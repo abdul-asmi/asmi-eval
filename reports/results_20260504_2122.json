@@ -1,0 +1,29 @@
+[
+  {
+    "id": "onboard_02",
+    "name": "Burst during onboarding: all messages handled cleanly",
+    "category": "onboarding",
+    "type": "burst",
+    "tasks_sent": [
+      "Hi",
+      "What can you help me with?",
+      "Can you make phone calls?",
+      "How do I get started?"
+    ],
+    "responses": [
+      "Hey Abdul! I can definitely make calls for you.",
+      "Think of me as your assistant for research, bookings, or handling your to-do list.",
+      "To start, just tell me one thing you've been procrastinating on."
+    ],
+    "verdict": "FAIL",
+    "reason": "Only got 3/4 responses \u2014 1 dropped or timed out.",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Only got 3/4 responses \u2014 1 dropped or timed out."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-05T01:20:28.823148+00:00",
+    "finished_at": "2026-05-05T01:22:32.597752+00:00"
+  }
+]

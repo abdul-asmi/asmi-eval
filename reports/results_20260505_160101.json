@@ -1,0 +1,22 @@
+[
+  {
+    "id": "nudge_01",
+    "name": "First call includes 3P nudge",
+    "category": "threep_nudge",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local Italian restaurant in Pittsburgh and ask if they take reservations"
+    ],
+    "responses": [
+      "Got it. Any specific spot in mind, or should I find a highly-rated one for you?"
+    ],
+    "verdict": "FAIL",
+    "reason": "The only response provided is a clarifying question, and the model failed to execute the task or provide the required third-party framing nudge.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-05T20:00:43.520787+00:00",
+    "finished_at": "2026-05-05T20:00:55.667400+00:00",
+    "matched_responses": "none found"
+  }
+]

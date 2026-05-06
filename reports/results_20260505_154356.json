@@ -1,0 +1,22 @@
+[
+  {
+    "id": "nudge_01",
+    "name": "First call includes 3P nudge",
+    "category": "threep_nudge",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local Italian restaurant in Pittsburgh and ask if they take reservations"
+    ],
+    "responses": [
+      "On it. I'll get that restaurant answer for you live on our call."
+    ],
+    "verdict": "PASS",
+    "reason": "The response confirms the assistant is performing the action on the user's behalf by stating it will get the answer \"live on our call.\"",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-05T19:43:38.054669+00:00",
+    "finished_at": "2026-05-05T19:43:50.176252+00:00",
+    "matched_responses": "\"On it. I'll get that restaurant answer for you live on our call.\""
+  }
+]

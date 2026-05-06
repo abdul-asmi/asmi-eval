@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Asmi Eval Report — 2026-05-04 14:02</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          background: #f8fafc; color: #1e293b; padding: 24px; }
+  h1   { font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: #64748b; font-size: 0.9rem; margin-bottom: 24px; }
+
+  .summary { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+  .stat { background: white; border-radius: 12px; padding: 16px 24px;
+           box-shadow: 0 1px 4px rgba(0,0,0,.08); min-width: 120px; text-align: center; }
+  .stat .num { font-size: 2rem; font-weight: 700; }
+  .stat .lbl { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+
+  .category { background: white; border-radius: 12px; margin-bottom: 20px;
+               box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; }
+  .cat-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+                 background: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
+  .cat-name  { font-weight: 600; flex: 1; }
+  .cat-score { font-weight: 700; font-size: 1rem; min-width: 40px; text-align: right; }
+  .bar-track { flex: 2; height: 8px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 99px; transition: width .4s; }
+
+  details.test-row { margin: 8px 16px; border-radius: 8px; overflow: hidden; }
+  details.test-row summary {
+    padding: 10px 14px; cursor: pointer; list-style: none;
+    display: flex; align-items: center; gap: 10px; font-size: 0.9rem;
+  }
+  details.test-row summary::-webkit-details-marker { display: none; }
+  details.test-row summary::before { content: "▶"; font-size: 0.7rem; color: #94a3b8; }
+  details[open].test-row summary::before { content: "▼"; }
+
+  .test-detail { padding: 12px 16px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 8px; }
+  .section-label { font-weight: 600; color: #475569; font-size: 0.75rem;
+                    text-transform: uppercase; letter-spacing: .05em; margin-top: 6px; }
+  .tasks code { display: block; background: #f1f5f9; padding: 4px 8px;
+                 border-radius: 4px; margin: 2px 0; font-size: 0.82rem; white-space: pre-wrap; }
+  .resp  { background: #f8fafc; padding: 6px 10px; border-radius: 4px;
+            margin: 2px 0; font-size: 0.82rem; white-space: pre-wrap; border-left: 3px solid #cbd5e1; }
+  .reason { color: #374151; }
+  .manual { color: #7c3aed; font-weight: 500; }
+  .note   { color: #0369a1; }
+  .precond{ color: #b45309; font-weight: 500; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px;
+            font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <h1>Asmi Eval Report</h1>
+  <div class="subtitle">Run at 2026-05-04 14:02 &nbsp;·&nbsp; v0.10.37.2 regression suite &nbsp;·&nbsp; iMessage only</div>
+
+  <div class="summary">
+    <div class="stat"><div class="num">28</div><div class="lbl">Total</div></div>
+    <div class="stat"><div class="num" style="color:#22c55e">0</div><div class="lbl">Passed</div></div>
+    <div class="stat"><div class="num" style="color:#ef4444">3</div><div class="lbl">Failed</div></div>
+    <div class="stat"><div class="num" style="color:#f59e0b">25</div><div class="lbl">Unclear</div></div>
+    <div class="stat"><div class="num">0%</div><div class="lbl">Pass rate</div></div>
+  </div>
+
+  
+        <div class="category">
+            <div class="cat-header">
+                <span class="cat-name">Sticky Message</span>
+                <span class="cat-score">0/4</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:0%;background:#ef4444"></div>
+                </div>
+            </div>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[sticky_01]</strong> Single research task arrives unprompted
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Find me the top 3 Italian restaurants in Pittsburgh with their hours and ratings</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: I'm finding the best Italian spots in Pittsburgh for you now.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[sticky_02]</strong> Single research task with Sunday-specific detail
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>What are the best coffee shops in downtown Pittsburgh that are open on Sundays?</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: Searching for the best coffee spots in downtown Pittsburgh for you...</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[sticky_03]</strong> Burst: 4 tasks back-to-back, all arrive
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>What is the weather like in Pittsburgh today?</code><br><code>What are the top 3 pizza places in Pittsburgh?</code><br><code>What time does Target in Pittsburgh open on weekdays?</code><br><code>Find me a highly rated plumber in Pittsburgh</code></div>
+                    <div class="section-label">Responses (5)</div>
+                    <div class="resp">Response 1: Sunday Coffee in Downtown Pittsburgh</div><div class="resp">Response 2: TOP PICK
+• Ghost Coffee Collab • 5.0 Rating
+1736 Forbes Ave • Open until 3:00 PM
+Highest possible rating with over 100 reviews, perfect for a high-quality Sunday afternoon cup.</div><div class="resp">Response 3: ALSO AVAILABLE</div><div class="resp">Response 4: • Novaria coffee co. (4.9 Rating)
+1812 Penn Ave • Open until 5:00 PM</div><div class="resp">Response 5: • De Fer Coffee & Tea (4.8 Rating)
+2002 Smallman St • Open until 5:00 PM</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 5/4 responses.</small>
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[sticky_04]</strong> Task after locking phone still arrives
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Find me a good Thai restaurant in Pittsburgh with vegetarian options</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: Gathering your local Pittsburgh updates and recommendations...</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    <div class="note">📝 After sending, lock your phone for 30 seconds then check — response should be waiting.</div>
+                </div>
+            </details>
+            
+        </div>
+        
+        <div class="category">
+            <div class="cat-header">
+                <span class="cat-name">Call Deduping</span>
+                <span class="cat-score">0/4</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:0%;background:#ef4444"></div>
+                </div>
+            </div>
+            
+            <details class="test-row" style="background:#fef2f2;border-left:4px solid #ef4444">
+                <summary>
+                    <span class="badge" style="background:#ef444422;color:#ef4444">FAIL</span>
+                    <strong>[dedup_01]</strong> Exact duplicate call within 2 seconds → only one call fires
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call a local pharmacy in Pittsburgh and ask if they have flu shots available</code><br><code>Call a local pharmacy in Pittsburgh and ask if they have flu shots available</code></div>
+                    <div class="section-label">Responses (4)</div>
+                    <div class="resp">Response 1: Pittsburgh Update for Monday</div><div class="resp">Response 2: ☀️ Today's Weather
+It's a pleasant, breezy day in Pittsburgh with a high near 75°F. Rain chances are low (around 15%) until the evening, but keep an eye out for scattered showers and gusty winds arriving tomorrow.</div><div class="resp">Response 3: I'm finding the best Italian spots in Pittsburgh for you now.</div><div class="resp">Response 4: 🍕 Top Pizza Spots
+• Pizza Parma (Liberty Ave) • 4.7★ • Fresh and flavorful
+• Fiori's Pizzaria (Capital Ave) • 4.7★ • Famous cozy atmosphere
+• Genoa Pizza & Bar (Market St) • 4.6★ • Friendly staff and great crust</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Dedup failed — got 4 responses, expected 1. Two calls may have fired.</div>
+                    <span class="badge" style="background:#ef444422;color:#ef4444">Count: FAIL</span> <small>Dedup failed — got 4 responses, expected 1. Two calls may have fired.</small>
+                    <div class="manual">📋 Manual check: Open ElevenLabs dashboard — confirm only 1 call was initiated.</div>
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fef2f2;border-left:4px solid #ef4444">
+                <summary>
+                    <span class="badge" style="background:#ef444422;color:#ef4444">FAIL</span>
+                    <strong>[dedup_02]</strong> Near-duplicate call within 5 seconds → treated as one
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call the nearest CVS in Pittsburgh and ask about their hours</code><br><code>Can you call CVS and check what time they close today?</code></div>
+                    <div class="section-label">Responses (4)</div>
+                    <div class="resp">Response 1: Top Italian Spots in Pittsburgh</div><div class="resp">Response 2: TOP PICK
+• Dish Osteria Bar • 4.9 Stars
+South Side • Opens 5 PM Tue • Sicilian & Mediterranean
+Highest rated with a cozy vibe, perfect for high-quality seafood and pastas.</div><div class="resp">Response 3: Top Italian Restaurants in Pittsburgh</div><div class="resp">Response 4: ALSO AVAILABLE</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Dedup failed — got 4 responses, expected 1. Two calls may have fired.</div>
+                    <span class="badge" style="background:#ef444422;color:#ef4444">Count: FAIL</span> <small>Dedup failed — got 4 responses, expected 1. Two calls may have fired.</small>
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[dedup_03]</strong> Two genuinely different call tasks both fire independently
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call the nearest CVS in Pittsburgh and ask about flu shots</code><br><code>Also call the nearest Walgreens and ask the same question</code></div>
+                    <div class="section-label">Responses (2)</div>
+                    <div class="resp">Response 1: Craving pasta yet? I can help with directions or check for more spots if you like.</div><div class="resp">Response 2: • Here's what I read:
+You're on a mission for flu shots in Pittsburgh. You need to call:
+• Local pharmacies
+• CVS (and check their closing time today)
+• Walgreens</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 2/2 responses.</small>
+                    <div class="manual">📋 Manual check: ElevenLabs dashboard should show 2 separate calls.</div>
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[dedup_04]</strong> Burst 4 different call tasks: all 4 fire and return results
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call the nearest CVS in Pittsburgh and ask about their hours</code><br><code>Call the nearest Walgreens in Pittsburgh and ask about flu shots</code><br><code>Call Domino's in Pittsburgh and ask what time they close tonight</code><br><code>Call a local Italian restaurant in Pittsburgh and ask if they take reservations</code></div>
+                    <div class="section-label">Responses (5)</div>
+                    <div class="resp">Response 1: Locating pharmacies and scheduling verification calls...</div><div class="resp">Response 2: Pharmacy Flu Shot Availability</div><div class="resp">Response 3: TOP PICK
+• CVS • Call Scheduled
+4610 Centre Ave • Pittsburgh, PA 15213
+I've scheduled calls to the nearest locations to verify their closing hours and confirm flu shot stock for you.</div><div class="resp">Response 4: ALSO AVAILABLE</div><div class="resp">Response 5: • Walgreens Pharmacy (Call Scheduled)
+5956 Centre Ave Ste 4 • Pittsburgh, PA 15206</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 5/4 responses.</small>
+                    <div class="manual">📋 Manual check: ElevenLabs should show 4 distinct calls.</div>
+                    
+                </div>
+            </details>
+            
+        </div>
+        
+        <div class="category">
+            <div class="cat-header">
+                <span class="cat-name">Post-Call Summary</span>
+                <span class="cat-score">0/4</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:0%;background:#ef4444"></div>
+                </div>
+            </div>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[summary_01]</strong> Successful call summary matches reality
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call a Domino's in Pittsburgh and ask what time they close tonight</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: • Here's what I read:
+• Check Pittsburgh CVS/Walgreens for hours and flu shots
+• Confirm Domino's closing time
+• Ask a local Italian spot about reservations
+
+You're on a mission to get things done in the Steel City today.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    <div class="manual">📋 Manual check: Compare summary against ElevenLabs call recording to verify accuracy.</div>
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[summary_02]</strong> Unanswered call reported honestly, not invented
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call +14085550100 and ask about their hours</code></div>
+                    <div class="section-label">Responses (2)</div>
+                    <div class="resp">Response 1: I've queued up those calls for you. Here’s who I’m checking in with:</div><div class="resp">Response 2: • Domino's (Stanwix St): Verifying their exact closing time for tonight.
+• Alla Famiglia: Confirming their closing hours and how they handle reservations for this evening.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[summary_03]</strong> Two back-to-back calls: summaries don't cross-contaminate
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call the nearest Walgreens in Pittsburgh and ask if they have flu shots</code><br><code>Call the nearest CVS in Pittsburgh and ask about their hours today</code></div>
+                    <div class="section-label">Responses (2)</div>
+                    <div class="resp">Response 1: I'm reaching out to Walgreens, CVS, and Domino's to verify those times and flu shot details for you.</div><div class="resp">Response 2: I've queued those calls for you. I'm checking with Domino's on Stanwix St for their closing time, Walgreens on Centre Ave about flu shot stock, and the nearby CVS for their hours today.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 2/2 responses.</small>
+                    <div class="manual">📋 Manual check: Check ElevenLabs recordings for both calls individually.</div>
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[summary_04]</strong> Call to business that can't answer specific question — no hallucination
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call a local restaurant in Pittsburgh and ask who their head chef is</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: I'm looking into the Italian restaurant details and preparing to call about their head chef.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+        </div>
+        
+        <div class="category">
+            <div class="cat-header">
+                <span class="cat-name">Language Preference</span>
+                <span class="cat-score">0/3</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:0%;background:#ef4444"></div>
+                </div>
+            </div>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[lang_01]</strong> First call task: no language preference asked before call fires
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call a local Italian restaurant in Pittsburgh and ask if they have outdoor seating</code></div>
+                    <div class="section-label">Responses (2)</div>
+                    <div class="resp">Response 1: I've scheduled those calls to track down the head chefs for you.</div><div class="resp">Response 2: I’ll reach out to Alla Famiglia today once they open at 4:00 PM. Since Dish Osteria Bar is closed until tomorrow, I have a call set for them at 5:00 PM Tuesday to get that name for you.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[lang_02]</strong> Burst: 3 call tasks, none trigger language prompt upfront
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call the nearest pharmacy in Pittsburgh and ask about flu shots</code><br><code>Call a local Italian restaurant in Pittsburgh and ask about reservations</code><br><code>Call the nearest urgent care in Pittsburgh and ask about walk-in hours</code></div>
+                    <div class="section-label">Responses (3)</div>
+                    <div class="resp">Response 1: I'm looking into the outdoor seating options for the Italian restaurants we discussed.</div><div class="resp">Response 2: I checked with the Walgreens in Crafton for you! The pharmacy is open until 7:00 PM tonight, though they are currently on a meal break until 2:00 PM.</div><div class="resp">Response 3: Since they were on break, I couldn't confirm the flu shot availability just yet. Would you like me to try calling them back after 2:00 PM to double-check that for you?</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 3/3 responses.</small>
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[lang_03]</strong> Explicit language in request: no re-ask
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call a restaurant in Pittsburgh in English and ask about their menu</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: Domino's has me trapped in an infinite loop of automated menus and recorded warnings. Should I try calling back later when a human might actually be around?</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+        </div>
+        
+        <div class="category">
+            <div class="cat-header">
+                <span class="cat-name">Location Memory</span>
+                <span class="cat-score">0/3</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:0%;background:#ef4444"></div>
+                </div>
+            </div>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[loc_01]</strong> Location retained across 3 follow-up tasks (sequence)
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Find a good sushi restaurant near me in Pittsburgh, PA</code><br><code>Now find a good Italian restaurant near me</code><br><code>What is the closest urgent care to me?</code><br><code>Find a pharmacy near me</code></div>
+                    <div class="section-label">Responses (4)</div>
+                    <div class="resp">Response 1: CVS is gatekeeping their hours behind a 10-digit ID verification. Should I try again with your phone number, or do you want to handle this one?</div><div class="resp">Response 2: Pittsburgh Updates and Calls</div><div class="resp">Response 3: Alla Famiglia let their voicemail do the talking: they close at 9 PM tonight and only take bookings via OpenTable. Want me to grab you a table there, or should we look elsewhere?</div><div class="resp">Response 4: I'm gathering the top sushi spots, revisiting those Italian favorites, and finding the nearest urgent care for you.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 4/4 responses.</small>
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[loc_02]</strong> Burst: 4 location tasks after setup, no re-ask
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>I'm based in Pittsburgh, PA</code><br><code>Find a pizza place near me</code><br><code>Find a coffee shop near me</code><br><code>Find a gym near me</code><br><code>Find a grocery store near me</code></div>
+                    <div class="section-label">Responses (4)</div>
+                    <div class="resp">Response 1: Searching for nearby pharmacies and preparing your update...</div><div class="resp">Response 2: Pharmacies Near Pittsburgh</div><div class="resp">Response 3: TOP PICK
+• Schiller's Apothecary • 4.9 Stars
+811 S Aiken Ave • Open until 6:00 PM
+This is the top-rated local choice with excellent reviews and delivery services available.</div><div class="resp">Response 4: ALSO AVAILABLE</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 4/4 responses.</small>
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[loc_03]</strong> Location retained after providing it during a call task
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call the nearest Walgreens to me in Pittsburgh and ask about flu shots</code><br><code>Now find me a pharmacy near me that's open late</code></div>
+                    <div class="section-label">Responses (2)</div>
+                    <div class="resp">Response 1: Need me to call any of these to check for specific stock?</div><div class="resp">Response 2: Pittsburgh Local Picks</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 2/2 responses.</small>
+                    
+                    
+                </div>
+            </details>
+            
+        </div>
+        
+        <div class="category">
+            <div class="cat-header">
+                <span class="cat-name">Onboarding Reactions</span>
+                <span class="cat-score">0/3</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:0%;background:#ef4444"></div>
+                </div>
+            </div>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[onboard_01]</strong> First message gets exactly one response
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Hi, what can you do?</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: I'm ready to call Walgreens about those flu shots—can you share your street address or zip code so I can find the one closest to you?</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[onboard_02]</strong> Burst during onboarding: all messages handled cleanly
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Hi</code><br><code>What can you help me with?</code><br><code>Can you make phone calls?</code><br><code>How do I get started?</code></div>
+                    <div class="section-label">Responses (5)</div>
+                    <div class="resp">Response 1: I reached out to the CVS on Centre Ave for you. The pharmacy is open until 9:00 PM today, but they do take a lunch break until 2:00 PM.</div><div class="resp">Response 2: The representative mentioned the front store is actually closed right now and isn't scheduled to reopen until Wednesday at 7:00 AM.</div><div class="resp">Response 3: Finding late-night pharmacies for you and preparing a guide on how I can help.</div><div class="resp">Response 4: I checked with Concentra Urgent Care and they are open until 5:00 PM today for walk-ins.</div><div class="resp">Response 5: Just a heads up: if you need any blood work done, they mentioned you'll need to arrive before 1:00 PM.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 5/4 responses.</small>
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[onboard_03]</strong> Onboarding completes correctly end-to-end
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Hi</code><br><code>My name is Abdul</code><br><code>I'm in Pittsburgh, PA</code><br><code>What can you do for me?</code></div>
+                    <div class="section-label">Responses (4)</div>
+                    <div class="resp">Response 1: Late Night Pharmacies in Pittsburgh</div><div class="resp">Response 2: Hey honey!</div><div class="resp">Response 3: Got it. I'll keep everything centered around Pittsburgh.</div><div class="resp">Response 4: I handle the stuff you don't have time for.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 4/4 responses.</small>
+                    
+                    
+                </div>
+            </details>
+            
+        </div>
+        
+        <div class="category">
+            <div class="cat-header">
+                <span class="cat-name">Capability Prompts</span>
+                <span class="cat-score">0/4</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:0%;background:#ef4444"></div>
+                </div>
+            </div>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[cap_01]</strong> What can you do: calling clearly mentioned
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>What can you help me with?</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: I'm your person for getting things done—think of me as your chief of staff.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[cap_02]</strong> Calling capability described accurately and specifically
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Can you make phone calls on my behalf?</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: Absolutely. I can call businesses or people to get info, book things, or follow up.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fef2f2;border-left:4px solid #ef4444">
+                <summary>
+                    <span class="badge" style="background:#ef444422;color:#ef4444">FAIL</span>
+                    <strong>[cap_03]</strong> Burst: 4 capability questions, consistent answers across all
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>What can you do?</code><br><code>Can you book things for me?</code><br><code>Can you make phone calls?</code><br><code>What can't you do?</code></div>
+                    <div class="section-label">Responses (2)</div>
+                    <div class="resp">Response 1: I can't handle payments or anything irreversible, like hitting 'buy' on a cart.</div><div class="resp">Response 2: And I don't have access to your email or calendar unless you specifically ask me to set that up.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Only got 2/4 responses — 2 dropped or timed out. | Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#ef444422;color:#ef4444">Count: FAIL</span> <small>Only got 2/4 responses — 2 dropped or timed out.</small>
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[cap_04]</strong> Mid-task: framing of what Asmi is about to do is accurate
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call a local restaurant in Pittsburgh and get me a reservation for 2 people tonight at 7pm</code></div>
+                    <div class="section-label">Responses (1)</div>
+                    <div class="resp">Response 1: Setting your preferences and preparing a summary of my services for you.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+        </div>
+        
+        <div class="category">
+            <div class="cat-header">
+                <span class="cat-name">3P Call Nudge</span>
+                <span class="cat-score">0/3</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:0%;background:#ef4444"></div>
+                </div>
+            </div>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[nudge_01]</strong> First call includes 3P nudge
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call a local Italian restaurant in Pittsburgh and ask if they take reservations</code></div>
+                    <div class="section-label">Responses (3)</div>
+                    <div class="resp">Response 1: Dinner in Pittsburgh</div><div class="resp">Response 2: TOP PICK
+• Alla Famiglia • Opens 4 PM
+Beltzhoover • Italian Classics
+This is your best bet for tonight since it's the only one of your favorites open this evening.</div><div class="resp">Response 3: ALSO AVAILABLE</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[nudge_02]</strong> Second call does NOT repeat the 3P nudge
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call the nearest pharmacy in Pittsburgh and ask about flu shots</code></div>
+                    <div class="section-label">Responses (2)</div>
+                    <div class="resp">Response 1: I tried calling UPMC-GoHealth Urgent Care on Baum Blvd for you, but I wasn't able to reach a person. Their phone system only offers automated options for text messaging or email support.</div><div class="resp">Response 2: Since I couldn't verify today's walk-in availability over the phone, you might want to try their online 'save your spot' feature or visit the clinic directly before they close at 8 PM.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+            <details class="test-row" style="background:#fffbeb;border-left:4px solid #f59e0b">
+                <summary>
+                    <span class="badge" style="background:#f59e0b22;color:#f59e0b">UNCLEAR</span>
+                    <strong>[nudge_03]</strong> Burst after first call: no nudge on any subsequent call
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call the nearest CVS in Pittsburgh and ask about their hours</code><br><code>Call a local pizza place and ask what time they close</code><br><code>Call the nearest urgent care in Pittsburgh and ask about walk-in availability</code></div>
+                    <div class="section-label">Responses (3)</div>
+                    <div class="resp">Response 1: To get these calls moving, I just need a little more detail.</div><div class="resp">Response 2: Could you share your zip code or street address? I want to make sure I'm contacting the Walgreens closest to you. Once I have that, I can also reach out to Alla Famiglia for your 7 PM reservation.</div><div class="resp">Response 3: I've pulled up the details for several spots in Pittsburgh, including Synchrony Pharmacy, CVS on Centre and Forbes, and urgent care options like UPMC-GoHealth, iHealth, and Concentra.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Judge error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.</div>
+                    <span class="badge" style="background:#22c55e22;color:#22c55e">Count: PASS</span> <small>Got 3/3 responses.</small>
+                    
+                    
+                </div>
+            </details>
+            
+        </div>
+        
+
+</body>
+</html>

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "sticky_01",
+    "name": "Single research task arrives unprompted",
+    "category": "sticky_message",
+    "type": "single",
+    "tasks_sent": [
+      "Find me the top 3 Italian restaurants in Pittsburgh with their hours and ratings"
+    ],
+    "responses": [
+      "I'm on it.",
+      "Do you have a preferred price range or a specific neighborhood you're looking at?"
+    ],
+    "verdict": "FAIL",
+    "reason": "The assistant failed to provide any restaurant recommendations, instead responding with a follow-up question.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-05T21:13:50.404325+00:00",
+    "finished_at": "2026-05-05T21:14:08.614411+00:00",
+    "matched_responses": "\"I'm on it.\", \"Do you have a preferred price range or a specific neighborhood you're looking at?\""
+  }
+]
