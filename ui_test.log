@@ -1,0 +1,18 @@
+
+  Asmi Eval UI — http://localhost:8765
+  Storage: Local file (/Users/yaybeedee/Desktop/asmi/eval/test_cases.py)
+  Ctrl+C to stop
+
+Traceback (most recent call last):
+  File "/Users/yaybeedee/Desktop/asmi/eval/ui.py", line 1739, in <module>
+    server = HTTPServer(("0.0.0.0", PORT), Handler)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socketserver.py", line 457, in __init__
+    self.server_bind()
+    ~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/server.py", line 136, in server_bind
+    socketserver.TCPServer.server_bind(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 48] Address already in use
