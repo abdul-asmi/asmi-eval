@@ -100,16 +100,8 @@ def _poll_railway() -> dict | None:
 
 
 def _poll_railway_full() -> dict:
-    """Poll /api/poll — tries Railway first, falls back to local UI."""
-    # Try Railway
-    if RAILWAY_URL:
-        try:
-            req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
-            with urllib.request.urlopen(req, timeout=5, context=_SSL_CTX) as resp:
-                return json.loads(resp.read())
-        except Exception as e:
-            print(f"  [railway poll error] {e}")
-    # Fall back to local UI
+    """Poll /api/poll — tries local UI first, falls back to Railway."""
+    # Prefer local UI so browser selections on localhost are always authoritative.
     if LOCAL_UI_URL:
         try:
             req = urllib.request.Request(f"{LOCAL_UI_URL}/api/poll", method="GET")
@@ -117,6 +109,14 @@ def _poll_railway_full() -> dict:
                 return json.loads(resp.read())
         except Exception:
             pass
+    # Fall back to Railway
+    if RAILWAY_URL:
+        try:
+            req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
+            with urllib.request.urlopen(req, timeout=5, context=_SSL_CTX) as resp:
+                return json.loads(resp.read())
+        except Exception as e:
+            print(f"  [railway poll error] {e}")
     return {}
 
 
@@ -200,6 +200,14 @@ def _run_with_stop(cmd: str) -> str:
     if not arg or arg == "all":
         proc_cmd = [sys.executable, "run_eval.py"]
         label = "full suite"
+    elif "," in arg:
+        parts = [p.strip() for p in arg.split(",") if p.strip()]
+        if all(p in CATEGORIES for p in parts):
+            proc_cmd = [sys.executable, "run_eval.py", "--categories", arg]
+            label = f"categories: {arg}"
+        else:
+            proc_cmd = [sys.executable, "run_eval.py", "--ids", arg]
+            label = f"tests: {arg}"
     elif arg in CATEGORIES:
         proc_cmd = [sys.executable, "run_eval.py", "--category", arg]
         label = f"category: {arg}"
@@ -212,6 +220,12 @@ def _run_with_stop(cmd: str) -> str:
         from test_cases import TEST_CASES as _all_tc
         if not arg or arg == "all":
             total_count = len(_all_tc)
+        elif "," in arg:
+            parts = [c.strip() for c in arg.split(',') if c.strip()]
+            if all(p in CATEGORIES for p in parts):
+                total_count = len([t for t in _all_tc if t["category"] in parts])
+            else:
+                total_count = len([t for t in _all_tc if t["id"] in parts])
         elif arg in CATEGORIES:
             total_count = len([t for t in _all_tc if t["category"] == arg])
         else:
@@ -379,8 +393,16 @@ def run():
     print(f"    {COMMAND_PREFIX}run all    → run full test suite")
     print(f"    {COMMAND_PREFIX}status     → last run summary\n")
 
+    poll_count = 0
     while True:
         try:
+            # Heartbeat: poll UI to stay online
+            poll_data = _poll_railway_full()
+            poll_count += 1
+            if poll_count % 10 == 0:  # Log every 50 seconds (10 polls × 5s)
+                has_run = bool(poll_data.get("run"))
+                print(f"  [poll #{poll_count}] UI poll ok, pending_run={has_run}")
+
             messages = _get_new_commands(since_ns)
 
             for msg in messages:
@@ -409,15 +431,26 @@ def run():
 
                 print(f"  → Reply ({len(response)} chars): {response[:120]}")
 
-            # Check Railway UI for run requests triggered from the browser
-            poll_data = _poll_railway_full()
+            # Check for run requests triggered from the browser
             if poll_data.get("stop"):
                 pass  # already cleared by server; nothing running here
             pending = poll_data.get("run")
             if pending:
+                ids = pending.get("ids")
+                cats = pending.get("categories")
                 cat = pending.get("category")
                 rid = pending.get("id")
-                cmd = f"run {rid or cat or 'all'}"
+                if not (ids or cats or cat or rid):
+                    print("\n  [ui run request skipped] empty selection payload")
+                    _post_output_to_local_ui("No tests selected. Please select at least one test and run again.", status="done")
+                    time.sleep(DAEMON_POLL)
+                    continue
+                if ids:
+                    cmd = f"run {','.join(ids)}"
+                elif cats:
+                    cmd = f"run {','.join(cats)}"
+                else:
+                    cmd = f"run {rid or cat or 'all'}"
                 ts  = datetime.now().strftime("%H:%M:%S")
                 print(f"\n  [{ts}] UI run request: {cmd}")
                 try:
@@ -434,7 +467,9 @@ def run():
             print("\n\n  Daemon stopped.")
             break
         except Exception as e:
+            import traceback
             print(f"  [daemon error] {e}")
+            traceback.print_exc()
 
         time.sleep(DAEMON_POLL)
 

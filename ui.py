@@ -12,10 +12,12 @@ Env vars required:
 
 import ast
 import base64
+import glob
 import json
 import os
 import re
 import time
+from collections import Counter
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -35,6 +37,7 @@ _run_status      = "idle" # "idle" | "running" | "done"
 _run_started     = 0.0    # epoch time when run started
 _run_report_html = ""     # full HTML of latest report (posted by daemon)
 _run_results     = []     # list of result dicts from results_*.json
+_run_result_stem = ""     # stem for latest posted results, e.g. 20260506_001311
 _stop_requested  = False  # True when the user clicks Stop
 _run_progress    = {}     # dict {current_test, current_category, completed, total}
 
@@ -45,6 +48,8 @@ GH_FILE   = os.environ.get("GITHUB_FILE_PATH", "test_cases.py")
 
 # Fallback: read/write local file if GitHub not configured (local dev)
 LOCAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_cases.py")
+REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
+OVERALL_ANALYSIS_FILE = os.path.join(REPORTS_DIR, "overall_analysis.json")
 USE_GITHUB = bool(GH_TOKEN and GH_REPO)
 
 CATEGORIES = [
@@ -113,6 +118,170 @@ def save_test_cases(cases: list):
         src = re.sub(r'TEST_CASES\s*=\s*\[.*\]', new_list, src, flags=re.DOTALL)
         with open(LOCAL_FILE, "w") as f:
             f.write(src)
+
+
+def _result_summary(results: list[dict]) -> dict:
+    total = len(results)
+    passed = sum(1 for r in results if (r.get("verdict") or "").upper() == "PASS")
+    failed = sum(1 for r in results if (r.get("verdict") or "").upper() == "FAIL")
+    unclear = total - passed - failed
+    pass_rate = round((passed / total) * 100, 1) if total else 0.0
+    return {
+        "total": total,
+        "passed": passed,
+        "failed": failed,
+        "unclear": unclear,
+        "pass_rate": pass_rate,
+    }
+
+
+def _build_overall_analysis_text(test_rows: list[dict], summary: dict) -> str:
+    if not test_rows:
+        return "No analysis yet. Run tests to populate cumulative insights."
+
+    failed_rows = [t for t in test_rows if (t.get("verdict") or "").upper() == "FAIL"]
+    unclear_rows = [t for t in test_rows if (t.get("verdict") or "").upper() == "UNCLEAR"]
+    total = summary["total"]
+    failed = summary["failed"]
+    unclear = summary["unclear"]
+    passed = summary["passed"]
+    pass_rate = summary["pass_rate"]
+
+    fail_test_counter = Counter((t.get("id") or "unknown") for t in failed_rows)
+    fail_cat_counter = Counter((t.get("category") or "unknown") for t in failed_rows)
+    fail_reason_counter = Counter(
+        " ".join((t.get("reason") or "").split())[:140] for t in failed_rows if (t.get("reason") or "").strip()
+    )
+
+    top_fail_tests = ", ".join(f"{k} ({v})" for k, v in fail_test_counter.most_common(3)) or "none"
+    top_fail_cats = ", ".join(f"{k} ({v})" for k, v in fail_cat_counter.most_common(3)) or "none"
+    top_fail_reasons = "\n".join(
+        f"- {reason} ({count})" for reason, count in fail_reason_counter.most_common(3)
+    ) or "- none"
+
+    lines = [
+        f"OVERALL_SCORE: {passed}/{total} passed ({pass_rate}%)",
+        (
+            f"SUMMARY: Across all recorded runs, the system has {failed} failures and {unclear} unclear outcomes. "
+            f"The current cumulative pass rate is {pass_rate}%."
+        ),
+        "HITS:",
+        f"- Total passed outcomes so far: {passed}.",
+        f"- Stable categories with fewer failures are visible where fail counts remain low outside the top failing categories.",
+        "MISSES:",
+        f"- Most repeated failing tests: {top_fail_tests}.",
+        f"- Most affected categories: {top_fail_cats}.",
+        "BEHAVIOR_PATTERN:",
+        (
+            "Recent failures cluster around repeated scenarios rather than random spread, which suggests a few persistent behavior gaps."
+        ),
+        "GAPS:",
+        f"- Repeated failure reasons observed:\n{top_fail_reasons}",
+        "RECOMMENDATION:",
+        (
+            "Prioritize fixes for the top failing tests/categories, then re-run only those categories to validate lift before full-suite regression."
+        ),
+    ]
+    return "\n".join(lines)
+
+
+def _build_analysis_payload() -> dict:
+    files = sorted(
+        glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+        key=os.path.getmtime,
+        reverse=True,
+    )
+
+    runs = []
+    tests = []
+
+    for f in files:
+        stem = os.path.basename(f).replace("results_", "").replace(".json", "")
+        try:
+            with open(f) as fp:
+                data = json.load(fp)
+        except Exception:
+            continue
+
+        if not isinstance(data, list):
+            continue
+
+        summary = _result_summary(data)
+        runs.append({
+            "stem": stem,
+            "ts": stem,
+            **summary,
+        })
+
+        for r in data:
+            tests.append({
+                "stem": stem,
+                "ts": stem,
+                "id": r.get("id"),
+                "name": r.get("name"),
+                "category": r.get("category"),
+                "verdict": (r.get("verdict") or "UNCLEAR").upper(),
+                "reason": r.get("reason", ""),
+                "tasks_sent_count": len(r.get("tasks_sent", []) or []),
+                "responses_count": len(r.get("responses", []) or []),
+            })
+
+    if _run_results and _run_result_stem and not any(r["stem"] == _run_result_stem for r in runs):
+        summary = _result_summary(_run_results)
+        runs.insert(0, {
+            "stem": _run_result_stem,
+            "ts": _run_result_stem,
+            **summary,
+        })
+        for r in _run_results:
+            tests.insert(0, {
+                "stem": _run_result_stem,
+                "ts": _run_result_stem,
+                "id": r.get("id"),
+                "name": r.get("name"),
+                "category": r.get("category"),
+                "verdict": (r.get("verdict") or "UNCLEAR").upper(),
+                "reason": r.get("reason", ""),
+                "tasks_sent_count": len(r.get("tasks_sent", []) or []),
+                "responses_count": len(r.get("responses", []) or []),
+            })
+
+    summary = _result_summary(tests)
+    run_count = len(runs)
+    latest_stem = runs[0]["stem"] if runs else ""
+
+    overall_text = ""
+    persisted = {}
+    try:
+        with open(OVERALL_ANALYSIS_FILE) as fp:
+            persisted = json.load(fp)
+    except Exception:
+        persisted = {}
+
+    if (
+        persisted.get("source_run_count") == run_count
+        and persisted.get("latest_stem") == latest_stem
+        and isinstance(persisted.get("text"), str)
+        and persisted.get("text", "").strip()
+    ):
+        overall_text = persisted["text"]
+    else:
+        overall_text = _build_overall_analysis_text(tests, summary)
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        with open(OVERALL_ANALYSIS_FILE, "w") as fp:
+            json.dump({
+                "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "source_run_count": run_count,
+                "latest_stem": latest_stem,
+                "text": overall_text,
+            }, fp, indent=2)
+
+    return {
+        "summary": summary,
+        "overall_analysis": overall_text,
+        "tests": tests,
+        "runs": runs,
+    }
 
 # ── Test case generation with LLM ─────────────────────────────────────────────
 
@@ -262,38 +431,64 @@ HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Break me, Asmi</title>
+<title>Asmi Testing</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-       background: #f1f5f9; color: #1e293b; }
-header { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 55%, #4c1d95 100%);
-         color: white; padding: 16px 24px;
-         display: flex; align-items: center; gap: 16px; }
-.logo { width:38px; height:38px; border-radius:10px; flex-shrink:0;
-        background: linear-gradient(135deg,#c084fc,#7c3aed);
-        display:flex; align-items:center; justify-content:center;
-        box-shadow: 0 0 0 2px rgba(255,255,255,.15), 0 4px 12px rgba(124,58,237,.5); }
-.logo svg { display:block; }
-.header-text { display:flex; flex-direction:column; gap:2px; }
+       background: #eef2f7; color: #1e293b; }
+header { background: #ede9fe;
+         color: #0f172a; padding: 12px 24px;
+         display: flex; align-items: center; justify-content: center; gap: 12px;
+         border-bottom: none; }
+.brand-logo { width: 30px; height: 30px; border-radius: 6px; object-fit: cover; }
+.header-text { display:flex; flex-direction:column; gap:2px; align-items:center; }
 .header-title { font-size: 1.15rem; font-weight: 700; letter-spacing:-.01em; }
-.header-sub { color: #c4b5fd; font-size: 0.82rem; }
-.toolbar { background: white; border-bottom: 1px solid #e2e8f0;
-           padding: 12px 24px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.toolbar select, .toolbar input { padding: 6px 10px; border: 1px solid #e2e8f0;
-                                   border-radius: 6px; font-size: 0.85rem; }
-.btn { padding: 7px 16px; border-radius: 6px; border: none; cursor: pointer;
-       font-size: 0.85rem; font-weight: 600; }
+.toolbar { background: #ede9fe; border-bottom: 1px solid #d8b4fe;
+           padding: 10px 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.toolbar-row { width: 100%; display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; }
+.toolbar-row.tabs { justify-content:center; }
+.tab-btn { border-radius:12px; padding:6px 14px; font-size:0.92rem; font-weight:800; cursor:pointer; }
+.tab-tests { background:#ffffff; border:1px solid #bfdbfe; color:#1d4ed8; }
+.tab-reports { background:#ffffff; border:1px solid #fecaca; color:#b91c1c; }
+.tab-responses { background:#ffffff; border:1px solid #bbf7d0; color:#166534; }
+.tab-analysis { background:#ffffff; border:1px solid #e9d5ff; color:#7e22ce; }
+.tab-tests.active { background:#eff6ff; border-color:#60a5fa; color:#1d4ed8; }
+.tab-reports.active { background:#fff1f2; border-color:#f87171; color:#b91c1c; }
+.tab-responses.active { background:#f0fdf4; border-color:#22c55e; color:#166534; }
+.tab-analysis.active { background:#faf5ff; border-color:#a855f7; color:#7e22ce; }
+.tab-menu { width:100%; display:none; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; }
+.toolbar select, .toolbar input {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d8b4fe;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+.toolbar input { min-width: 260px; max-width: 360px; width: 32vw; }
+.toolbar input:focus { outline: none; border-color: #a855f7; box-shadow: 0 0 0 3px rgba(168,85,247,0.18); }
+.toolbar input, .toolbar select { background:#ffffff; color:#0f172a; }
+.toolbar input::placeholder { color:#64748b; }
+.toolbar select { padding-right: 20px; }
+.btn { padding: 5px 12px; border-radius: 6px; border: none; cursor: pointer;
+       font-size: 0.8rem; font-weight: 600; }
+.tab-menu .btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
 .btn-primary { background: #3b82f6; color: white; }
 .btn-primary:hover { background: #2563eb; }
 .btn-success { background: #22c55e; color: white; }
 .btn-success:hover { background: #16a34a; }
 .btn-danger  { background: #ef4444; color: white; }
 .btn-danger:hover  { background: #dc2626; }
-.btn-outline { background: white; color: #374151; border: 1px solid #d1d5db; }
-.btn-outline:hover { background: #f9fafb; }
+.btn-outline { background: #ffffff; color: #0f172a; border: 1px solid #d8b4fe; }
+.btn-outline:hover { background: #f8fafc; }
 .count { background: #eff6ff; color: #1d4ed8; padding: 4px 10px;
-         border-radius: 99px; font-size: 0.8rem; font-weight: 700; margin-left: auto; }
+         border-radius: 99px; font-size: 0.8rem; font-weight: 700; }
 main { padding: 24px; max-width: 1300px; margin: 0 auto; }
 /* Monday.com style table */
 .test-table { width:100%; border-collapse:collapse; background:white;
@@ -325,6 +520,9 @@ main { padding: 24px; max-width: 1300px; margin: 0 auto; }
 .action-btn { background:none; border:none; cursor:pointer; font-size:0.9rem;
               padding:3px 5px; border-radius:4px; color:#64748b; }
 .action-btn:hover { background:#f1f5f9; color:#1e293b; }
+.test-table input[type=checkbox], .cat-row input[type=checkbox] {
+    width:14px; height:14px; cursor:pointer; margin:0;
+}
 .badge { padding: 2px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; }
 .badge-warn { background: #fffbeb; color: #b45309; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -400,15 +598,9 @@ textarea { resize: vertical; min-height: 70px; }
 <body>
 
 <header>
-  <div class="logo">
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M11 2L13.8 8.6H20.4L15 12.8L17.2 19.4L11 15.2L4.8 19.4L7 12.8L1.6 8.6H8.2L11 2Z"
-            fill="white" fill-opacity="0.95"/>
-    </svg>
-  </div>
+  <img class="brand-logo" src="data:image/jpeg;base64,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" alt="Asmi logo">
   <div class="header-text">
-    <div class="header-title">Break me, Asmi</div>
-    <div class="header-sub" id="subtitle">Ready when you are.</div>
+    <div class="header-title">Asmi Testing</div>
   </div>
 </header>
 
@@ -441,22 +633,34 @@ textarea { resize: vertical; min-height: 70px; }
   </div>
 </div>
 <div class="toolbar">
-  <input type="text" id="search" placeholder="Search tests…" style="width:180px" oninput="filter()">
-  <select id="filterCat" onchange="filter()"><option value="">All categories</option></select>
-  <select id="filterType" onchange="filter()">
-    <option value="">All types</option>
-    <option value="single">single</option>
-    <option value="burst">burst</option>
-    <option value="sequence">sequence</option>
-    <option value="dedup">dedup</option>
-    <option value="burst_with_setup">burst_with_setup</option>
-  </select>
-  <button class="btn btn-primary" onclick="toggleNew()">+ Add Test</button>
-  <button class="btn btn-outline" onclick="toggleGenerate()" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;">🤖 Generate</button>
-  <button class="btn btn-success" id="saveBtn" onclick="saveAll()">💾 Save All</button>
-  <select id="runCat" style="margin-left:12px"><option value="">All tests</option></select>
-  <button class="btn btn-run" id="runBtn" onclick="runTests()">▶ Run</button>
-  <span class="count" id="countBadge">0 tests</span>
+  <div class="toolbar-row tabs">
+    <button class="tab-btn tab-tests" id="tabMain" onclick="showTab('main')">Tests</button>
+    <button class="tab-btn tab-reports" id="tabHistory" onclick="showTab('history')">Reports</button>
+    <button class="tab-btn tab-responses" id="tabResponses" onclick="showTab('responses')">Responses</button>
+    <button class="tab-btn tab-analysis" id="tabAnalysis" onclick="showTab('analysis')">Analysis</button>
+  </div>
+
+  <div class="tab-menu" id="menuMain">
+    <button class="btn btn-outline" onclick="toggleGenerate()" style="font-size:0.75rem;padding:3px 8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;white-space:nowrap">Generate Test Cases with AI</button>
+    <button class="btn btn-primary" onclick="toggleNew()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">+ Add a test case</button>
+    <input type="text" id="search" placeholder="Search tests…" oninput="filter()">
+    <button class="btn btn-outline" id="collapseAllBtn" onclick="collapseAll()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">Collapse all</button>
+    <button class="btn btn-outline" id="expandAllBtn" onclick="expandAll()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">Expand all</button>
+    <span id="selectedBadge" class="count" style="background:#fef3c7;color:#92400e;">0 selected</span>
+    <button class="btn btn-run" id="runBtn" onclick="runSelected()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">▶ Run selected</button>
+  </div>
+
+  <div class="tab-menu" id="menuHistory">
+    <span style="font-size:0.82rem;color:#0f172a;">View run history and download report files.</span>
+  </div>
+
+  <div class="tab-menu" id="menuResponses">
+    <span style="font-size:0.82rem;color:#0f172a;">Review sent messages and captured replies by run.</span>
+  </div>
+
+  <div class="tab-menu" id="menuAnalysis">
+    <span style="font-size:0.82rem;color:#0f172a;">See cumulative verdict trends and per-test reasoning.</span>
+  </div>
 </div>
 
 <main>
@@ -465,11 +669,14 @@ textarea { resize: vertical; min-height: 70px; }
   <div class="new-form" id="newForm">
     <div style="font-weight:700;margin-bottom:14px;font-size:1rem;">New Test Case</div>
     <div class="form-grid">
-      <div><label>ID</label><input type="text" id="new_id" placeholder="e.g. sticky_05"></div>
       <div><label>Name</label><input type="text" id="new_name" placeholder="Short description"></div>
       <div>
         <label>Category</label>
-        <select id="new_category"></select>
+        <div style="display:flex;gap:6px;">
+          <select id="new_category" onchange="_handleCategoryChange()" style="flex:1;"></select>
+          <input type="text" id="new_cat_input" placeholder="New category" style="flex:1;display:none;">
+          <button type="button" id="new_cat_btn" class="btn btn-primary" style="display:none;padding:6px 12px;font-size:0.8rem;" onclick="_confirmNewCategory()">Create</button>
+        </div>
       </div>
       <div>
         <label>Type</label>
@@ -489,8 +696,15 @@ textarea { resize: vertical; min-height: 70px; }
         <label>Messages (one per line)</label>
         <textarea id="new_messages" placeholder="Message 1&#10;Message 2&#10;Message 3"></textarea>
       </div>
-      <div><label>Wait (seconds)</label><input type="text" id="new_wait" value="120"></div>
-      <div><label>Expected Responses</label><input type="text" id="new_expected" placeholder="optional"></div>
+      <div id="new_wait_wrap" style="display:none">
+        <label>Response Speed</label>
+        <select id="new_wait_preset">
+          <option value="60">Fast — simple reply expected (60s)</option>
+          <option value="120" selected>Normal — default (120s)</option>
+          <option value="180">Slow — Asmi needs to make a call (180s)</option>
+          <option value="300">Very Slow — complex task or research (300s)</option>
+        </select>
+      </div>
       <div class="form-full"><label>Pass Criteria</label>
         <textarea id="new_pass_criteria" placeholder="What does a passing response look like? Be specific."></textarea>
       </div>
@@ -530,7 +744,7 @@ textarea { resize: vertical; min-height: 70px; }
       </div>
       <div>
         <label>Category Focus (optional)</label>
-        <select id="generate_category"><option value="">Any category</option></select>
+        <select id="generate_category" style="flex:1;"><option value="">Any category</option></select>
       </div>
     </div>
     <div class="form-actions">
@@ -557,12 +771,35 @@ textarea { resize: vertical; min-height: 70px; }
     </div>
   </div>
 
-  <div id="testList"></div>
+  <div id="mainSection">
+    <div id="testList"></div>
+  </div>
+
+  <div id="historySection" style="display:none; padding:16px;">
+    <h2 style="margin-bottom:16px;">Reports</h2>
+    <div id="historyList" style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.06);">
+      <p style="color:#94a3b8;padding:20px;text-align:center;">Loading…</p>
+    </div>
+  </div>
+
+  <div id="responsesSection" style="display:none; padding:16px;">
+    <h2 style="margin-bottom:16px;">Responses</h2>
+    <div id="responsesList" style="display:grid;gap:16px;"></div>
+  </div>
+
+  <div id="analysisSection" style="display:none; padding:16px;">
+    <h2 style="margin-bottom:16px;">Analysis</h2>
+    <div id="analysisSummary" style="display:grid;gap:12px;"></div>
+    <div id="analysisList" style="margin-top:16px;display:grid;gap:12px;"></div>
+  </div>
 </main>
 <div id="toast"></div>
 <script>
 let tests = [];
 let _editingId = null;
+let collapsedCats = new Set();
+let _sortBy = 'default';
+let _categoryOrder = [];
 
 const CAT_META = {
   onboarding:         {label:'Onboarding',        color:'#7c3aed', bg:'#f5f3ff'},
@@ -593,46 +830,114 @@ const CAT_ORDER = [
   'personalization','reengagement','guardrails','generated',
 ];
 
-function _catOptions(selected = '', includeAll = false) {
+function _catOptions(selected = '', includeAll = false, includeAdd = true) {
   let html = includeAll ? '<option value="">All categories</option>' : '';
-  CAT_ORDER.forEach(c => {
+  Array.from(new Set(CAT_ORDER)).forEach(c => {
     const m = CAT_META[c] || {label:c};
     html += `<option value="${c}" ${selected===c?'selected':''}>${m.label}</option>`;
   });
+  if (!includeAll && includeAdd) html += '<option value="__add__">+ Add Category</option>';
   return html;
 }
 
+function _handleCategoryChange() {
+  const el = document.getElementById('new_category');
+  const input = document.getElementById('new_cat_input');
+  const btn = document.getElementById('new_cat_btn');
+
+  if (el.value === '__add__') {
+    el.style.display = 'none';
+    input.style.display = '';
+    btn.style.display = '';
+    input.value = '';
+    input.focus();
+  }
+}
+
+function _confirmNewCategory() {
+  const input = document.getElementById('new_cat_input');
+  const name = input.value.trim();
+  if (!name) { alert('Enter a category name'); return; }
+  if (CAT_ORDER.includes(name)) {
+    alert('Category already exists');
+    return;
+  }
+
+  const el = document.getElementById('new_category');
+  const btn = document.getElementById('new_cat_btn');
+
+  CAT_ORDER.push(name);
+  CAT_META[name] = {label: name.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), color: '#64748b', bg: '#f1f5f9'};
+  _initCatDropdowns();
+
+  el.style.display = '';
+  input.style.display = 'none';
+  btn.style.display = 'none';
+  el.value = name;
+}
+
+function _dedupeSelectOptions(selectId) {
+  const el = document.getElementById(selectId);
+  if (!el) return;
+  const seen = new Set();
+  Array.from(el.options).forEach(opt => {
+    const key = `${opt.value}||${opt.text}`;
+    if (seen.has(key)) opt.remove();
+    else seen.add(key);
+  });
+}
+
 function _initCatDropdowns() {
-  ['filterCat','runCat'].forEach(id => {
+  ['filterCat'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = _catOptions('', true);
   });
   ['new_category','generate_category'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = _catOptions('');
+    if (el && id === 'new_category') el.innerHTML = _catOptions('');
+    else if (el) el.innerHTML = '<option value="">Any category</option>' + _catOptions('', false, false);
   });
+  _dedupeSelectOptions('filterCat');
+  _dedupeSelectOptions('new_category');
+  _dedupeSelectOptions('generate_category');
+  _dedupeSelectOptions('filterType');
+}
+
+function autoGenerateId() {
+  const cat = document.getElementById('new_category').value;
+  if (!cat) { alert('Select a category first'); return; }
+  const existing = tests.filter(t => t.category === cat);
+  const maxNum = Math.max(0, ...existing.map(t => {
+    const m = t.id.match(new RegExp(cat + '_(\\d+)$'));
+    return m ? parseInt(m[1]) : 0;
+  }));
+  document.getElementById('new_id').value = `${cat}_${String(maxNum + 1).padStart(2, '0')}`;
 }
 
 async function load() {
   _initCatDropdowns();
-  document.getElementById('subtitle').textContent = 'Loading…';
   try {
     const res = await fetch('/api/tests');
     tests = await res.json();
     if (tests.error) throw new Error(tests.error);
+    collapsedCats = new Set(CAT_ORDER);
+    selectedTestIds = new Set();
     render();
+    showTab('main');
   } catch(e) {
-    document.getElementById('subtitle').textContent = 'Load failed: ' + e.message;
     document.getElementById('testList').innerHTML = '<p style="color:#ef4444;padding:20px">Failed to load test cases. Check GitHub env vars.</p>';
   }
 }
 
 function render() {
   const search = document.getElementById('search').value.toLowerCase();
-  const catF   = document.getElementById('filterCat').value;
-  const typeF  = document.getElementById('filterType').value;
+  const catEl = document.getElementById('filterCat');
+  const typeEl = document.getElementById('filterType');
+  const catF = catEl ? catEl.value : '';
+  const typeF = typeEl ? typeEl.value : '';
+  _sortBy      = 'default';
 
-  const filtered = tests.filter(t =>
+  let filtered = tests.filter(t =>
     (!search || t.id.includes(search) || t.name.toLowerCase().includes(search) ||
      (t.message||'').toLowerCase().includes(search) ||
      (t.pass_criteria||'').toLowerCase().includes(search)) &&
@@ -640,8 +945,7 @@ function render() {
     (!typeF || t.type === typeF)
   );
 
-  document.getElementById('countBadge').textContent = `${filtered.length} / ${tests.length} tests`;
-  document.getElementById('subtitle').textContent   = `${tests.length} tests`;
+  updateSelectionControls(filtered);
 
   const bycat = {};
   filtered.forEach(t => {
@@ -661,23 +965,27 @@ function render() {
   orderedCats.forEach(cat => {
     const items = bycat[cat];
     const m = CAT_META[cat] || {label:cat, color:'#334155', bg:'#f8fafc'};
-    rows += `<tr class="cat-row">
-      <td colspan="5" style="color:${m.color}">
-        <span style="background:${m.bg};padding:2px 10px;border-radius:99px">${m.label}</span>
+    const isCollapsed = collapsedCats.has(cat);
+    const chevron = isCollapsed ? '▸' : '▾';
+    const checked = items.every(t => selectedTestIds.has(t.id)) ? 'checked' : '';
+    rows += `<tr class="cat-row" data-cat-header="${cat}">
+      <td colspan="6" style="color:${m.color}">
+        <button class="action-btn" onclick="toggleCat('${cat}')" style="padding:2px 6px;margin-right:4px;color:${m.color}">${chevron}</button>
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="catchk_${cat}" data-cat-select="${cat}" onclick="toggleCategorySelection('${cat}', this.checked)" ${checked}>
+          <span style="background:${m.bg};padding:2px 10px;border-radius:99px">${m.label}</span>
+        </label>
         <span style="color:#94a3b8;font-weight:400;margin-left:6px">${items.length} test${items.length!==1?'s':''}</span>
       </td>
-      <td style="text-align:right">
-        <button class="run-cell-btn" style="font-size:0.7rem;padding:3px 10px"
-          onclick="runByCategory('${cat}')">▶ Run</button>
-      </td>
+      <td style="text-align:right"></td>
     </tr>`;
-    items.forEach(t => { rows += renderRow(t); });
+    items.forEach(t => { rows += renderRow(t, cat); });
   });
 
   document.getElementById('testList').innerHTML =
     `<table class="test-table">
       <thead><tr>
-        <th style="width:44px"></th>
+        <th style="width:44px"><input type="checkbox" id="selectAllTests" onchange="toggleAllVisibleTests(this.checked)"></th>
         <th style="width:110px">ID</th>
         <th>Name</th>
         <th style="width:100px">Type</th>
@@ -686,19 +994,24 @@ function render() {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
+
+  _applyCollapsed();
+  _updateSelectionAfterRender();
+
 }
 
-function renderRow(t) {
+function renderRow(t, cat) {
   const idx      = tests.indexOf(t);
   const m        = CAT_META[t.category] || {label:t.category, color:'#334155', bg:'#f8fafc'};
   const msgs     = t.messages ? t.messages.join('\\n') : '';
   const preview  = esc((t.message || (t.messages||[]).join(' · ') || '').substring(0, 80));
   const preWarn  = t.precondition ? ' ⚠' : '';
+  const checked   = selectedTestIds.has(t.id) ? 'checked' : '';
 
   return `
-  <tr class="test-row" id="row_${t.id}" onclick="editRow('${t.id}')">
+  <tr class="test-row" id="row_${t.id}" data-cat="${cat}" onclick="editRow('${t.id}')">
     <td onclick="event.stopPropagation()">
-      <button class="run-cell-btn" id="runbtn_${t.id}" onclick="runById('${t.id}')">▶</button>
+      <input type="checkbox" id="testchk_${t.id}" onchange="toggleTestSelection('${t.id}', this.checked)" ${checked}>
     </td>
     <td class="id-cell">${esc(t.id)}</td>
     <td style="font-weight:600">${esc(t.name)}${preWarn}</td>
@@ -709,7 +1022,7 @@ function renderRow(t) {
       <button class="action-btn" onclick="deleteTest(${idx})" title="Delete">🗑</button>
     </td>
   </tr>
-  <tr class="edit-row" id="editrow_${t.id}" style="display:none">
+  <tr class="edit-row" id="editrow_${t.id}" data-cat="${cat}" style="display:none">
     <td colspan="6">
       <div class="edit-form-inner">
         <div class="form-grid">
@@ -783,6 +1096,69 @@ function editRow(id) {
 
 function filter() { render(); }
 
+function toggleCat(cat) {
+  if (collapsedCats.has(cat)) {
+    collapsedCats.delete(cat);
+  } else {
+    collapsedCats.add(cat);
+    _closeEditRowsForCategory(cat);
+  }
+  _applyCollapsed();
+}
+
+function collapseAll() {
+  document.querySelectorAll('tr[data-cat]').forEach(row => {
+    const cat = row.getAttribute('data-cat');
+    collapsedCats.add(cat);
+    _closeEditRowsForCategory(cat);
+  });
+  _applyCollapsed();
+}
+
+function expandAll() {
+  collapsedCats.clear();
+  _applyCollapsed();
+}
+
+function _closeEditRowsForCategory(cat) {
+  document.querySelectorAll(`tr.edit-row[data-cat="${cat}"]`).forEach(el => {
+    el.style.display = 'none';
+  });
+  document.querySelectorAll(`tr.test-row[data-cat="${cat}"]`).forEach(el => {
+    el.classList.remove('editing');
+  });
+  if (_editingId) {
+    const editEl = document.getElementById('editrow_' + _editingId);
+    if (editEl && editEl.getAttribute('data-cat') === cat) {
+      _editingId = null;
+    }
+  }
+}
+
+function _applyCollapsed() {
+  document.querySelectorAll('tr[data-cat]').forEach(row => {
+    const cat = row.getAttribute('data-cat');
+    if (row.classList.contains('edit-row')) {
+      row.style.display = 'none';
+      return;
+    }
+    if (collapsedCats.has(cat)) {
+      row.style.display = 'none';
+    } else {
+      row.style.display = '';
+      row.classList.remove('editing');
+    }
+  });
+  // Update chevron icons
+  document.querySelectorAll('.cat-row[data-cat-header]').forEach(row => {
+    const btn = row.querySelector('.action-btn');
+    if (btn) {
+      const cat = row.getAttribute('data-cat-header');
+      btn.textContent = collapsedCats.has(cat) ? '▸' : '▾';
+    }
+  });
+}
+
 function update(idx, key, val) {
   if (val === undefined || val === '') delete tests[idx][key];
   else tests[idx][key] = val;
@@ -793,7 +1169,20 @@ function updateMsgs(idx, val) {
 }
 
 function toggleNew() {
-  document.getElementById('newForm').classList.toggle('open');
+  const form = document.getElementById('newForm');
+  const isOpening = !form.classList.contains('open');
+  form.classList.toggle('open');
+  if (isOpening) {
+    document.getElementById('new_name').value = '';
+    document.getElementById('new_message').value = '';
+    document.getElementById('new_messages').value = '';
+    document.getElementById('new_pass_criteria').value = '';
+    document.getElementById('new_precondition').value = '';
+    document.getElementById('new_manual_check').value = '';
+    document.getElementById('new_type').value = 'single';
+    _initCatDropdowns();
+    toggleNewMsgFields();
+  }
 }
 
 function toggleNewMsgFields() {
@@ -801,22 +1190,22 @@ function toggleNewMsgFields() {
   const multi = ['burst','sequence','burst_with_setup'].includes(type);
   document.getElementById('new_msg_wrap').style.display  = multi ? 'none' : '';
   document.getElementById('new_msgs_wrap').style.display = multi ? '' : 'none';
+  document.getElementById('new_wait_wrap').style.display = multi ? '' : 'none';
 }
 
 function addNew() {
   const type = document.getElementById('new_type').value;
+  const category = document.getElementById('new_category').value.trim();
   const tc = {
-    id:           document.getElementById('new_id').value.trim(),
     name:         document.getElementById('new_name').value.trim(),
-    category:     document.getElementById('new_category').value,
+    category:     category,
     type:         type,
-    wait:         parseInt(document.getElementById('new_wait').value) || 120,
     pass_criteria: document.getElementById('new_pass_criteria').value.trim(),
   };
   if (['burst','sequence','burst_with_setup'].includes(type)) {
     tc.messages = document.getElementById('new_messages').value.split('\\n').map(s=>s.trim()).filter(Boolean);
-    const exp = parseInt(document.getElementById('new_expected').value);
-    if (exp) tc.expected_responses = exp;
+    const waitVal = document.getElementById('new_wait_preset').value;
+    if (waitVal) tc.wait = parseInt(waitVal);
   } else {
     tc.message = document.getElementById('new_message').value.trim();
   }
@@ -825,7 +1214,13 @@ function addNew() {
   if (pre)  tc.precondition  = pre;
   if (mchk) tc.manual_check  = mchk;
 
-  if (!tc.id || !tc.name) { alert('ID and Name are required'); return; }
+  if (!tc.name) { alert('Name is required'); return; }
+
+  const existingIds = tests.filter(t => t.category === category).map(t => t.id);
+  let seq = 1;
+  while (existingIds.includes(category.substring(0,3).toLowerCase() + '_' + String(seq).padStart(2,'0'))) seq++;
+  tc.id = category.substring(0,3).toLowerCase() + '_' + String(seq).padStart(2,'0');
+
   tests.push(tc);
   toggleNew();
   render();
@@ -839,8 +1234,10 @@ function deleteTest(idx) {
 
 async function saveAll() {
   const btn = document.getElementById('saveBtn');
-  btn.textContent = 'Saving…';
-  btn.classList.add('saving');
+  if (btn) {
+    btn.textContent = 'Saving…';
+    btn.classList.add('saving');
+  }
   try {
     const res = await fetch('/api/tests', {
       method: 'POST',
@@ -853,8 +1250,10 @@ async function saveAll() {
   } catch(e) {
     alert('Save failed: ' + e.message);
   } finally {
-    btn.textContent = 'Save All';
-    btn.classList.remove('saving');
+    if (btn) {
+      btn.textContent = 'Save';
+      btn.classList.remove('saving');
+    }
   }
 }
 
@@ -862,10 +1261,116 @@ let _pollTimer      = null;
 let _runStart       = 0;
 let _activeTestId   = null;
 let _lastRunAnalysis = '';
+let _historyRefreshTimer = null;
+let selectedTestIds = new Set();
 
-async function runTests() {
-  const cat = document.getElementById('runCat').value;
-  await _triggerRun({category: cat || null});
+async function runSelected() {
+  const ids = Array.from(selectedTestIds);
+  if (!ids.length) {
+    toast('Select at least one test to run');
+    return;
+  }
+  if (ids.length === 1) {
+    await _triggerRun({id: ids[0]});
+  } else {
+    await _triggerRun({ids});
+  }
+}
+
+function updateSelectionControls(visibleTests = tests) {
+  const count = selectedTestIds.size;
+  const label = count === 1 ? '1 test selected' : `${count} tests selected`;
+  const el = document.getElementById('selectedBadge');
+  if (el) el.textContent = label;
+  const visibleIds = visibleTests.map(t => t.id);
+  const selectedVisible = visibleIds.filter(id => selectedTestIds.has(id)).length;
+  const all = document.getElementById('selectAllTests');
+  if (all) {
+    all.checked = visibleIds.length > 0 && selectedVisible === visibleIds.length;
+    all.indeterminate = selectedVisible > 0 && selectedVisible < visibleIds.length;
+  }
+  document.querySelectorAll('input[data-cat-select]').forEach(el => {
+    const cat = el.getAttribute('data-cat-select');
+    const items = visibleTests.filter(t => t.category === cat);
+    const selected = items.filter(t => selectedTestIds.has(t.id)).length;
+    el.checked = items.length > 0 && selected === items.length;
+    el.indeterminate = selected > 0 && selected < items.length;
+    if (!items.length) {
+      el.checked = false;
+      el.indeterminate = false;
+    }
+  });
+}
+
+function _visibleTests() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const catEl = document.getElementById('filterCat');
+  const typeEl = document.getElementById('filterType');
+  const catF = catEl ? catEl.value : '';
+  const typeF = typeEl ? typeEl.value : '';
+  return tests.filter(t =>
+    (!search || t.id.includes(search) || t.name.toLowerCase().includes(search) ||
+     (t.message||'').toLowerCase().includes(search) ||
+     (t.pass_criteria||'').toLowerCase().includes(search)) &&
+    (!catF  || t.category === catF) &&
+    (!typeF || t.type === typeF)
+  );
+}
+
+function _updateSelectionAfterRender() {
+  const visibleTests = _visibleTests();
+  updateSelectionControls(visibleTests);
+  visibleTests.forEach(t => {
+    const el = document.getElementById('testchk_' + t.id);
+    if (el) el.checked = selectedTestIds.has(t.id);
+  });
+  const bycat = {};
+  visibleTests.forEach(t => {
+    if (!bycat[t.category]) bycat[t.category] = [];
+    bycat[t.category].push(t);
+  });
+  Object.keys(bycat).forEach(cat => {
+    const el = document.getElementById('catchk_' + cat);
+    if (!el) return;
+    const items = bycat[cat];
+    const selected = items.filter(t => selectedTestIds.has(t.id)).length;
+    el.checked = selected === items.length;
+    el.indeterminate = selected > 0 && selected < items.length;
+  });
+}
+
+function updateSelectedBadge() {
+  updateSelectionControls();
+}
+
+function toggleCategorySelection(cat, checked) {
+  tests.filter(t => t.category === cat).forEach(t => {
+    if (checked) selectedTestIds.add(t.id);
+    else selectedTestIds.delete(t.id);
+  });
+  render();
+}
+
+function toggleTestSelection(id, checked) {
+  if (checked) selectedTestIds.add(id);
+  else selectedTestIds.delete(id);
+  render();
+}
+
+function toggleAllVisibleTests(checked) {
+  _visibleTests().forEach(t => {
+    const id = t.id;
+    if (checked) selectedTestIds.add(id);
+    else selectedTestIds.delete(id);
+  });
+  render();
+}
+
+function selectAllCategories() {
+  const allSelected = selectedTestIds.size === tests.length;
+  if (allSelected) selectedTestIds.clear();
+  else tests.forEach(t => selectedTestIds.add(t.id));
+  render();
 }
 
 async function runById(id) {
@@ -889,7 +1394,9 @@ async function runByCategory(cat) {
 
 async function _triggerRun(payload) {
   const label = payload.id ? `test: ${payload.id}` :
-                payload.category ? `category: ${payload.category}` : 'all tests';
+                payload.ids ? `${payload.ids.length} selected tests` :
+                payload.category ? `category: ${payload.category}` :
+                payload.categories ? `categories: ${payload.categories.join(',')}` : 'all tests';
   try {
     const res = await fetch('/api/run', {
       method: 'POST',
@@ -897,6 +1404,10 @@ async function _triggerRun(payload) {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
+    if (!data.ok) {
+      toast(data.error || 'Run request failed');
+      return;
+    }
     if (data.mac_online) {
       toast(`Running ${label}…`);
       _openOutput(`Running ${label}…`);
@@ -985,13 +1496,16 @@ async function _pollOutput() {
       }
 
       if (data.results && data.results.length > 0) {
-        // Multi-test: show full results panel
+        // Multi-test: keep completion compact and direct user to Reports tab
         if (!_activeTestId) {
           document.getElementById('outputPanel').style.display = 'block';
           document.getElementById('outputStatus').textContent = 'Done';
           document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
-          _renderResults(data.results);
-          if (data.results.length > 1) _runBehaviorAnalysis(data.results);
+          document.getElementById('resultsTable').style.display = 'none';
+          document.getElementById('resultsTable').innerHTML = '';
+          document.getElementById('behaviorAnalysisPanel').style.display = 'none';
+          document.getElementById('outputBodyText').textContent = 'Run complete. Open the Reports tab to view results and download the report.';
+          toast('Run complete. Check Reports tab.');
         }
         // Single-test: render inline in card
         if (_activeTestId) {
@@ -1024,8 +1538,23 @@ async function _pollOutput() {
           document.getElementById('outputBodyText').textContent = cleaned;
         }
       }
+      _refreshHistoryTabs();
     }
   } catch(e) {}
+}
+
+function _refreshHistoryTabs() {
+  const historySection = document.getElementById('historySection');
+  const responsesSection = document.getElementById('responsesSection');
+  const analysisSection = document.getElementById('analysisSection');
+  if (historySection && historySection.style.display !== 'none') loadHistory();
+  if (responsesSection && responsesSection.style.display !== 'none') loadResponses();
+  if (analysisSection && analysisSection.style.display !== 'none') loadAnalysis();
+}
+
+function _startHistoryAutoRefresh() {
+  if (_historyRefreshTimer) clearInterval(_historyRefreshTimer);
+  _historyRefreshTimer = setInterval(_refreshHistoryTabs, 5000);
 }
 
 function _resultCard(r) {
@@ -1365,7 +1894,233 @@ function clearGenerated() {
   document.getElementById('genAnalysisSection').style.display = 'none';
 }
 
+function _setTabMenu(tab) {
+  const map = {
+    main: 'menuMain',
+    history: 'menuHistory',
+    responses: 'menuResponses',
+    analysis: 'menuAnalysis',
+  };
+  Object.values(map).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  const activeMenu = document.getElementById(map[tab] || map.main);
+  if (activeMenu) activeMenu.style.display = 'flex';
+}
+
+function _setActiveTabStyle(tab) {
+  const tabMap = {
+    main: 'tabMain',
+    history: 'tabHistory',
+    responses: 'tabResponses',
+    analysis: 'tabAnalysis',
+  };
+  Object.values(tabMap).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('active');
+  });
+  const active = document.getElementById(tabMap[tab] || tabMap.main);
+  if (active) active.classList.add('active');
+}
+
+function showTab(tab) {
+  const mainSection = document.getElementById('mainSection');
+  const historySection = document.getElementById('historySection');
+  const responsesSection = document.getElementById('responsesSection');
+  const analysisSection = document.getElementById('analysisSection');
+  const tabMain = document.getElementById('tabMain');
+  const tabHistory = document.getElementById('tabHistory');
+  const tabResponses = document.getElementById('tabResponses');
+  const tabAnalysis = document.getElementById('tabAnalysis');
+  _setTabMenu(tab);
+  _setActiveTabStyle(tab);
+
+  if (tab === 'history') {
+    mainSection.style.display = 'none';
+    historySection.style.display = 'block';
+    responsesSection.style.display = 'none';
+    analysisSection.style.display = 'none';
+    loadHistory();
+  } else if (tab === 'responses') {
+    mainSection.style.display = 'none';
+    historySection.style.display = 'none';
+    responsesSection.style.display = 'block';
+    analysisSection.style.display = 'none';
+    loadResponses();
+  } else if (tab === 'analysis') {
+    mainSection.style.display = 'none';
+    historySection.style.display = 'none';
+    responsesSection.style.display = 'none';
+    analysisSection.style.display = 'block';
+    loadAnalysis();
+  } else {
+    mainSection.style.display = 'block';
+    historySection.style.display = 'none';
+    responsesSection.style.display = 'none';
+    analysisSection.style.display = 'none';
+  }
+}
+
+async function loadHistory() {
+  const historyList = document.getElementById('historyList');
+  historyList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Loading…</p>';
+  try {
+    const res = await fetch('/api/history');
+    const data = await res.json();
+    if (data.length === 0) {
+      historyList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">No reports yet.</p>';
+      return;
+    }
+    let html = '<table style="width:100%;border-collapse:collapse;">';
+    html += '<thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">';
+    html += '<th style="padding:12px;text-align:left;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Timestamp (ET)</th>';
+    html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Total</th>';
+    html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Passed</th>';
+    html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Failed</th>';
+    html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Unclear</th>';
+    html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Pass %</th>';
+    html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Actions</th>';
+    html += '</tr></thead><tbody>';
+
+    data.forEach(run => {
+      const ts = run.ts;
+      const formatted = formatTimestamp(ts);
+      const passPct = run.total > 0 ? Math.round((run.passed / run.total) * 100) : 0;
+      const passColor = passPct === 100 ? '#16a34a' : passPct >= 80 ? '#f59e0b' : '#dc2626';
+      html += `<tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:12px;font-size:0.88rem;color:#1e293b;">${formatted}</td>
+        <td style="padding:12px;text-align:center;font-size:0.88rem;color:#475569;">${run.total}</td>
+        <td style="padding:12px;text-align:center;font-size:0.88rem;color:#16a34a;font-weight:600;">${run.passed}</td>
+        <td style="padding:12px;text-align:center;font-size:0.88rem;color:#dc2626;font-weight:600;">${run.failed}</td>
+        <td style="padding:12px;text-align:center;font-size:0.88rem;color:#b45309;font-weight:600;">${run.unclear}</td>
+        <td style="padding:12px;text-align:center;font-size:0.88rem;font-weight:700;color:${passColor};">${passPct}%</td>
+        <td style="padding:12px;text-align:center;font-size:0.85rem;">
+          ${run.has_report ? `<button class="btn btn-primary" style="padding:4px 10px;font-size:0.75rem;margin-right:4px;" onclick="location.href='/api/report/${run.stem}'">View</button>` : ''}
+          ${run.has_report ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:0.75rem;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;" onclick="location.href='/api/report/${run.stem}?dl=1'">Download</button>` : '<span style="color:#94a3b8">No report</span>'}
+        </td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    historyList.innerHTML = html;
+  } catch(e) {
+    historyList.innerHTML = '<p style="color:#dc2626;padding:20px;text-align:center;">Failed to load reports: ' + e.message + '</p>';
+  }
+}
+
+function formatTimestamp(stem) {
+  const match = String(stem).match(/(\\d{4})(\\d{2})(\\d{2})_?(\\d{2})(\\d{2})(\\d{2})?/);
+  if (!match) return stem || '';
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+  const hour = parseInt(match[4], 10);
+  const min = parseInt(match[5], 10);
+  const sec = parseInt(match[6] || '0', 10);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(month)}/${pad(day)}/${year} ${pad(hour)}:${pad(min)}:${pad(sec)} ET`;
+}
+
+async function loadResponses() {
+  const responsesList = document.getElementById('responsesList');
+  responsesList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Loading…</p>';
+  try {
+    const res = await fetch('/api/responses');
+    const data = await res.json();
+    if (!data || !data.length) {
+      responsesList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">No responses yet.</p>';
+      return;
+    }
+    let html = '';
+    data.forEach(run => {
+      const ts = formatTimestamp(run.stem);
+      let runTests = '';
+      run.tests.forEach(test => {
+        const tasks = (test.tasks_sent || []).map((task, idx) =>
+          `<div style="background:#eef2ff;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:8px;margin-bottom:6px;">
+             <div style="font-size:0.85rem;font-weight:700;color:#1e3a8a;margin-bottom:4px;">Sent message ${idx+1}</div>
+             <div style="color:#0f172a;font-size:0.9rem;white-space:pre-wrap;">${esc(task)}</div>
+           </div>`).join('');
+        const responses = (test.responses || []).map((rsp, idx) =>
+          `<div style="background:#f7fee7;border-left:4px solid #16a34a;padding:10px 12px;border-radius:8px;margin-bottom:6px;">
+             <div style="font-size:0.85rem;font-weight:700;color:#166534;margin-bottom:4px;">Response ${idx+1}</div>
+             <div style="color:#14532d;font-size:0.9rem;white-space:pre-wrap;">${esc(rsp)}</div>
+           </div>`).join('');
+        runTests += `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#ffffff;">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+            <span style="font-weight:700;color:#0f172a;">${esc(test.id)}: ${esc(test.name)}</span>
+            <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:999px;font-size:0.75rem;">${test.tasks_sent?.length || 0} sent</span>
+            <span style="background:#dcfce7;color:#166534;padding:4px 8px;border-radius:999px;font-size:0.75rem;">${test.responses?.length || 0} response(s)</span>
+          </div>
+          ${tasks || '<div style="color:#64748b;font-size:0.85rem;margin-bottom:6px;">No task messages recorded.</div>'}
+          ${responses || '<div style="color:#64748b;font-size:0.85rem;">No responses recorded.</div>'}
+        </div>`;
+      });
+      html += `<div style="border:1px solid #e2e8f0;border-radius:14px;padding:18px;background:#f8fafc;">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;">
+          <div style="font-size:0.95rem;font-weight:700;color:#0f172a;">Run ${ts}</div>
+          <div style="background:#e2e8f0;color:#1d4ed8;padding:4px 10px;border-radius:999px;font-size:0.78rem;">${run.tests.length} test${run.tests.length===1?'':'s'}</div>
+          <div style="background:#d1fae5;color:#15803d;padding:4px 10px;border-radius:999px;font-size:0.78rem;">${run.totalResponses} total responses</div>
+        </div>
+        ${runTests}
+      </div>`;
+    });
+    responsesList.innerHTML = html;
+  } catch(e) {
+    responsesList.innerHTML = '<p style="color:#dc2626;padding:20px;text-align:center;">Failed to load responses: ' + esc(e.message) + '</p>';
+  }
+}
+
+async function loadAnalysis() {
+  const summaryEl = document.getElementById('analysisSummary');
+  const listEl = document.getElementById('analysisList');
+  summaryEl.innerHTML = '<p style="color:#94a3b8;padding:12px 0;">Loading analysis…</p>';
+  listEl.innerHTML = '';
+  try {
+    const res = await fetch('/api/analysis');
+    const data = await res.json();
+    const s = data.summary || {total:0, passed:0, failed:0, unclear:0, pass_rate:0};
+    summaryEl.innerHTML = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="count" style="margin-left:0;">${s.total} total</div>
+        <div class="count" style="margin-left:0;background:#dcfce7;color:#166534;">${s.passed} passed</div>
+        <div class="count" style="margin-left:0;background:#fee2e2;color:#991b1b;">${s.failed} failed</div>
+        <div class="count" style="margin-left:0;background:#fef3c7;color:#92400e;">${s.unclear} unclear</div>
+        <div class="count" style="margin-left:0;background:#e0e7ff;color:#3730a3;">${s.pass_rate}% pass rate</div>
+      </div>
+      <div style="background:#0f172a;color:#e2e8f0;border-radius:8px;padding:14px;font-family:monospace;font-size:0.8rem;white-space:pre-wrap;line-height:1.6;border:1px solid #1e293b;">${esc(data.overall_analysis || 'No overall analysis yet.')}</div>
+    `;
+
+    const tests = data.tests || [];
+    if (!tests.length) {
+      listEl.innerHTML = '<p style="color:#94a3b8;padding:12px 0;">No per-test analysis yet.</p>';
+      return;
+    }
+
+    listEl.innerHTML = tests.map(t => {
+      const verdict = (t.verdict || 'UNCLEAR').toUpperCase();
+      const vColor = verdict === 'PASS' ? '#166534' : verdict === 'FAIL' ? '#991b1b' : '#92400e';
+      const vBg = verdict === 'PASS' ? '#dcfce7' : verdict === 'FAIL' ? '#fee2e2' : '#fef3c7';
+      return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#fff;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+          <span style="font-family:monospace;color:#64748b;font-size:0.78rem;">${esc(t.stem || '')}</span>
+          <span style="background:${vBg};color:${vColor};padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;">${verdict}</span>
+          <span style="font-weight:700;color:#0f172a;">${esc(t.id || '')}</span>
+          <span style="color:#334155;">${esc(t.name || '')}</span>
+          <span style="color:#64748b;font-size:0.78rem;">${t.tasks_sent_count || 0} sent · ${t.responses_count || 0} responses</span>
+        </div>
+        <div style="color:#475569;font-size:0.85rem;line-height:1.55;">${esc(t.reason || '') || 'No judge reason.'}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    summaryEl.innerHTML = '<p style="color:#dc2626;padding:12px 0;">Failed to load analysis: ' + esc(e.message) + '</p>';
+    listEl.innerHTML = '';
+  }
+}
+
 load();
+_startHistoryAutoRefresh();
 </script>
 </body>
 </html>
@@ -1388,12 +2143,11 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": str(e)})
         elif path == "/api/poll":
-            # Daemon calls this: update heartbeat, return + clear any pending run
             _last_heartbeat = time.time()
             run = _pending_run
             _pending_run = None
             stop = _stop_requested
-            _stop_requested = False  # clear after daemon picks it up
+            _stop_requested = False
             self._json({"run": run, "stop": stop})
         elif path == "/api/output":
             self._json({
@@ -1407,11 +2161,110 @@ class Handler(BaseHTTPRequestHandler):
             self._json(_run_progress)
         elif path == "/health":
             self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
+        elif path == "/api/history":
+            files = sorted(glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+                           key=os.path.getmtime, reverse=True)
+            history = []
+            for f in files:
+                stem = os.path.basename(f).replace("results_", "").replace(".json", "")
+                try:
+                    with open(f) as fp:
+                        data = json.load(fp)
+                    passed  = sum(1 for r in data if r.get("verdict") == "PASS")
+                    failed  = sum(1 for r in data if r.get("verdict") == "FAIL")
+                    unclear = sum(1 for r in data if r.get("verdict") == "UNCLEAR")
+                    history.append({
+                        "stem":    stem,
+                        "ts":      stem,
+                        "total":   len(data),
+                        "passed":  passed,
+                        "failed":  failed,
+                        "unclear": unclear,
+                        "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{stem}.html")),
+                    })
+                except Exception:
+                    pass
+            if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in history):
+                passed  = sum(1 for r in _run_results if r.get("verdict") == "PASS")
+                failed  = sum(1 for r in _run_results if r.get("verdict") == "FAIL")
+                unclear = sum(1 for r in _run_results if r.get("verdict") == "UNCLEAR")
+                history.insert(0, {
+                    "stem": _run_result_stem,
+                    "ts": _run_result_stem,
+                    "total": len(_run_results),
+                    "passed": passed,
+                    "failed": failed,
+                    "unclear": unclear,
+                    "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{_run_result_stem}.html")),
+                })
+            self._json(history)
+        elif path == "/api/responses":
+            files = sorted(glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+                           key=os.path.getmtime, reverse=True)
+            responses = []
+            for f in files:
+                stem = os.path.basename(f).replace("results_", "").replace(".json", "")
+                try:
+                    with open(f) as fp:
+                        data = json.load(fp)
+                    tests = []
+                    total_responses = 0
+                    for r in data:
+                        tests.append({
+                            "id": r.get("id"),
+                            "name": r.get("name"),
+                            "tasks_sent": r.get("tasks_sent", []),
+                            "responses": r.get("responses", []),
+                        })
+                        total_responses += len(r.get("responses", []))
+                    responses.append({
+                        "stem": stem,
+                        "tests": tests,
+                        "totalResponses": total_responses,
+                    })
+                except Exception:
+                    pass
+            if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in responses):
+                tests = []
+                total_responses = 0
+                for r in _run_results:
+                    tests.append({
+                        "id": r.get("id"),
+                        "name": r.get("name"),
+                        "tasks_sent": r.get("tasks_sent", []),
+                        "responses": r.get("responses", []),
+                    })
+                    total_responses += len(r.get("responses", []))
+                responses.insert(0, {
+                    "stem": _run_result_stem,
+                    "tests": tests,
+                    "totalResponses": total_responses,
+                })
+            self._json(responses)
+        elif path == "/api/analysis":
+            self._json(_build_analysis_payload())
+        elif path.startswith("/api/report/"):
+            stem     = path.removeprefix("/api/report/")
+            filepath = os.path.join(REPORTS_DIR, f"report_{stem}.html")
+            qs       = urlparse(self.path).query
+            download = "dl=1" in qs
+            if not os.path.exists(filepath):
+                self.send_response(404)
+                self.end_headers()
+                return
+            with open(filepath, "rb") as fp:
+                content = fp.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            if download:
+                self.send_header("Content-Disposition", f'attachment; filename="report_{stem}.html"')
+            self.end_headers()
+            self.wfile.write(content)
         else:
             self._html(HTML)
 
     def do_POST(self):
-        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _stop_requested, _run_progress
+        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _run_result_stem, _stop_requested, _run_progress
         path = urlparse(self.path).path
         if path == "/api/tests":
             length = int(self.headers.get("Content-Length", 0))
@@ -1423,21 +2276,40 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
         elif path == "/api/run":
+            global _pending_run, _run_output, _run_status, _run_started, _run_results, _run_result_stem
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
             try:
                 data = json.loads(body) if length else {}
             except Exception:
                 data = {}
+            ids = data.get("ids")
+            if isinstance(ids, list):
+                ids = [str(x).strip() for x in ids if str(x).strip()]
+            else:
+                ids = None
+            rid = (str(data.get("id")).strip() if data.get("id") is not None else None) or None
+            cat = (str(data.get("category")).strip() if data.get("category") is not None else None) or None
+            cats = data.get("categories")
+            if isinstance(cats, list):
+                cats = [str(x).strip() for x in cats if str(x).strip()]
+            else:
+                cats = None
+            if not (ids or rid or cat or cats):
+                self._json({"ok": False, "error": "No tests selected"})
+                return
             _pending_run = {
-                "category": data.get("category"),
-                "id":       data.get("id"),
+                "category": cat,
+                "categories": cats,
+                "id":       rid,
+                "ids":      ids,
                 "ts":       time.time(),
             }
             _run_output  = ""
             _run_status  = "running"
             _run_started = time.time()
             _run_results = []
+            _run_result_stem = ""
             mac_online = (time.time() - _last_heartbeat) < 90
             self._json({"ok": True, "mac_online": mac_online})
         elif path == "/api/output":
@@ -1449,6 +2321,8 @@ class Handler(BaseHTTPRequestHandler):
                 _run_status      = data.get("status", "done")
                 _run_report_html = data.get("report_html", "")
                 _run_results     = data.get("results", [])
+                m = re.search(r"Raw results:\s*\S*results_(\d{8}_?\d{4,6})\.json", _run_output)
+                _run_result_stem = m.group(1) if m else time.strftime("%Y%m%d_%H%M%S")
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
@@ -1508,6 +2382,9 @@ class Handler(BaseHTTPRequestHandler):
     def _html(self, body):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.end_headers()
         self.wfile.write(body.encode())
 
@@ -1516,6 +2393,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.end_headers()
         self.wfile.write(body)
 

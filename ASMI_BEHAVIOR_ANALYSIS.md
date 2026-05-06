@@ -1,6 +1,7 @@
 # How Asmi Is Currently Behaving: Test Case Analysis
 
-Based on **54 test cases** (28 active regression + 26 launch tests), here's what we know about Asmi's current behavior:
+Based on **97 test cases** across 35 runs to date, here's what we know about Asmi's current behavior:
+(20 passed · 41 failed · 36 unclear | 20% pass rate)
 
 ---
 

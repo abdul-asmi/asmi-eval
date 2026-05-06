@@ -4,12 +4,12 @@
 # This makes the daemon start automatically and restart if it crashes.
 
 EVAL_DIR="$(cd "$(dirname "$0")" && pwd)"
-PYTHON="$(which python3)"
+WRAPPER="$EVAL_DIR/run_daemon.sh"
 PLIST="$HOME/Library/LaunchAgents/com.asmi.eval.daemon.plist"
 
 echo "Setting up Asmi Eval Daemon..."
 echo "  Eval dir: $EVAL_DIR"
-echo "  Python:   $PYTHON"
+echo "  Wrapper:  $WRAPPER"
 
 # Write the LaunchAgent plist
 cat > "$PLIST" << EOF
@@ -23,8 +23,8 @@ cat > "$PLIST" << EOF
 
     <key>ProgramArguments</key>
     <array>
-        <string>$PYTHON</string>
-        <string>$EVAL_DIR/daemon.py</string>
+        <string>/bin/bash</string>
+        <string>$WRAPPER</string>
     </array>
 
     <key>WorkingDirectory</key>
