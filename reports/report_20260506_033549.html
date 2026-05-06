@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Asmi Eval Report — 2026-05-06 03:35</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          background: #f8fafc; color: #1e293b; padding: 24px; }
+  h1   { font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: #64748b; font-size: 0.9rem; margin-bottom: 24px; }
+
+  .summary { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+  .stat { background: white; border-radius: 12px; padding: 16px 24px;
+           box-shadow: 0 1px 4px rgba(0,0,0,.08); min-width: 120px; text-align: center; }
+  .stat .num { font-size: 2rem; font-weight: 700; }
+  .stat .lbl { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+
+  .category { background: white; border-radius: 12px; margin-bottom: 20px;
+               box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; }
+  .cat-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+                 background: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
+  .cat-name  { font-weight: 600; flex: 1; }
+  .cat-score { font-weight: 700; font-size: 1rem; min-width: 40px; text-align: right; }
+  .bar-track { flex: 2; height: 8px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 99px; transition: width .4s; }
+
+  details.test-row { margin: 8px 16px; border-radius: 8px; overflow: hidden; }
+  details.test-row summary {
+    padding: 10px 14px; cursor: pointer; list-style: none;
+    display: flex; align-items: center; gap: 10px; font-size: 0.9rem;
+  }
+  details.test-row summary::-webkit-details-marker { display: none; }
+  details.test-row summary::before { content: "▶"; font-size: 0.7rem; color: #94a3b8; }
+  details[open].test-row summary::before { content: "▼"; }
+
+  .test-detail { padding: 12px 16px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 8px; }
+  .section-label { font-weight: 600; color: #475569; font-size: 0.75rem;
+                    text-transform: uppercase; letter-spacing: .05em; margin-top: 6px; }
+  .tasks code { display: block; background: #f1f5f9; padding: 4px 8px;
+                 border-radius: 4px; margin: 2px 0; font-size: 0.82rem; white-space: pre-wrap; }
+  .resp  { background: #f8fafc; padding: 6px 10px; border-radius: 4px;
+            margin: 2px 0; font-size: 0.82rem; white-space: pre-wrap; border-left: 3px solid #cbd5e1; }
+  .reason { color: #374151; }
+  .manual { color: #7c3aed; font-weight: 500; }
+  .note   { color: #0369a1; }
+  .precond{ color: #b45309; font-weight: 500; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px;
+            font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <h1>Asmi Eval Report</h1>
+  <div class="subtitle">Run at 2026-05-06 03:35 &nbsp;·&nbsp; v0.10.37.2 regression suite &nbsp;·&nbsp; iMessage only</div>
+
+  <div class="summary">
+    <div class="stat"><div class="num">1</div><div class="lbl">Total</div></div>
+    <div class="stat"><div class="num" style="color:#22c55e">0</div><div class="lbl">Passed</div></div>
+    <div class="stat"><div class="num" style="color:#ef4444">1</div><div class="lbl">Failed</div></div>
+    <div class="stat"><div class="num" style="color:#f59e0b">0</div><div class="lbl">Unclear</div></div>
+    <div class="stat"><div class="num">0%</div><div class="lbl">Pass rate</div></div>
+  </div>
+
+  
+        <div class="category">
+            <div class="cat-header">
+                <span class="cat-name">timezone</span>
+                <span class="cat-score">0/1</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:0%;background:#ef4444"></div>
+                </div>
+            </div>
+            
+            <details class="test-row" style="background:#fef2f2;border-left:4px solid #ef4444">
+                <summary>
+                    <span class="badge" style="background:#ef444422;color:#ef4444">FAIL</span>
+                    <strong>[tz_01]</strong> Timezone: Captured naturally during task with location
+                </summary>
+                <div class="test-detail">
+                    
+                    <div class="section-label">Tasks sent</div>
+                    <div class="tasks"><code>Call a restaurant in Los Angeles and ask what time they close today</code></div>
+                    <div class="section-label">Responses (2)</div>
+                    <div class="resp">Response 1: I'll handle the phone tag for you. Which restaurant are we checking on?</div><div class="resp">Response 2: Also, what do you do for work? Need to know how much life I'm saving you from.</div>
+                    <div class="section-label">Judge</div>
+                    <div class="reason">Asmi did not perform the task or demonstrate awareness of the Los Angeles timezone, instead stalling to ask for the restaurant name.</div>
+                    
+                    
+                    
+                </div>
+            </details>
+            
+        </div>
+        
+
+</body>
+</html>
