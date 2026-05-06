@@ -2210,8 +2210,21 @@ function formatTimestamp(stem) {
   const hour = parseInt(match[4], 10);
   const min = parseInt(match[5], 10);
   const sec = parseInt(match[6] || '0', 10);
-  const pad = n => String(n).padStart(2, '0');
-  return `${pad(month)}/${pad(day)}/${year} ${pad(hour)}:${pad(min)}:${pad(sec)} ET`;
+  const utc = new Date(Date.UTC(year, month - 1, day, hour, min, sec));
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(utc).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.month}/${parts.day}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second} ET`;
 }
 
 async function loadResponses() {
@@ -2312,7 +2325,7 @@ async function loadAnalysis() {
       const vBg = verdict === 'PASS' ? '#dcfce7' : verdict === 'FAIL' ? '#fee2e2' : '#fef3c7';
       return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#fff;">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
-          <span style="font-family:monospace;color:#64748b;font-size:0.78rem;">${esc(t.stem || '')}</span>
+          <span style="font-family:monospace;color:#64748b;font-size:0.78rem;">${esc(formatTimestamp(t.stem || ''))}</span>
           <span style="background:${vBg};color:${vColor};padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;">${verdict}</span>
           <span style="font-weight:700;color:#0f172a;">${esc(t.id || '')}</span>
           <span style="color:#334155;">${esc(t.name || '')}</span>
