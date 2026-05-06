@@ -1504,12 +1504,8 @@ async function _triggerRun(payload) {
       toast(data.error || 'Run request failed');
       return;
     }
-    if (data.mac_online) {
-      toast(`Running ${label}…`);
-      _openOutput(`Running ${label}…`);
-    } else {
-      toast('Mac is offline — daemon not running');
-    }
+    toast(`Queued ${label}…`);
+    _openOutput(`Queued ${label}…`);
   } catch(e) {
     toast('Failed to queue run: ' + e.message);
   }
@@ -1856,7 +1852,7 @@ async function saveAndRunGenerated() {
   const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({category:'generated'})});
   const data = await res.json();
   if (!data.ok) { alert('Run failed'); btn.disabled = false; return; }
-  if (!data.mac_online) document.getElementById('genRunStatus').textContent = '⚠ Daemon offline — waiting…';
+  document.getElementById('genRunStatus').textContent = 'Queued for daemon…';
 
   _genRunStart = Date.now();
   if (_genPollTimer) clearInterval(_genPollTimer);
