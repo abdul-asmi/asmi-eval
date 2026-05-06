@@ -451,7 +451,22 @@ textarea { resize: vertical; min-height: 70px; }
     <option value="dedup">dedup</option>
     <option value="burst_with_setup">burst_with_setup</option>
   </select>
-  <button class="btn btn-primary" onclick="toggleNew()">+ Add Test</button>
+  <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;color:#475569;font-weight:500">
+    <input type="checkbox" id="filterPrecond" onchange="filter()" style="width:14px;height:14px;cursor:pointer">
+    ⚠ Precond
+  </label>
+  <select id="sortBy" onchange="filter()" style="margin-left:6px">
+    <option value="default">Default</option>
+    <option value="id">ID (A→Z)</option>
+    <option value="name">Name (A→Z)</option>
+    <option value="type">Type</option>
+    <option value="wait_asc">Wait ↑</option>
+    <option value="wait_desc">Wait ↓</option>
+  </select>
+  <span style="margin-left:8px">|</span>
+  <button class="btn btn-outline" id="collapseAllBtn" onclick="collapseAll()" style="font-size:0.8rem;padding:5px 10px;margin-left:8px">Collapse all</button>
+  <button class="btn btn-outline" id="expandAllBtn" onclick="expandAll()" style="font-size:0.8rem;padding:5px 10px">Expand all</button>
+  <button class="btn btn-primary" onclick="toggleNew()" style="margin-left:12px">+ Add Test</button>
   <button class="btn btn-outline" onclick="toggleGenerate()" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;">🤖 Generate</button>
   <button class="btn btn-success" id="saveBtn" onclick="saveAll()">💾 Save All</button>
   <select id="runCat" style="margin-left:12px"><option value="">All tests</option></select>
@@ -563,6 +578,8 @@ textarea { resize: vertical; min-height: 70px; }
 <script>
 let tests = [];
 let _editingId = null;
+let collapsedCats = new Set();
+let _sortBy = 'default';
 
 const CAT_META = {
   onboarding:         {label:'Onboarding',        color:'#7c3aed', bg:'#f5f3ff'},
@@ -631,14 +648,29 @@ function render() {
   const search = document.getElementById('search').value.toLowerCase();
   const catF   = document.getElementById('filterCat').value;
   const typeF  = document.getElementById('filterType').value;
+  const precF  = document.getElementById('filterPrecond').checked;
+  _sortBy      = document.getElementById('sortBy').value;
 
-  const filtered = tests.filter(t =>
+  let filtered = tests.filter(t =>
     (!search || t.id.includes(search) || t.name.toLowerCase().includes(search) ||
      (t.message||'').toLowerCase().includes(search) ||
      (t.pass_criteria||'').toLowerCase().includes(search)) &&
     (!catF  || t.category === catF) &&
-    (!typeF || t.type === typeF)
+    (!typeF || t.type === typeF) &&
+    (!precF || t.precondition)
   );
+
+  // Apply sort
+  if (_sortBy !== 'default') {
+    filtered = filtered.sort((a, b) => {
+      if (_sortBy === 'id') return a.id.localeCompare(b.id);
+      if (_sortBy === 'name') return a.name.localeCompare(b.name);
+      if (_sortBy === 'type') return a.type.localeCompare(b.type);
+      if (_sortBy === 'wait_asc') return (a.wait||120) - (b.wait||120);
+      if (_sortBy === 'wait_desc') return (b.wait||120) - (a.wait||120);
+      return 0;
+    });
+  }
 
   document.getElementById('countBadge').textContent = `${filtered.length} / ${tests.length} tests`;
   document.getElementById('subtitle').textContent   = `${tests.length} tests`;
@@ -661,8 +693,11 @@ function render() {
   orderedCats.forEach(cat => {
     const items = bycat[cat];
     const m = CAT_META[cat] || {label:cat, color:'#334155', bg:'#f8fafc'};
+    const isCollapsed = collapsedCats.has(cat);
+    const chevron = isCollapsed ? '▸' : '▾';
     rows += `<tr class="cat-row">
       <td colspan="5" style="color:${m.color}">
+        <button class="action-btn" onclick="toggleCat('${cat}')" style="padding:2px 6px;margin-right:4px;color:${m.color}">${chevron}</button>
         <span style="background:${m.bg};padding:2px 10px;border-radius:99px">${m.label}</span>
         <span style="color:#94a3b8;font-weight:400;margin-left:6px">${items.length} test${items.length!==1?'s':''}</span>
       </td>
@@ -671,7 +706,7 @@ function render() {
           onclick="runByCategory('${cat}')">▶ Run</button>
       </td>
     </tr>`;
-    items.forEach(t => { rows += renderRow(t); });
+    items.forEach(t => { rows += renderRow(t, cat); });
   });
 
   document.getElementById('testList').innerHTML =
@@ -686,9 +721,12 @@ function render() {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
+
+  _applyCollapsed();
+
 }
 
-function renderRow(t) {
+function renderRow(t, cat) {
   const idx      = tests.indexOf(t);
   const m        = CAT_META[t.category] || {label:t.category, color:'#334155', bg:'#f8fafc'};
   const msgs     = t.messages ? t.messages.join('\\n') : '';
@@ -696,7 +734,7 @@ function renderRow(t) {
   const preWarn  = t.precondition ? ' ⚠' : '';
 
   return `
-  <tr class="test-row" id="row_${t.id}" onclick="editRow('${t.id}')">
+  <tr class="test-row" id="row_${t.id}" data-cat="${cat}" onclick="editRow('${t.id}')">
     <td onclick="event.stopPropagation()">
       <button class="run-cell-btn" id="runbtn_${t.id}" onclick="runById('${t.id}')">▶</button>
     </td>
@@ -709,7 +747,7 @@ function renderRow(t) {
       <button class="action-btn" onclick="deleteTest(${idx})" title="Delete">🗑</button>
     </td>
   </tr>
-  <tr class="edit-row" id="editrow_${t.id}" style="display:none">
+  <tr class="edit-row" id="editrow_${t.id}" data-cat="${cat}" style="display:none">
     <td colspan="6">
       <div class="edit-form-inner">
         <div class="form-grid">
@@ -782,6 +820,56 @@ function editRow(id) {
 }
 
 function filter() { render(); }
+
+function toggleCat(cat) {
+  if (collapsedCats.has(cat)) {
+    collapsedCats.delete(cat);
+  } else {
+    collapsedCats.add(cat);
+  }
+  _applyCollapsed();
+}
+
+function collapseAll() {
+  document.querySelectorAll('tr[data-cat]').forEach(row => {
+    const cat = row.getAttribute('data-cat');
+    collapsedCats.add(cat);
+  });
+  _applyCollapsed();
+}
+
+function expandAll() {
+  collapsedCats.clear();
+  _applyCollapsed();
+}
+
+function _applyCollapsed() {
+  document.querySelectorAll('tr[data-cat]').forEach(row => {
+    const cat = row.getAttribute('data-cat');
+    if (collapsedCats.has(cat)) {
+      row.style.display = 'none';
+    } else {
+      row.style.display = '';
+    }
+  });
+  // Update chevron icons
+  document.querySelectorAll('.cat-row').forEach(row => {
+    const btn = row.querySelector('.action-btn');
+    if (btn) {
+      const catSpan = row.querySelector('[style*="background"]');
+      if (catSpan) {
+        const text = catSpan.textContent.trim();
+        const cat = Array.from(CAT_ORDER).find(c => {
+          const m = CAT_META[c];
+          return m && m.label === text;
+        });
+        if (cat) {
+          btn.textContent = collapsedCats.has(cat) ? '▸' : '▾';
+        }
+      }
+    }
+  });
+}
 
 function update(idx, key, val) {
   if (val === undefined || val === '') delete tests[idx][key];
