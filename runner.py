@@ -297,6 +297,7 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
     # Apply priority ordering only for full runs (no category/id filter)
     running_all = not filter_category and not filter_id and not filter_categories and not filter_ids
     if running_all:
+        to_run = [t for t in to_run if t["category"] != "interactive"]
         to_run = _sort_by_priority(list(to_run))
 
     print(f"\n{'═'*65}")

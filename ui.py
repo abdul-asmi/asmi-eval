@@ -623,6 +623,8 @@ main { padding: 24px; max-width: 1300px; margin: 0 auto; }
 .action-btn { background:none; border:none; cursor:pointer; font-size:0.9rem;
               padding:3px 5px; border-radius:4px; color:#64748b; }
 .action-btn:hover { background:#f1f5f9; color:#1e293b; }
+.drag-handle { cursor: grab; user-select: none; }
+.drag-handle:active { cursor: grabbing; }
 .test-table input[type=checkbox], .cat-row input[type=checkbox] {
     width:14px; height:14px; cursor:pointer; margin:0;
 }
@@ -913,6 +915,10 @@ textarea { resize: vertical; min-height: 70px; }
 
   <div id="responsesSection" style="display:none; padding:16px;">
     <h2 style="margin-bottom:16px;">Responses</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      <button class="btn btn-outline" id="responsesViewTranscriptBtn" onclick="setResponsesView('transcript')" style="font-size:0.75rem;padding:4px 10px;white-space:nowrap">Transcript</button>
+      <button class="btn btn-outline" id="responsesViewHistoryBtn" onclick="setResponsesView('history')" style="font-size:0.75rem;padding:4px 10px;white-space:nowrap">All conversations</button>
+    </div>
     <div id="responsesList" style="display:grid;gap:16px;"></div>
   </div>
 
@@ -929,6 +935,8 @@ let _editingId = null;
 let collapsedCats = new Set();
 let _sortBy = 'default';
 let _categoryOrder = [];
+let _responsesViewMode = 'transcript';
+let _dragState = null;
 
 const CAT_META = {
   onboarding:         {label:'Onboarding',        color:'#7c3aed', bg:'#f5f3ff'},
@@ -1018,6 +1026,111 @@ function _dedupeSelectOptions(selectId) {
   });
 }
 
+function _categoryOrderFromTests(list = tests) {
+  const order = [];
+  const seen = new Set();
+  list.forEach(t => {
+    if (!seen.has(t.category)) {
+      seen.add(t.category);
+      order.push(t.category);
+    }
+  });
+  return order;
+}
+
+function _saveCurrentOrder() {
+  return saveAll();
+}
+
+function _moveItemInArray(arr, fromIdx, toIdx) {
+  if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= arr.length || toIdx >= arr.length) return arr;
+  const copy = arr.slice();
+  const [item] = copy.splice(fromIdx, 1);
+  copy.splice(toIdx, 0, item);
+  return copy;
+}
+
+function _reorderTestsByCategory(sourceCat, targetCat, insertBefore = true) {
+  if (!sourceCat || !targetCat || sourceCat === targetCat) return;
+  const source = tests.filter(t => t.category === sourceCat);
+  const target = tests.filter(t => t.category === targetCat);
+  if (!source.length || !target.length) return;
+  const remaining = tests.filter(t => t.category !== sourceCat);
+  const targetIndex = remaining.findIndex(t => t.category === targetCat);
+  if (targetIndex < 0) return;
+  const insertAt = insertBefore ? targetIndex : targetIndex + target.length;
+  remaining.splice(insertAt, 0, ...source);
+  tests = remaining;
+  render();
+  _saveCurrentOrder();
+  toast(`Moved ${sourceCat} category`);
+}
+
+function _reorderTestWithinCategory(sourceId, targetId, insertBefore = true) {
+  if (!sourceId || !targetId || sourceId === targetId) return;
+  const source = tests.find(t => t.id === sourceId);
+  const target = tests.find(t => t.id === targetId);
+  if (!source || !target || source.category !== target.category) return;
+  const sourceIdx = tests.findIndex(t => t.id === sourceId);
+  const targetIdx = tests.findIndex(t => t.id === targetId);
+  if (sourceIdx < 0 || targetIdx < 0) return;
+  const next = tests.slice();
+  const [item] = next.splice(sourceIdx, 1);
+  const adjustedTargetIdx = sourceIdx < targetIdx ? targetIdx - 1 : targetIdx;
+  next.splice(insertBefore ? adjustedTargetIdx : adjustedTargetIdx + 1, 0, item);
+  tests = next;
+  render();
+  _saveCurrentOrder();
+  toast(`Moved ${sourceId}`);
+}
+
+function dragStartCategory(ev, cat) {
+  _dragState = {type: 'category', id: cat};
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('text/plain', `category:${cat}`);
+}
+
+function endDrag() {
+  _dragState = null;
+}
+
+function dragOverCategory(ev) {
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+}
+
+function dropCategory(ev, cat) {
+  ev.preventDefault();
+  const src = _dragState;
+  _dragState = null;
+  if (!src || src.type !== 'category' || src.id === cat) return;
+  _reorderTestsByCategory(src.id, cat, true);
+}
+
+function dragStartTest(ev, id) {
+  _dragState = {type: 'test', id};
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('text/plain', `test:${id}`);
+}
+
+function dragOverTest(ev) {
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+}
+
+function dropTest(ev, id) {
+  ev.preventDefault();
+  const src = _dragState;
+  _dragState = null;
+  if (!src || src.type !== 'test' || src.id === id) return;
+  _reorderTestWithinCategory(src.id, id, true);
+}
+
+function setResponsesView(mode) {
+  _responsesViewMode = mode;
+  loadResponses();
+}
+
 function _initCatDropdowns() {
   ['filterCat'].forEach(id => {
     const el = document.getElementById(id);
@@ -1086,8 +1199,9 @@ function render() {
     bycat[t.category].push(t);
   });
 
-  const orderedCats = CAT_ORDER.filter(c => bycat[c])
-    .concat(Object.keys(bycat).filter(c => !CAT_ORDER.includes(c)));
+  const filteredCatOrder = _categoryOrderFromTests(filtered);
+  const orderedCats = filteredCatOrder
+    .concat(Object.keys(bycat).filter(c => !filteredCatOrder.includes(c)));
 
   if (!orderedCats.length) {
     document.getElementById('testList').innerHTML = '<p style="color:#94a3b8;padding:20px">No tests match filter.</p>';
@@ -1101,8 +1215,12 @@ function render() {
     const isCollapsed = collapsedCats.has(cat);
     const chevron = isCollapsed ? '▸' : '▾';
     const checked = items.every(t => selectedTestIds.has(t.id)) ? 'checked' : '';
-    rows += `<tr class="cat-row" data-cat-header="${cat}">
+    rows += `<tr class="cat-row" data-cat-header="${cat}"
+                 ondragover="dragOverCategory(event)"
+                 ondrop="dropCategory(event, '${cat}')">
       <td colspan="6" style="color:${m.color}">
+        <button class="action-btn drag-handle" draggable="true" onclick="event.stopPropagation()" ondragstart="dragStartCategory(event, '${cat}')" ondragend="endDrag()"
+                title="Drag category" style="padding:2px 6px;margin-right:4px;color:${m.color};cursor:grab;">⋮⋮</button>
         <button class="action-btn" onclick="toggleCat('${cat}')" style="padding:2px 6px;margin-right:4px;color:${m.color}">${chevron}</button>
         <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="catchk_${cat}" data-cat-select="${cat}" onclick="toggleCategorySelection('${cat}', this.checked)" ${checked}>
@@ -1144,8 +1262,11 @@ function renderRow(t, cat) {
   const checked   = selectedTestIds.has(t.id) ? 'checked' : '';
 
   return `
-  <tr class="test-row" id="row_${t.id}" data-cat="${cat}" onclick="editRow('${t.id}')">
+  <tr class="test-row" id="row_${t.id}" data-cat="${cat}" onclick="editRow('${t.id}')"
+      ondragover="dragOverTest(event)" ondrop="dropTest(event, '${t.id}')">
     <td onclick="event.stopPropagation()">
+      <button class="action-btn drag-handle" draggable="true" onclick="event.stopPropagation()" ondragstart="dragStartTest(event, '${t.id}')" ondragend="endDrag()"
+              title="Drag test" style="padding:2px 4px;margin-right:4px;cursor:grab;">⋮⋮</button>
       <input type="checkbox" id="testchk_${t.id}" onchange="toggleTestSelection('${t.id}', this.checked)" ${checked}>
     </td>
     <td class="id-cell">${esc(t.id)}</td>
@@ -1441,7 +1562,7 @@ let selectedTestIds = new Set();
 let interactiveAutoContinue = true;
 
 async function runSelected() {
-  const ids = Array.from(selectedTestIds);
+  const ids = tests.filter(t => selectedTestIds.has(t.id)).map(t => t.id);
   if (!ids.length) {
     toast('Select at least one test to run');
     return;
@@ -1560,8 +1681,9 @@ function selectAllCategories() {
 
 async function runById(id) {
   _activeTestId = id;
-  // Open the edit row so inline result is visible
-  editRow(id);
+  // Keep the row open if the user already expanded it; otherwise open it.
+  const editEl = document.getElementById('editrow_' + id);
+  if (editEl && editEl.style.display === 'none') editRow(id);
   // Show running indicator inline
   const inlineEl = document.getElementById('result_' + id);
   if (inlineEl) {
@@ -2214,9 +2336,198 @@ function formatTimestamp(stem) {
   return `${pad(month)}/${pad(day)}/${year} ${pad(hour)}:${pad(min)}:${pad(sec)} ET`;
 }
 
+function formatDisplayTimestamp(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^\\d{8}_?\\d{4,6}$/.test(raw)) return formatTimestamp(raw);
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const pick = type => parts.find(p => p.type === type)?.value || '';
+  return `${pick('month')}/${pick('day')}/${pick('year')} ${pick('hour')}:${pick('minute')}:${pick('second')} ET`;
+}
+
+function _timestampSortValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return 0;
+  const stem = raw.match(/^(\\d{4})(\\d{2})(\\d{2})_?(\\d{2})(\\d{2})(\\d{2})?$/);
+  if (stem) {
+    return new Date(
+      parseInt(stem[1], 10),
+      parseInt(stem[2], 10) - 1,
+      parseInt(stem[3], 10),
+      parseInt(stem[4], 10),
+      parseInt(stem[5], 10),
+      parseInt(stem[6] || '0', 10),
+    ).getTime();
+  }
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+function _responseTimestamp(ts, fallback = '') {
+  const val = ts || fallback || '';
+  return val ? formatDisplayTimestamp(val) : '';
+}
+
+function _normalizeTranscriptTurns(test, runStem) {
+  const startedAt = test.started_at || runStem;
+  const finishedAt = test.finished_at || runStem;
+  const transcript = Array.isArray(test.transcript) ? test.transcript : [];
+  if (transcript.length) {
+    return transcript.map((turn, idx) => ({
+      turn: turn.turn || idx + 1,
+      user: turn.user || '',
+      responses: Array.isArray(turn.responses) ? turn.responses : [],
+      started_at: turn.started_at || startedAt,
+      finished_at: turn.finished_at || finishedAt,
+    }));
+  }
+
+  const tasks = Array.isArray(test.tasks_sent) ? test.tasks_sent : [];
+  const resps = Array.isArray(test.responses) ? test.responses : [];
+  if (!tasks.length && !resps.length) return [];
+  if (tasks.length <= 1 && resps.length <= 1) {
+    return [{
+      turn: 1,
+      user: tasks.join('\n'),
+      responses: resps,
+      started_at: startedAt,
+      finished_at: finishedAt,
+    }];
+  }
+  return tasks.map((task, idx) => ({
+    turn: idx + 1,
+    user: task,
+    responses: resps[idx] ? [resps[idx]] : [],
+    started_at: startedAt,
+    finished_at: finishedAt,
+  }));
+}
+
+function _renderTranscriptBlock(turn) {
+  const userTs = _responseTimestamp(turn.started_at);
+  const respTs = _responseTimestamp(turn.finished_at, turn.started_at);
+  const responses = (turn.responses || []).map((rsp, idx) => `
+    <div style="background:#f8fafc;border-left:4px solid #94a3b8;padding:10px 12px;border-radius:8px;margin-bottom:6px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
+        <div style="font-size:0.84rem;font-weight:700;color:#334155;">Asmi ${idx+1}</div>
+        <div style="font-size:0.72rem;color:#64748b;font-family:monospace;">${esc(respTs)}</div>
+      </div>
+      <div style="color:#0f172a;font-size:0.9rem;white-space:pre-wrap;">${esc(rsp)}</div>
+    </div>`).join('');
+  return `<div style="border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin-bottom:10px;background:#ffffff;">
+    <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;">
+      <div style="font-weight:700;color:#0f172a;">Turn ${turn.turn || ''}</div>
+      <div style="font-size:0.72rem;color:#64748b;font-family:monospace;">${esc(userTs)}</div>
+    </div>
+    <div style="background:#eef2ff;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:8px;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
+        <div style="font-size:0.84rem;font-weight:700;color:#1e3a8a;">You</div>
+        <div style="font-size:0.72rem;color:#64748b;font-family:monospace;">${esc(userTs)}</div>
+      </div>
+      <div style="color:#0f172a;font-size:0.9rem;white-space:pre-wrap;">${esc(turn.user || '')}</div>
+    </div>
+    ${responses || '<div style="color:#64748b;font-size:0.85rem;">No responses recorded.</div>'}
+  </div>`;
+}
+
+function _renderTranscriptCard(run, test) {
+  const turns = _normalizeTranscriptTurns(test, run.stem || test.stem || '');
+  const verdict = (test.verdict || 'UNCLEAR').toUpperCase();
+  const vColor = verdict === 'PASS' ? '#166534' : verdict === 'FAIL' ? '#991b1b' : '#92400e';
+  const vBg = verdict === 'PASS' ? '#dcfce7' : verdict === 'FAIL' ? '#fee2e2' : '#fef3c7';
+  const ts = _responseTimestamp(test.started_at || run.stem || test.stem || '');
+  return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+      <span style="font-weight:700;color:#0f172a;">${esc(test.id)}: ${esc(test.name)}</span>
+      <span style="background:${vBg};color:${vColor};padding:4px 8px;border-radius:999px;font-size:0.75rem;">${verdict}</span>
+      <span style="color:#64748b;font-size:0.78rem;font-family:monospace;">${esc(ts)}</span>
+      <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:999px;font-size:0.75rem;">${turns.length} turn(s)</span>
+    </div>
+    ${turns.length ? turns.map(_renderTranscriptBlock).join('') : '<div style="color:#64748b;font-size:0.85rem;">No transcript available.</div>'}
+    ${test.reason ? `<div style="margin-top:8px;font-size:0.85rem;color:#475569;"><strong>Judge:</strong> ${esc(test.reason)}</div>` : ''}
+  </div>`;
+}
+
+function _flattenConversationRows(data) {
+  const rows = [];
+  (data || []).forEach(run => {
+    (run.tests || []).forEach(test => {
+      const turns = _normalizeTranscriptTurns(test, run.stem || '');
+      if (!turns.length) {
+        if ((test.tasks_sent || []).length) {
+          rows.push({
+            ts: test.started_at || run.stem || '',
+            runStem: run.stem || '',
+            testId: test.id || '',
+            testName: test.name || '',
+            side: 'you',
+            text: (test.tasks_sent || []).join('\n'),
+          });
+        }
+        if ((test.responses || []).length) {
+          rows.push({
+            ts: test.finished_at || test.started_at || run.stem || '',
+            runStem: run.stem || '',
+            testId: test.id || '',
+            testName: test.name || '',
+            side: 'asmi',
+            text: (test.responses || []).join('\n'),
+          });
+        }
+        return;
+      }
+      turns.forEach(turn => {
+        rows.push({
+          ts: turn.started_at || test.started_at || run.stem || '',
+          runStem: run.stem || '',
+          testId: test.id || '',
+          testName: test.name || '',
+          side: 'you',
+          text: turn.user || '',
+        });
+        (turn.responses || []).forEach(rsp => {
+          rows.push({
+            ts: turn.finished_at || turn.started_at || test.finished_at || run.stem || '',
+            runStem: run.stem || '',
+            testId: test.id || '',
+            testName: test.name || '',
+            side: 'asmi',
+            text: rsp || '',
+          });
+        });
+      });
+    });
+  });
+  rows.sort((a, b) => {
+    const ta = _timestampSortValue(a.ts || 0);
+    const tb = _timestampSortValue(b.ts || 0);
+    return tb - ta;
+  });
+  return rows;
+}
+
 async function loadResponses() {
   const responsesList = document.getElementById('responsesList');
   responsesList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Loading…</p>';
+  const transcriptBtn = document.getElementById('responsesViewTranscriptBtn');
+  const historyBtn = document.getElementById('responsesViewHistoryBtn');
+  if (transcriptBtn && historyBtn) {
+    transcriptBtn.style.background = _responsesViewMode === 'transcript' ? '#e0e7ff' : '#ffffff';
+    transcriptBtn.style.color = _responsesViewMode === 'transcript' ? '#3730a3' : '#0f172a';
+    historyBtn.style.background = _responsesViewMode === 'history' ? '#e0e7ff' : '#ffffff';
+    historyBtn.style.color = _responsesViewMode === 'history' ? '#3730a3' : '#0f172a';
+  }
   try {
     const res = await fetch('/api/responses');
     const data = await res.json();
@@ -2224,54 +2535,43 @@ async function loadResponses() {
       responsesList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">No responses yet.</p>';
       return;
     }
+    if (_responsesViewMode === 'history') {
+      const rows = _flattenConversationRows(data);
+      if (!rows.length) {
+        responsesList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">No conversation rows yet.</p>';
+        return;
+      }
+      responsesList.innerHTML = `
+        <div style="border:1px solid #e2e8f0;border-radius:14px;padding:18px;background:#f8fafc;">
+          <div style="font-size:0.95rem;font-weight:700;color:#0f172a;margin-bottom:14px;">All conversations</div>
+          <div style="display:grid;gap:10px;">
+            ${rows.map(row => `
+              <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
+                  <span style="font-size:0.72rem;color:#64748b;font-family:monospace;">${esc(formatDisplayTimestamp(row.ts || ''))}</span>
+                  <span style="font-size:0.72rem;font-weight:700;color:#334155;background:#e2e8f0;padding:2px 8px;border-radius:999px;">${esc(row.runStem || '')}</span>
+                  <span style="font-size:0.72rem;color:#475569;">${esc(row.testId || '')} · ${esc(row.testName || '')}</span>
+                  <span style="font-size:0.72rem;font-weight:700;color:${row.side === 'you' ? '#1d4ed8' : '#15803d'};background:${row.side === 'you' ? '#dbeafe' : '#dcfce7'};padding:2px 8px;border-radius:999px;">${row.side === 'you' ? 'You' : 'Asmi'}</span>
+                </div>
+                <div style="color:#0f172a;font-size:0.9rem;white-space:pre-wrap;line-height:1.55;">${esc(row.text || '')}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+      return;
+    }
+
     let html = '';
     data.forEach(run => {
       const ts = formatTimestamp(run.stem);
-      let runTests = '';
-      run.tests.forEach(test => {
-        const tasks = (test.tasks_sent || []).map((task, idx) =>
-          `<div style="background:#eef2ff;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:8px;margin-bottom:6px;">
-             <div style="font-size:0.85rem;font-weight:700;color:#1e3a8a;margin-bottom:4px;">Sent message ${idx+1}</div>
-             <div style="color:#0f172a;font-size:0.9rem;white-space:pre-wrap;">${esc(task)}</div>
-           </div>`).join('');
-        const responses = (test.responses || []).map((rsp, idx) =>
-          `<div style="background:#f7fee7;border-left:4px solid #16a34a;padding:10px 12px;border-radius:8px;margin-bottom:6px;">
-             <div style="font-size:0.85rem;font-weight:700;color:#166534;margin-bottom:4px;">Response ${idx+1}</div>
-             <div style="color:#14532d;font-size:0.9rem;white-space:pre-wrap;">${esc(rsp)}</div>
-           </div>`).join('');
-        const transcript = (test.transcript || []).map(turn => {
-          const turnResponses = (turn.responses || []).map((rsp, ridx) =>
-            `<div style="background:#f8fafc;border-left:4px solid #94a3b8;padding:10px 12px;border-radius:8px;margin-bottom:6px;">
-               <div style="font-size:0.84rem;font-weight:700;color:#334155;margin-bottom:4px;">Asmi ${ridx+1}</div>
-               <div style="color:#0f172a;font-size:0.9rem;white-space:pre-wrap;">${esc(rsp)}</div>
-             </div>`).join('');
-          return `<div style="border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin-bottom:10px;background:#ffffff;">
-            <div style="font-weight:700;color:#0f172a;margin-bottom:8px;">Turn ${turn.turn || ''}</div>
-            <div style="background:#eef2ff;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:8px;margin-bottom:8px;">
-              <div style="font-size:0.84rem;font-weight:700;color:#1e3a8a;margin-bottom:4px;">You</div>
-              <div style="color:#0f172a;font-size:0.9rem;white-space:pre-wrap;">${esc(turn.user || '')}</div>
-            </div>
-            ${turnResponses}
-          </div>`;
-        }).join('');
-        runTests += `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#ffffff;">
-          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
-            <span style="font-weight:700;color:#0f172a;">${esc(test.id)}: ${esc(test.name)}</span>
-            <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:999px;font-size:0.75rem;">${test.tasks_sent?.length || 0} sent</span>
-            <span style="background:#dcfce7;color:#166534;padding:4px 8px;border-radius:999px;font-size:0.75rem;">${test.responses?.length || 0} response(s)</span>
-          </div>
-          ${tasks || '<div style="color:#64748b;font-size:0.85rem;margin-bottom:6px;">No task messages recorded.</div>'}
-          ${responses || '<div style="color:#64748b;font-size:0.85rem;">No responses recorded.</div>'}
-          ${transcript ? `<div style="margin-top:12px;"><div style="font-weight:700;color:#0f172a;margin-bottom:8px;">Transcript</div>${transcript}</div>` : ''}
-        </div>`;
-      });
+      const runTests = (run.tests || []).map(test => _renderTranscriptCard(run, test)).join('');
       html += `<div style="border:1px solid #e2e8f0;border-radius:14px;padding:18px;background:#f8fafc;">
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;">
           <div style="font-size:0.95rem;font-weight:700;color:#0f172a;">Run ${ts}</div>
           <div style="background:#e2e8f0;color:#1d4ed8;padding:4px 10px;border-radius:999px;font-size:0.78rem;">${run.tests.length} test${run.tests.length===1?'':'s'}</div>
           <div style="background:#d1fae5;color:#15803d;padding:4px 10px;border-radius:999px;font-size:0.78rem;">${run.totalResponses} total responses</div>
         </div>
-        ${runTests}
+        <div style="display:grid;gap:12px;">${runTests}</div>
       </div>`;
     });
     responsesList.innerHTML = html;
@@ -2426,6 +2726,11 @@ class Handler(BaseHTTPRequestHandler):
                         tests.append({
                             "id": r.get("id"),
                             "name": r.get("name"),
+                            "category": r.get("category"),
+                            "verdict": r.get("verdict"),
+                            "reason": r.get("reason"),
+                            "started_at": r.get("started_at"),
+                            "finished_at": r.get("finished_at"),
                             "tasks_sent": r.get("tasks_sent", []),
                             "responses": r.get("responses", []),
                             "transcript": r.get("transcript", []),
@@ -2445,6 +2750,11 @@ class Handler(BaseHTTPRequestHandler):
                     tests.append({
                         "id": r.get("id"),
                         "name": r.get("name"),
+                        "category": r.get("category"),
+                        "verdict": r.get("verdict"),
+                        "reason": r.get("reason"),
+                        "started_at": r.get("started_at"),
+                        "finished_at": r.get("finished_at"),
                         "tasks_sent": r.get("tasks_sent", []),
                         "responses": r.get("responses", []),
                         "transcript": r.get("transcript", []),
