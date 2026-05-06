@@ -1160,6 +1160,8 @@ function autoGenerateId() {
 
 async function load() {
   _initCatDropdowns();
+  showTab('main');
+  document.getElementById('testList').innerHTML = '<p style="color:#94a3b8;padding:20px">Loading test cases…</p>';
   try {
     const res = await fetch('/api/tests');
     tests = await res.json();
@@ -1167,7 +1169,6 @@ async function load() {
     collapsedCats = new Set(CAT_ORDER);
     selectedTestIds = new Set();
     render();
-    showTab('main');
   } catch(e) {
     document.getElementById('testList').innerHTML = '<p style="color:#ef4444;padding:20px">Failed to load test cases. Check GitHub env vars.</p>';
   }
