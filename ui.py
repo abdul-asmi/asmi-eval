@@ -1479,6 +1479,9 @@ class Handler(BaseHTTPRequestHandler):
             # Daemon calls this: update heartbeat, return + clear any pending run
             _last_heartbeat = time.time()
             run = _pending_run
+            import sys
+            print(f"[/api/poll] _pending_run at poll time: {_pending_run}", file=sys.stderr)
+            sys.stderr.flush()
             _pending_run = None
             stop = _stop_requested
             _stop_requested = False  # clear after daemon picks it up
@@ -1511,6 +1514,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
         elif path == "/api/run":
+            global _pending_run, _run_output, _run_status, _run_started, _run_results
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
             try:
@@ -1522,6 +1526,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id":       data.get("id"),
                 "ts":       time.time(),
             }
+            print(f"[/api/run] Set _pending_run = {_pending_run}")
             _run_output  = ""
             _run_status  = "running"
             _run_started = time.time()

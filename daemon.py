@@ -379,10 +379,15 @@ def run():
     print(f"    {COMMAND_PREFIX}run all    → run full test suite")
     print(f"    {COMMAND_PREFIX}status     → last run summary\n")
 
+    poll_count = 0
     while True:
         try:
             # Heartbeat: poll UI to stay online
             poll_data = _poll_railway_full()
+            poll_count += 1
+            if poll_count % 10 == 0:  # Log every 50 seconds (10 polls × 5s)
+                has_run = bool(poll_data.get("run"))
+                print(f"  [poll #{poll_count}] UI poll ok, pending_run={has_run}")
 
             messages = _get_new_commands(since_ns)
 
