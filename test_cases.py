@@ -29,7 +29,7 @@ TEST_CASES = [
         'type': 'burst',
         'messages': ['What is the weather like in Pittsburgh today?', 'What are the top 3 pizza places in Pittsburgh?', 'What time does Target in Pittsburgh open on weekdays?', 'Find me a highly rated plumber in Pittsburgh'],
         'burst_delay': 1,
-        'wait': 240,
+        'wait': 80,
         'expected_responses': 4,
         'pass_criteria': 'All 4 responses arrive within the wait window. None are dropped, merged, or stuck. Each response is relevant to its specific task.',
     },
