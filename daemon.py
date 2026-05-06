@@ -381,6 +381,9 @@ def run():
 
     while True:
         try:
+            # Heartbeat: poll UI to stay online
+            poll_data = _poll_railway_full()
+
             messages = _get_new_commands(since_ns)
 
             for msg in messages:
@@ -409,8 +412,7 @@ def run():
 
                 print(f"  → Reply ({len(response)} chars): {response[:120]}")
 
-            # Check Railway UI for run requests triggered from the browser
-            poll_data = _poll_railway_full()
+            # Check for run requests triggered from the browser
             if poll_data.get("stop"):
                 pass  # already cleared by server; nothing running here
             pending = poll_data.get("run")
@@ -434,7 +436,9 @@ def run():
             print("\n\n  Daemon stopped.")
             break
         except Exception as e:
+            import traceback
             print(f"  [daemon error] {e}")
+            traceback.print_exc()
 
         time.sleep(DAEMON_POLL)
 
