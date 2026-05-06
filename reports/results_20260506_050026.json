@@ -1,0 +1,23 @@
+[
+  {
+    "id": "cap_01",
+    "name": "What can you do: calling clearly mentioned",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "What can you help me with?"
+    ],
+    "responses": [
+      "I'm the assistant who handles the real-world stuff\u2014calling the bank, booking appointments, or chasing your plumber.",
+      "Since I'm curious, what do you do for work? Want to see how much of your day I can save."
+    ],
+    "verdict": "PASS",
+    "reason": "The response explicitly identifies phone calling as a capability and provides specific examples of the types of calls it can make.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-06T08:59:59.403765+00:00",
+    "finished_at": "2026-05-06T09:00:20.563334+00:00",
+    "matched_responses": "\"I'm the assistant who handles the real-world stuff\u2014calling the bank, booking appointments, or chasing your plumber.\""
+  }
+]
