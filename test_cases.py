@@ -308,9 +308,9 @@ TEST_CASES = [
         'name': 'Explicit language in request: no re-ask',
         'category': 'language_pref',
         'type': 'single',
-        'message': 'Call a restaurant in Pittsburgh in English and ask about their menu',
+        'message': 'Call a restaurant in Pittsburgh in French and ask about their menu',
         'wait': 120,
-        'pass_criteria': 'Asmi uses English on the call without asking for language preference first. No language prompt appears.',
+        'pass_criteria': 'Asmi uses French on the call without asking for language preference first. No language prompt appears.',
     },
     {
         'id': 'loc_01',
