@@ -1,0 +1,24 @@
+[
+  {
+    "id": "preonb_03",
+    "name": "Pre-onboarding: User says NO to first call, then offers task \u2192 text-only flow",
+    "category": "onboarding",
+    "type": "sequence",
+    "tasks_sent": [
+      "Hi there",
+      "No, I don't want a call",
+      "But I have a task: find me a plumber in Pittsburgh"
+    ],
+    "responses": [],
+    "verdict": "FAIL",
+    "reason": "Only got 0/4 responses \u2014 4 dropped or timed out.",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Only got 0/4 responses \u2014 4 dropped or timed out."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-07T07:50:09.364817+00:00",
+    "finished_at": "2026-05-07T07:57:51.432463+00:00"
+  }
+]
