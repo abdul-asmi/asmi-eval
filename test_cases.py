@@ -283,6 +283,15 @@ TEST_CASES = [
         'pass_criteria': "If the business didn't know or answer, Asmi reports that honestly. Does not invent a chef's name or any other fabricated detail.",
     },
     {
+        'name': 'Adhoc call nudge',
+        'category': 'Launch',
+        'type': 'single',
+        'pass_criteria': 'Asmi asks to jump on a call.',
+        'message': 'Need to make a plan for engagement part for a friend in LA',
+        'manual_check': 'Check if the call got triggered after saying yes',
+        'id': 'lau_01',
+    },
+    {
         'id': 'lang_01',
         'name': 'First call task: no language preference asked before call fires',
         'category': 'language_pref',
