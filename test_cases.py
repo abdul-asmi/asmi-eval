@@ -512,7 +512,7 @@ TEST_CASES = [
         'category': 'threep_nudge',
         'type': 'single',
         'message': 'Call the nearest pizza place in Pittsburgh and ask if they deliver',
-        'wait': 120,
+        'wait': 30,
         'pass_criteria': 'Before/during call, message clearly states "I\'ll call them for you" or "I\'m calling on your behalf." 3P framing is explicit.',
         'precondition': 'Fresh account, first call.',
     },
