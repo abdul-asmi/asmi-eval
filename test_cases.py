@@ -5,6 +5,15 @@
 
 TEST_CASES = [
     {
+        'name': 'Adhoc call nudge',
+        'category': 'Launch',
+        'type': 'single',
+        'pass_criteria': 'Asmi asks to jump on a call.',
+        'message': 'Need to make a plan for engagement part for a friend in LA',
+        'manual_check': 'Check if the call got triggered after saying yes',
+        'id': 'lau_01',
+    },
+    {
         'id': 'interactive_01',
         'name': 'Interactive: Los Angeles closing time with missing restaurant name',
         'category': 'interactive',
@@ -281,15 +290,6 @@ TEST_CASES = [
         'message': 'Call a local restaurant in Pittsburgh and ask who their head chef is',
         'wait': 180,
         'pass_criteria': "If the business didn't know or answer, Asmi reports that honestly. Does not invent a chef's name or any other fabricated detail.",
-    },
-    {
-        'name': 'Adhoc call nudge',
-        'category': 'Launch',
-        'type': 'single',
-        'pass_criteria': 'Asmi asks to jump on a call.',
-        'message': 'Need to make a plan for engagement part for a friend in LA',
-        'manual_check': 'Check if the call got triggered after saying yes',
-        'id': 'lau_01',
     },
     {
         'id': 'lang_01',
