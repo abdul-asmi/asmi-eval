@@ -1,0 +1,23 @@
+[
+  {
+    "id": "cap_01",
+    "name": "What can you do: calling clearly mentioned",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "What can you help me with?"
+    ],
+    "responses": [
+      "I handle your daily friction. Think booking, chasing, and coordinating\u2014anything that eats your time.",
+      "Need a reservation, an errand run, or a problem solved? I get it done. Call you?"
+    ],
+    "verdict": "FAIL",
+    "reason": "While the response mentions \"Call you?\", it is phrased as a confusing question rather than clearly explaining the capability of making outbound business phone calls.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-09T23:00:30.844964+00:00",
+    "finished_at": "2026-05-09T23:00:46.012958+00:00",
+    "matched_responses": "\"Need a reservation, an errand run, or a problem solved? I get it done. Call you?\""
+  }
+]
