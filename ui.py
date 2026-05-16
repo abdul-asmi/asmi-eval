@@ -1860,13 +1860,15 @@ async function _pollOutput() {
   } catch(e) {}
 }
 
-function _refreshHistoryTabs() {
+async function _refreshHistoryTabs() {
   const historySection = document.getElementById('historySection');
   const responsesSection = document.getElementById('responsesSection');
   const analysisSection = document.getElementById('analysisSection');
-  if (historySection && historySection.style.display !== 'none') loadHistory();
-  if (responsesSection && responsesSection.style.display !== 'none') loadResponses();
-  if (analysisSection && analysisSection.style.display !== 'none') loadAnalysis();
+  const scrollY = window.scrollY;
+  if (historySection && historySection.style.display !== 'none') await loadHistory(true);
+  if (responsesSection && responsesSection.style.display !== 'none') await loadResponses(true);
+  if (analysisSection && analysisSection.style.display !== 'none') await loadAnalysis(true);
+  window.scrollTo(0, scrollY);
 }
 
 function _startHistoryAutoRefresh() {
@@ -2290,9 +2292,9 @@ function showTab(tab) {
   }
 }
 
-async function loadHistory() {
+async function loadHistory(silent = false) {
   const historyList = document.getElementById('historyList');
-  historyList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Loading…</p>';
+  if (!silent) historyList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Loading…</p>';
   try {
     const res = await fetch('/api/history');
     const data = await res.json();
@@ -2530,9 +2532,9 @@ function _flattenConversationRows(data) {
   return rows;
 }
 
-async function loadResponses() {
+async function loadResponses(silent = false) {
   const responsesList = document.getElementById('responsesList');
-  responsesList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Loading…</p>';
+  if (!silent) responsesList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Loading…</p>';
   const transcriptBtn = document.getElementById('responsesViewTranscriptBtn');
   const historyBtn = document.getElementById('responsesViewHistoryBtn');
   if (transcriptBtn && historyBtn) {
@@ -2593,11 +2595,13 @@ async function loadResponses() {
   }
 }
 
-async function loadAnalysis() {
+async function loadAnalysis(silent = false) {
   const summaryEl = document.getElementById('analysisSummary');
   const listEl = document.getElementById('analysisList');
-  summaryEl.innerHTML = '<p style="color:#94a3b8;padding:12px 0;">Loading analysis…</p>';
-  listEl.innerHTML = '';
+  if (!silent) {
+    summaryEl.innerHTML = '<p style="color:#94a3b8;padding:12px 0;">Loading analysis…</p>';
+    listEl.innerHTML = '';
+  }
   try {
     const res = await fetch('/api/analysis');
     const data = await res.json();
