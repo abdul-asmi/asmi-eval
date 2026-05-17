@@ -70,75 +70,6 @@ TEST_CASES = [
         'pass_criteria': 'Asmi asks the minimum follow-up needed, keeps the conversation going, and finalizes the call using the correct local timezone.',
     },
     {
-        'name': 'Simple task → immediate call',
-        'category': 'adhoc_call_v1',
-        'type': 'sequence',
-        'message': 'cmd_reset_history
-Need to plan a birthday party',
-        'pass_criteria': 'Asmi responds in chat acknowledging the task and either asks clarifying questions or proposes next steps.',
-        'messages': ['cmd_reset_history
-Need to plan a birthday party'],
-        'id': 'adh_01',
-    },
-    {
-        'name': 'Multi-part task → all covered',
-        'category': 'adhoc_call_v1',
-        'type': 'sequence',
-        'message': 'cmd_reset_history
-I need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.',
-        'pass_criteria': 'Asmi acknowledges all 3 tasks in chat. Follow-up messages cover each item with status or next steps.',
-        'messages': ['cmd_reset_history
-I need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.'],
-        'id': 'adh_02',
-    },
-    {
-        'name': 'Task → call deferred, never comes (regression)',
-        'category': 'adhoc_call_v1',
-        'type': 'sequence',
-        'message': 'cmd_reset_history
-Can you call someone and check on my prescription refill at the pharmacy?',
-        'pass_criteria': 'REGRESSION: Asmi should send a chat update within 3 min. If no message received, flag as bug.',
-        'manual_check': 'Wait 3 min after sending. Check if any follow-up chat message arrived.',
-        'messages': ['cmd_reset_history
-Can you call someone and check on my prescription refill at the pharmacy?'],
-        'id': 'adh_03',
-    },
-    {
-        'name': 'Domain bleed on call',
-        'category': 'adhoc_call_v1',
-        'type': 'sequence',
-        'message': 'cmd_reset_history
-Can you help me cancel my gym membership?',
-        'pass_criteria': "Asmi's chat messages reference gym/membership only. No unrelated domain mentioned in reply.",
-        'messages': ['cmd_reset_history
-Can you help me cancel my gym membership?'],
-        'id': 'adh_04',
-    },
-    {
-        'name': 'Missed call → retry logic',
-        'category': 'adhoc_call_v1',
-        'type': 'sequence',
-        'message': 'cmd_reset_history
-Please call my landlord about the noise complaint I filed last week.',
-        'pass_criteria': 'Asmi sends a chat update about the call attempt. Message should offer to retry or ask how to proceed — not go silent.',
-        'messages': ['cmd_reset_history
-Please call my landlord about the noise complaint I filed last week.'],
-        'id': 'adh_05',
-    },
-    {
-        'name': 'Mid-task pivot',
-        'category': 'adhoc_call_v1',
-        'type': 'sequence',
-        'message': 'cmd_reset_history
-Can you call my landlord at (412) 555-0166 about the broken heater?
-Actually forget that — call the plumber at (412) 555-0177 instead.',
-        'pass_criteria': "Asmi's chat response acknowledges the pivot cleanly. No reference to the cancelled task continuing. Confirms new task.",
-        'messages': ['cmd_reset_history
-Can you call my landlord at (412) 555-0166 about the broken heater?
-Actually forget that — call the plumber at (412) 555-0177 instead.'],
-        'id': 'adh_06',
-    },
-    {
         'id': 'onboard_01',
         'name': 'First message gets exactly one response',
         'category': 'onboarding',
@@ -415,6 +346,75 @@ Actually forget that — call the plumber at (412) 555-0177 instead.'],
         'wait': 180,
         'expected_responses': 2,
         'pass_criteria': 'Message 2 does not ask for location again — uses Pittsburgh from message 1.',
+    },
+    {
+        'name': 'Simple task → immediate call',
+        'category': 'adhoc_call_v1',
+        'type': 'sequence',
+        'message': 'cmd_reset_history
+Need to plan a birthday party',
+        'pass_criteria': 'Asmi responds in chat acknowledging the task and either asks clarifying questions or proposes next steps.',
+        'messages': ['cmd_reset_history
+Need to plan a birthday party'],
+        'id': 'adh_01',
+    },
+    {
+        'name': 'Multi-part task → all covered',
+        'category': 'adhoc_call_v1',
+        'type': 'sequence',
+        'message': 'cmd_reset_history
+I need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.',
+        'pass_criteria': 'Asmi acknowledges all 3 tasks in chat. Follow-up messages cover each item with status or next steps.',
+        'messages': ['cmd_reset_history
+I need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.'],
+        'id': 'adh_02',
+    },
+    {
+        'name': 'Task → call deferred, never comes (regression)',
+        'category': 'adhoc_call_v1',
+        'type': 'sequence',
+        'message': 'cmd_reset_history
+Can you call someone and check on my prescription refill at the pharmacy?',
+        'pass_criteria': 'REGRESSION: Asmi should send a chat update within 3 min. If no message received, flag as bug.',
+        'manual_check': 'Wait 3 min after sending. Check if any follow-up chat message arrived.',
+        'messages': ['cmd_reset_history
+Can you call someone and check on my prescription refill at the pharmacy?'],
+        'id': 'adh_03',
+    },
+    {
+        'name': 'Domain bleed on call',
+        'category': 'adhoc_call_v1',
+        'type': 'sequence',
+        'message': 'cmd_reset_history
+Can you help me cancel my gym membership?',
+        'pass_criteria': "Asmi's chat messages reference gym/membership only. No unrelated domain mentioned in reply.",
+        'messages': ['cmd_reset_history
+Can you help me cancel my gym membership?'],
+        'id': 'adh_04',
+    },
+    {
+        'name': 'Missed call → retry logic',
+        'category': 'adhoc_call_v1',
+        'type': 'sequence',
+        'message': 'cmd_reset_history
+Please call my landlord about the noise complaint I filed last week.',
+        'pass_criteria': 'Asmi sends a chat update about the call attempt. Message should offer to retry or ask how to proceed — not go silent.',
+        'messages': ['cmd_reset_history
+Please call my landlord about the noise complaint I filed last week.'],
+        'id': 'adh_05',
+    },
+    {
+        'name': 'Mid-task pivot',
+        'category': 'adhoc_call_v1',
+        'type': 'sequence',
+        'message': 'cmd_reset_history
+Can you call my landlord at (412) 555-0166 about the broken heater?
+Actually forget that — call the plumber at (412) 555-0177 instead.',
+        'pass_criteria': "Asmi's chat response acknowledges the pivot cleanly. No reference to the cancelled task continuing. Confirms new task.",
+        'messages': ['cmd_reset_history
+Can you call my landlord at (412) 555-0166 about the broken heater?
+Actually forget that — call the plumber at (412) 555-0177 instead.'],
+        'id': 'adh_06',
     },
     {
         'id': 'cap_01',
