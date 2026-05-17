@@ -1178,7 +1178,7 @@ textarea { resize: vertical; min-height: 70px; }
       </ul>
 
       <div style="font-weight:800;margin:12px 0 6px;">List formatting in cells</div>
-      <div style="margin-bottom:12px;">For <code>messages</code>, <code>followups</code>, <code>stop_when</code>: use multiple lines in the cell (best) or separate items with <code>|</code>. (Commas also work for <code>stop_when</code>.)</div>
+      <div style="margin-bottom:12px;">For <code>messages</code>, <code>followups</code>, <code>stop_when</code>: use multiple lines in the cell (best) or separate items with <code>|</code>. (Commas also work for <code>stop_when</code>.) If you ever edit <code>test_cases.py</code> by hand, don’t paste raw newlines inside single-quoted strings — use <code>\\n</code> instead (example: <code>'cmd_reset_history\\nNeed to plan a party'</code>).</div>
 
       <div style="font-weight:800;margin:12px 0 6px;">Timing defaults</div>
       <div style="margin-bottom:12px;">If a test row has no <code>wait</code>, the default timeout is <b>60 seconds</b>. You can override per test with the <code>wait</code> column. Other knobs include <code>burst_delay</code>, <code>sequence_delay</code>, <code>dedup_delay</code>, <code>setup_wait</code>.</div>
