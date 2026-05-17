@@ -379,8 +379,6 @@ Can you call someone and check on my prescription refill at the pharmacy?'],
         'name': 'Domain bleed on call',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-Can you help me cancel my gym membership?',
         'pass_criteria': "Asmi's chat messages reference gym/membership only. No unrelated domain mentioned in reply.",
         'messages': ['cmd_reset_history
 Can you help me cancel my gym membership?'],
