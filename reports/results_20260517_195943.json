@@ -1,0 +1,29 @@
+[
+  {
+    "id": "adh_01",
+    "name": "Simple task \u2192 immediate call",
+    "category": "adhoc_call_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history",
+      "Need to plan a birthday party"
+    ],
+    "responses": [
+      "\u2713 Chat history and planning canvas cleared.",
+      "Love a good celebration.",
+      "Quick call to nail down the vibe? Date, guest count, and how wild the theme should be.",
+      "Way faster than typing it all out."
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi acknowledged the birthday planning task and immediately proposed a call to clarify the event details.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 4/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T23:57:57.688582+00:00",
+    "finished_at": "2026-05-17T23:59:37.148629+00:00",
+    "matched_responses": "\"Love a good celebration.\", \"Quick call to nail down the vibe? Date, guest count, and how wild the theme should be.\", \"Way faster than typing it all out.\""
+  }
+]
