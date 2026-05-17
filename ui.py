@@ -1495,7 +1495,16 @@ async function load() {
     selectedTestIds = new Set();
     render();
   } catch(e) {
-    document.getElementById('testList').innerHTML = '<p style="color:#ef4444;padding:20px">Failed to load test cases. Check GitHub env vars.</p>';
+    const msg = (e && e.message) ? esc(e.message) : 'Unknown error';
+    document.getElementById('testList').innerHTML =
+      `<div style="padding:20px">
+         <div style="color:#ef4444;font-weight:800;margin-bottom:6px;">Failed to load test cases</div>
+         <div style="color:#ef4444;font-family:monospace;font-size:0.85rem;white-space:pre-wrap;">${msg}</div>
+         <div style="margin-top:10px;color:#64748b;font-size:0.86rem;line-height:1.5;">
+           If running on Railway with GitHub storage enabled, set <code>GITHUB_TOKEN</code>, <code>GITHUB_REPO</code>, and optional <code>GITHUB_FILE_PATH</code>.
+           Otherwise unset them to use the repo’s local <code>test_cases.py</code>.
+         </div>
+       </div>`;
   }
 }
 
