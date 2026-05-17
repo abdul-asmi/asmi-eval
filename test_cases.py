@@ -195,7 +195,7 @@ Call (412) 555-0000 and ask about their hours.'],
     },
     {
         'name': 'PDF from chat history',
-        'category': 'pdf_v1',
+        'category': 'PDF',
         'type': 'sequence',
         'pass_criteria': 'Asmi responds in chat with research, options, or next steps. If PDF is generated, a file is delivered in chat.',
         'messages': ["cmd_reset_history
@@ -204,7 +204,7 @@ Can you help me book a flight to Honalulu from Hyderabad departing June 1st to J
     },
     {
         'name': 'PDF from call content',
-        'category': 'pdf_v1',
+        'category': 'PDF',
         'type': 'sequence',
         'pass_criteria': "Asmi either delivers a PDF file in chat or explains why one can't be generated. Should not confirm delivery if no file arrives.",
         'manual_check': 'Run after completing an ad hoc call in the same session.',
@@ -215,7 +215,7 @@ Make me a plan PDF from what we just discussed.'],
     },
     {
         'name': 'False confirm — no delivery (regression)',
-        'category': 'pdf_v1',
+        'category': 'PDF',
         'type': 'sequence',
         'pass_criteria': "REGRESSION: If Asmi says 'Sending now' or 'Here you go' but no PDF file arrives in chat within 60s, flag as bug.",
         'messages': ['cmd_reset_history
@@ -224,7 +224,7 @@ Can you send me a PDF summary of my tasks?'],
     },
     {
         'name': 'Multi-task PDF with status',
-        'category': 'pdf_v1',
+        'category': 'PDF',
         'type': 'sequence',
         'pass_criteria': 'PDF delivered as file in chat. Covers both tasks (flight search + grocery list) with status for each.',
         'messages': ["cmd_reset_history
