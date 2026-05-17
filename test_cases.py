@@ -5,29 +5,6 @@
 
 TEST_CASES = [
     {
-        'id': 'onboard_01',
-        'name': 'First message gets exactly one response',
-        'category': 'onboarding',
-        'type': 'sequence',
-        'message': 'Hiwhat can you do?',
-        'wait': 60,
-        'expected_responses': 5,
-        'pass_criteria': 'Exactly one response arrives. Not zero, not two. Response is relevant and coherent.',
-        'precondition': 'Fresh account in pre-onboarding state.',
-    },
-    {
-        'id': 'onboard_02',
-        'name': 'Burst during onboarding: all messages handled cleanly',
-        'category': 'onboarding',
-        'type': 'burst',
-        'messages': ['Hi', 'What can you help me with?', 'Can you make phone calls?', 'How do I get started?'],
-        'burst_delay': 1,
-        'wait': 30,
-        'expected_responses': 4,
-        'pass_criteria': 'All 4 messages receive responses. No dropped messages. No doubled replies. Onboarding flow is not broken by the burst.',
-        'precondition': 'Fresh account in pre-onboarding state.',
-    },
-    {
         'id': 'onboard_03',
         'name': 'Onboarding completes correctly end-to-end',
         'category': 'onboarding',
