@@ -185,7 +185,7 @@ CSV_COLUMNS = [
 SIMPLE_CSV_COLUMNS = [
     "category",
     "type",
-    "message",
+    "messages",
     "pass_criteria",
     "id",
     "name",
@@ -241,7 +241,7 @@ def _csv_template_bytes() -> bytes:
     w.writerow({
         "category": "onboarding",
         "type": "single",
-        "message": "Hi, what can you do?",
+        "messages": "Hi, what can you do?",
         "pass_criteria": "Exactly one helpful response arrives.",
         "id": "",
         "name": "",
@@ -304,6 +304,8 @@ def _import_tests_from_csv(csv_text: str) -> tuple[list[dict], list[str]]:
         # Minimal columns support
         tc.setdefault("category", (row.get("category") or "").strip())
         tc.setdefault("type", (row.get("type") or "").strip())
+        # For the simple template, we prefer `messages` (single-line allowed).
+        tc.setdefault("messages", (row.get("messages") or "").strip())
         tc.setdefault("message", (row.get("message") or "").strip())
         tc.setdefault("pass_criteria", (row.get("pass_criteria") or "").strip())
         tc.setdefault("id", (row.get("id") or "").strip())
@@ -344,6 +346,8 @@ def _import_tests_from_csv(csv_text: str) -> tuple[list[dict], list[str]]:
 
         # Normalize message fields: if type is single and message missing but messages provided, use first
         ttype = (tc.get("type") or "").strip()
+        if not tc.get("messages") and tc.get("message"):
+            tc["messages"] = [tc["message"]]
         if ttype == "single" and not tc.get("message") and isinstance(tc.get("messages"), list) and tc["messages"]:
             tc["message"] = tc["messages"][0]
         if ttype in {"burst", "sequence"} and not tc.get("messages") and tc.get("message"):
@@ -1165,16 +1169,16 @@ textarea { resize: vertical; min-height: 70px; }
     </div>
     <div style="padding:16px 18px;color:#334155;line-height:1.55;font-size:0.92rem;">
       <div style="font-weight:800;margin-bottom:6px;">Fastest workflow (3–4 columns)</div>
-      <div style="margin-bottom:12px;">You can upload a CSV with just: <code>category</code>, <code>type</code>, <code>message</code>, <code>pass_criteria</code>. Leave <code>id</code>/<code>name</code> blank — the system will generate them.</div>
+      <div style="margin-bottom:12px;">You can upload a CSV with just: <code>category</code>, <code>type</code>, <code>messages</code>, <code>pass_criteria</code>. Leave <code>id</code>/<code>name</code> blank — the system will generate them. For a single-step test, put one line in <code>messages</code>.</div>
 
       <div style="font-weight:800;margin:12px 0 6px;">Types & required columns</div>
       <ul style="margin:0 0 12px 18px;">
-        <li><code>single</code>: requires <code>message</code></li>
-        <li><code>burst</code>: requires <code>messages</code> (or use <code>message</code> and it becomes a 1-item list)</li>
-        <li><code>sequence</code>: requires <code>messages</code> (or use <code>message</code> and it becomes a 1-item list)</li>
+        <li><code>single</code>: requires <code>messages</code> (or <code>message</code>)</li>
+        <li><code>burst</code>: requires <code>messages</code></li>
+        <li><code>sequence</code>: requires <code>messages</code></li>
         <li><code>burst_with_setup</code>: requires <code>setup_message</code> + <code>messages</code></li>
         <li><code>dedup</code>: requires <code>message</code> (optional <code>dedup_message</code>)</li>
-        <li><code>interactive</code>: requires <code>start_message</code> (if you only provide <code>message</code>, it becomes <code>start_message</code>). Recommended: <code>followups</code>. Optional: <code>stop_when</code>, <code>max_turns</code>, <code>auto_continue</code>.</li>
+        <li><code>interactive</code>: requires <code>start_message</code> (if you only provide <code>message</code>/<code>messages</code>, it becomes <code>start_message</code>). Recommended: <code>followups</code>. Optional: <code>stop_when</code>, <code>max_turns</code>, <code>auto_continue</code>.</li>
       </ul>
 
       <div style="font-weight:800;margin:12px 0 6px;">List formatting in cells</div>
@@ -1666,7 +1670,7 @@ function renderRow(t, cat) {
             <textarea onchange="updateMsgs(${idx},this.value)">${esc(msgs)}</textarea>
           </div>` : ''}
           <div><label>Wait (s)</label>
-            <input type="text" value="${t.wait||120}" onchange="update(${idx},'wait',parseInt(this.value))">
+            <input type="text" value="${t.wait||60}" onchange="update(${idx},'wait',parseInt(this.value))">
           </div>
           <div><label>Expected Responses</label>
             <input type="text" value="${t.expected_responses||''}" onchange="update(${idx},'expected_responses',parseInt(this.value)||undefined)">

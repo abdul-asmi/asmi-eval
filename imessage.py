@@ -11,7 +11,7 @@ import time
 import os
 from datetime import datetime, timezone, timedelta
 
-from config import CHAT_DB, ASMI_HANDLE as _CFG_ASMI_HANDLE, POLL_INTERVAL
+from config import CHAT_DB, ASMI_HANDLE as _CFG_ASMI_HANDLE, POLL_INTERVAL, SILENCE_AFTER
 
 # Mac Absolute Time epoch (2001-01-01 UTC)
 _MAC_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
@@ -104,7 +104,7 @@ def wait_for_responses(
     max_responses: int = 10,
     drain_all: bool = False,
     return_raw: bool = False,
-    silence_after: float = 2.0,
+    silence_after: float = SILENCE_AFTER,
 ) -> list[str]:
     """
     Wait up to `timeout` seconds for `count` responses from Asmi after `sent_at`.
@@ -135,6 +135,11 @@ def wait_for_responses(
             last_new_time = time.time()
         if len(collected) >= max_responses:
             break
+        # If we have received at least one response, ensure we always wait
+        # `silence_after` seconds after the last response before ending capture,
+        # even if the original timeout would have ended earlier.
+        if last_new_time is not None:
+            deadline = max(deadline, last_new_time + silence_after)
         if last_new_time is not None and time.time() - last_new_time >= silence_after:
             if drain_all or len(collected) >= count:
                 break
