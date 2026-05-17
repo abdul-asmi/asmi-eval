@@ -727,8 +727,6 @@ Call nearest chinese restaurant and book a table for 2 for 6PM'],
         'name': 'Name only → asks for number',
         'category': '3p_calls_v1',
         'type': 'sequence',
-        'message': "cmd_reset_history
-Call Joe's Pizza and ask about their catering options.",
         'pass_criteria': 'Asmi either finds a number via web search and confirms in chat, or asks the user for the number. Does not silently fail.',
         'messages': ["cmd_reset_history
 Call Joe's Pizza and ask about their catering options."],
