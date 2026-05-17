@@ -9,7 +9,7 @@ TEST_CASES = [
         'name': 'Onboarding completes correctly end-to-end',
         'category': 'onboarding',
         'type': 'sequence',
-        'messages': ['cmd_onboard', 'Hi', 'My name is Gaffoor', 'I work as a barber', 'Sure', 'Sure'],
+        'messages': ['cmd_onboard', 'Hi', 'My name is Gaffoor', 'I work as a barber', 'Sure', 'Sure', 'I live in Pittsburgh, PA'],
         'sequence_delay': 8,
         'wait': 60,
         'pass_criteria': 'Asmi asks my name, what I do for work, and for an onboarding call, which needs legal consent.',
