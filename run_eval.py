@@ -23,15 +23,11 @@
 import argparse
 import json
 import os
-import subprocess
 import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-# Auto-sync test cases from GitHub before every run
-subprocess.run(["git", "pull", "--quiet"], cwd=os.path.dirname(os.path.abspath(__file__)))
-
-from test_cases import TEST_CASES
+from test_case_store import load_test_cases
 from runner import run_all
 from report import generate
 
@@ -46,14 +42,16 @@ def main():
     parser.add_argument("--no-report",action="store_true", help="Skip HTML report generation")
     args = parser.parse_args()
 
+    test_cases = load_test_cases()
+
     # ── list mode ─────────────────────────────────────────────────────────────
     if args.list:
         print(f"\n{'ID':<15} {'CATEGORY':<20} NAME")
         print("─" * 70)
-        for tc in TEST_CASES:
+        for tc in test_cases:
             pre = " [needs fresh acct]" if tc.get("precondition") else ""
             print(f"{tc['id']:<15} {tc['category']:<20} {tc['name']}{pre}")
-        print(f"\nTotal: {len(TEST_CASES)} tests\n")
+        print(f"\nTotal: {len(test_cases)} tests\n")
         return
 
     # ── run ───────────────────────────────────────────────────────────────────
@@ -64,7 +62,7 @@ def main():
     if args.ids:
         ids = [i.strip() for i in args.ids.split(',') if i.strip()]
     results = run_all(
-        TEST_CASES,
+        test_cases,
         filter_category=args.category,
         filter_categories=categories,
         filter_id=args.id,

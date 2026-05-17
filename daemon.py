@@ -159,12 +159,18 @@ def _ack_run_to_server(run: dict):
 # Track progress state across calls
 _progress_state = {"current_test": None, "current_category": None, "completed": 0, "total": 0}
 
-# Build test_id → category map once at startup
-try:
-    from test_cases import TEST_CASES as _TC
-    _TC_MAP = {t["id"]: t["category"] for t in _TC}
-except Exception:
-    _TC_MAP = {}
+from test_case_store import load_test_cases as _load_test_cases
+
+# test_id → category map (refreshed before each run)
+_TC_MAP = {}
+
+
+def _refresh_tc_map():
+    global _TC_MAP
+    try:
+        _TC_MAP = {t.get("id"): t.get("category") for t in _load_test_cases() if t.get("id")}
+    except Exception:
+        _TC_MAP = {}
 
 import re as _re_mod
 
@@ -245,9 +251,12 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
         proc_cmd = [sys.executable, "run_eval.py", "--id", arg]
         label = f"test: {arg}"
 
+    # Refresh the in-memory id → category mapping so progress uses latest dashboard edits
+    _refresh_tc_map()
+
     # Count total tests for progress reporting
     try:
-        from test_cases import TEST_CASES as _all_tc
+        _all_tc = _load_test_cases()
         if not arg or arg == "all":
             total_count = len(_all_tc)
         elif "," in arg:

@@ -209,13 +209,12 @@ def collect(tc: dict) -> dict:
 
 # ── Phase 2: batch judge ───────────────────────────────────────────────────────
 
-def batch_judge(results: list[dict], all_responses: list[str]) -> list[dict]:
+def batch_judge(results: list[dict], all_responses: list[str], test_cases: list[dict]) -> list[dict]:
     """
     Run Gemini judge on all collected results.
     Fires ONE Gemini call per test with a delay between each.
     """
-    from test_cases import TEST_CASES
-    tc_map = {t["id"]: t for t in TEST_CASES}
+    tc_map = {t.get("id"): t for t in (test_cases or []) if t.get("id")}
 
     print(f"\n{'─'*65}")
     print(f"  JUDGING {len(results)} test(s) — {JUDGE_DELAY}s between calls (free tier)")
@@ -334,7 +333,7 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
 
     # Phase 2 — batch judge all at once
     pool    = _all_responses(results)
-    results = batch_judge(results, all_responses=pool)
+    results = batch_judge(results, all_responses=pool, test_cases=test_cases)
 
     # Summary
     total   = len(results)

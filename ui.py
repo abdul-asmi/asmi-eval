@@ -12,10 +12,12 @@ Env vars required:
 
 import ast
 import base64
+import csv
 import glob
 import json
 import os
 import re
+import io
 import subprocess
 import time
 from collections import Counter
@@ -152,6 +154,170 @@ def save_test_cases(cases: list):
         src = re.sub(r'TEST_CASES\s*=\s*\[.*\]', new_list, src, flags=re.DOTALL)
         with open(LOCAL_FILE, "w") as f:
             f.write(src)
+
+
+CSV_COLUMNS = [
+    "id",
+    "name",
+    "category",
+    "type",
+    "message",
+    "messages",
+    "start_message",
+    "followups",
+    "pass_criteria",
+    "wait",
+    "expected_responses",
+    "precondition",
+    "manual_check",
+    "stop_when",
+    "auto_continue",
+    "max_turns",
+    "setup_message",
+    "setup_wait",
+    "burst_delay",
+    "sequence_delay",
+    "dedup_message",
+    "dedup_delay",
+    "note",
+]
+
+
+def _split_cell_list(val: str) -> list[str]:
+    if val is None:
+        return []
+    s = str(val)
+    if not s.strip():
+        return []
+    if "\n" in s:
+        parts = [p.strip() for p in s.splitlines()]
+    elif "|" in s:
+        parts = [p.strip() for p in s.split("|")]
+    else:
+        # allow comma-separated for stop_when-like fields
+        parts = [p.strip() for p in s.split(",")]
+    return [p for p in parts if p]
+
+
+def _as_int(val):
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    try:
+        return int(float(s))
+    except Exception:
+        return None
+
+
+def _as_bool(val):
+    if val is None:
+        return None
+    s = str(val).strip().lower()
+    if not s:
+        return None
+    if s in {"1", "true", "yes", "y", "on"}:
+        return True
+    if s in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _csv_template_bytes() -> bytes:
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, extrasaction="ignore")
+    w.writeheader()
+    # include a single example row with the most common fields
+    w.writerow({
+        "id": "onboard_99",
+        "name": "Example: onboarding greeting",
+        "category": "onboarding",
+        "type": "single",
+        "message": "Hi, what can you do?",
+        "pass_criteria": "Exactly one helpful response arrives.",
+        "wait": "60",
+    })
+    return buf.getvalue().encode("utf-8")
+
+
+def _tests_to_csv_bytes(cases: list[dict]) -> bytes:
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, extrasaction="ignore")
+    w.writeheader()
+    for tc in cases:
+        row = {}
+        for k in CSV_COLUMNS:
+            v = tc.get(k)
+            if isinstance(v, list):
+                row[k] = "\n".join(str(x) for x in v)
+            else:
+                row[k] = "" if v is None else str(v)
+        w.writerow(row)
+    return buf.getvalue().encode("utf-8")
+
+
+def _import_tests_from_csv(csv_text: str) -> tuple[list[dict], list[str]]:
+    """
+    Returns (parsed_cases, warnings).
+    - Upsert-by-id happens in the caller.
+    """
+    warnings: list[str] = []
+    buf = io.StringIO(csv_text or "")
+    try:
+        reader = csv.DictReader(buf)
+    except Exception as e:
+        raise ValueError(f"Invalid CSV: {e}") from e
+    cases: list[dict] = []
+    for idx, row in enumerate(reader, start=2):  # header is line 1
+        if not row:
+            continue
+        tid = (row.get("id") or "").strip()
+        if not tid:
+            warnings.append(f"Row {idx}: missing id (skipped)")
+            continue
+        tc = {k: (row.get(k) or "").strip() for k in CSV_COLUMNS}
+        tc["id"] = tid
+        # Required-ish fields
+        if not tc.get("name"):
+            warnings.append(f"Row {idx}: id={tid} missing name")
+        if not tc.get("category"):
+            warnings.append(f"Row {idx}: id={tid} missing category")
+        if not tc.get("type"):
+            warnings.append(f"Row {idx}: id={tid} missing type")
+
+        # Lists
+        if tc.get("messages"):
+            tc["messages"] = _split_cell_list(tc["messages"])
+        if tc.get("followups"):
+            tc["followups"] = _split_cell_list(tc["followups"])
+        if tc.get("stop_when"):
+            tc["stop_when"] = _split_cell_list(tc["stop_when"])
+
+        # Numbers / bools
+        for k in ("wait", "expected_responses", "max_turns", "setup_wait", "burst_delay", "sequence_delay", "dedup_delay"):
+            v = _as_int(tc.get(k))
+            if v is None:
+                tc.pop(k, None)
+            else:
+                tc[k] = v
+        b = _as_bool(tc.get("auto_continue"))
+        if b is None:
+            tc.pop("auto_continue", None)
+        else:
+            tc["auto_continue"] = b
+
+        # Remove empty strings for optional keys
+        for k in list(tc.keys()):
+            if tc.get(k) == "":
+                tc.pop(k, None)
+
+        # Normalize message fields: if type is single and message missing but messages provided, use first
+        ttype = (tc.get("type") or "").strip()
+        if ttype == "single" and not tc.get("message") and isinstance(tc.get("messages"), list) and tc["messages"]:
+            tc["message"] = tc["messages"][0]
+        cases.append(tc)
+    return cases, warnings
 
 
 def _result_summary(results: list[dict]) -> dict:
@@ -751,6 +917,10 @@ textarea { resize: vertical; min-height: 70px; }
   <div class="tab-menu" id="menuMain" style="display:flex;">
     <button class="btn btn-outline" onclick="toggleGenerate()" style="font-size:0.75rem;padding:3px 8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;white-space:nowrap">Generate Test Cases with AI</button>
     <button class="btn btn-primary" onclick="toggleNew()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">+ Add a test case</button>
+    <button class="btn btn-outline" onclick="downloadCSVTemplate()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">⬇ Template (CSV)</button>
+    <button class="btn btn-outline" onclick="exportTestsCSV()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">⬇ Export (CSV)</button>
+    <input type="file" id="csvImportInput" accept=".csv,text/csv" style="display:none" onchange="importTestsCSV(event)">
+    <button class="btn btn-outline" onclick="document.getElementById('csvImportInput').click()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">⬆ Upload (CSV)</button>
     <input type="text" id="search" placeholder="Search tests…" oninput="filter()">
     <button class="btn btn-outline" id="collapseAllBtn" onclick="collapseAll()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">Collapse all</button>
     <button class="btn btn-outline" id="expandAllBtn" onclick="expandAll()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">Expand all</button>
@@ -1999,6 +2169,40 @@ function toast(msg) {
   setTimeout(() => el.classList.remove('show'), 3000);
 }
 
+function downloadCSVTemplate() {
+  window.location.href = '/api/tests/template.csv';
+}
+
+function exportTestsCSV() {
+  window.location.href = '/api/tests/export.csv';
+}
+
+async function importTestsCSV(ev) {
+  const file = ev?.target?.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const res = await fetch('/api/tests/import', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({csv: text, mode: 'upsert'}),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Import failed');
+    if (Array.isArray(data.warnings) && data.warnings.length) {
+      console.log('CSV import warnings:', data.warnings);
+      toast(`Imported ${data.count || 0} row(s) (see console for warnings)`);
+    } else {
+      toast(`Imported ${data.count || 0} row(s)`);
+    }
+    await load();
+  } catch(e) {
+    alert('CSV import failed: ' + e.message);
+  } finally {
+    ev.target.value = '';
+  }
+}
+
 // ── Test Case Generation Functions ───────────────────────────────────────────
 
 let generatedTests = [];
@@ -2668,6 +2872,13 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(cases)
                 except Exception as e:
                     self._json({"error": str(e)})
+            elif path == "/api/tests/template.csv":
+                content = _csv_template_bytes()
+                self._csv(content, filename="test_cases_template.csv")
+            elif path == "/api/tests/export.csv":
+                cases = load_test_cases()
+                content = _tests_to_csv_bytes(cases)
+                self._csv(content, filename="test_cases_export.csv")
             elif path == "/api/poll":
                 _last_heartbeat = time.time()
                 run = _pending_run
@@ -2820,6 +3031,28 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
+        elif path == "/api/tests/import":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                data = json.loads(body) if length else {}
+                csv_text = data.get("csv", "")
+                mode = (data.get("mode") or "upsert").strip().lower()
+                if mode not in {"upsert", "replace"}:
+                    mode = "upsert"
+                incoming, warnings = _import_tests_from_csv(csv_text)
+                existing = load_test_cases()
+                if mode == "replace":
+                    merged = incoming
+                else:
+                    by_id = {t.get("id"): t for t in existing if t.get("id")}
+                    for tc in incoming:
+                        by_id[tc["id"]] = tc
+                    merged = list(by_id.values())
+                save_test_cases(merged)
+                self._json({"ok": True, "count": len(incoming), "warnings": warnings})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
         elif path == "/api/run":
             global _pending_run, _run_output, _run_status, _run_started, _run_results, _run_result_stem
             length = int(self.headers.get("Content-Length", 0))
@@ -2953,6 +3186,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         try:
             self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
+
+    def _csv(self, content: bytes, filename: str = "download.csv"):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        self.end_headers()
+        try:
+            self.wfile.write(content)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
 
