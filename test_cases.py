@@ -75,7 +75,7 @@ TEST_CASES = [
         'category': 'sticky_message',
         'type': 'single',
         'message': 'Find me the top 3 Italian restaurants in Pittsburgh with their hours and ratings',
-        'wait': 150,
+        'wait': 30,
         'pass_criteria': 'Asmi responds with at least 3 restaurant recommendations. Response arrives without user needing to follow up. Includes hours or ratings.',
     },
     {
@@ -351,55 +351,69 @@ TEST_CASES = [
         'name': 'Simple task → immediate call',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nNeed to plan a birthday party',
+        'message': 'cmd_reset_history
+Need to plan a birthday party',
         'pass_criteria': 'Asmi responds in chat acknowledging the task and either asks clarifying questions or proposes next steps.',
-        'messages': ['cmd_reset_history\nNeed to plan a birthday party'],
+        'messages': ['cmd_reset_history
+Need to plan a birthday party'],
         'id': 'adh_01',
     },
     {
         'name': 'Multi-part task → all covered',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nI need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.',
+        'message': 'cmd_reset_history
+I need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.',
         'pass_criteria': 'Asmi acknowledges all 3 tasks in chat. Follow-up messages cover each item with status or next steps.',
-        'messages': ['cmd_reset_history\nI need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.'],
+        'messages': ['cmd_reset_history
+I need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.'],
         'id': 'adh_02',
     },
     {
         'name': 'Task → call deferred, never comes (regression)',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nCan you call someone and check on my prescription refill at the pharmacy?',
+        'message': 'cmd_reset_history
+Can you call someone and check on my prescription refill at the pharmacy?',
         'pass_criteria': 'REGRESSION: Asmi should send a chat update within 3 min. If no message received, flag as bug.',
         'manual_check': 'Wait 3 min after sending. Check if any follow-up chat message arrived.',
-        'messages': ['cmd_reset_history\nCan you call someone and check on my prescription refill at the pharmacy?'],
+        'messages': ['cmd_reset_history
+Can you call someone and check on my prescription refill at the pharmacy?'],
         'id': 'adh_03',
     },
     {
         'name': 'Domain bleed on call',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nCan you help me cancel my gym membership?',
+        'message': 'cmd_reset_history
+Can you help me cancel my gym membership?',
         'pass_criteria': "Asmi's chat messages reference gym/membership only. No unrelated domain mentioned in reply.",
-        'messages': ['cmd_reset_history\nCan you help me cancel my gym membership?'],
+        'messages': ['cmd_reset_history
+Can you help me cancel my gym membership?'],
         'id': 'adh_04',
     },
     {
         'name': 'Missed call → retry logic',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nPlease call my landlord about the noise complaint I filed last week.',
+        'message': 'cmd_reset_history
+Please call my landlord about the noise complaint I filed last week.',
         'pass_criteria': 'Asmi sends a chat update about the call attempt. Message should offer to retry or ask how to proceed — not go silent.',
-        'messages': ['cmd_reset_history\nPlease call my landlord about the noise complaint I filed last week.'],
+        'messages': ['cmd_reset_history
+Please call my landlord about the noise complaint I filed last week.'],
         'id': 'adh_05',
     },
     {
         'name': 'Mid-task pivot',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nCan you call my landlord at (412) 555-0166 about the broken heater?\nActually forget that — call the plumber at (412) 555-0177 instead.',
+        'message': 'cmd_reset_history
+Can you call my landlord at (412) 555-0166 about the broken heater?
+Actually forget that — call the plumber at (412) 555-0177 instead.',
         'pass_criteria': "Asmi's chat response acknowledges the pivot cleanly. No reference to the cancelled task continuing. Confirms new task.",
-        'messages': ['cmd_reset_history\nCan you call my landlord at (412) 555-0166 about the broken heater?\nActually forget that — call the plumber at (412) 555-0177 instead.'],
+        'messages': ['cmd_reset_history
+Can you call my landlord at (412) 555-0166 about the broken heater?
+Actually forget that — call the plumber at (412) 555-0177 instead.'],
         'id': 'adh_06',
     },
     {
@@ -705,45 +719,58 @@ TEST_CASES = [
         'category': '3p_calls_v1',
         'type': 'sequence',
         'pass_criteria': 'Asmi responds in chat confirming it found a number or is looking one up. Does not ask the user to provide the number.',
-        'messages': ['cmd_reset_history\nCall nearest chinese restaurant and book a table for 2 for 6PM'],
+        'messages': ['cmd_reset_history
+Call nearest chinese restaurant and book a table for 2 for 6PM'],
         'id': '3pc_01',
     },
     {
         'name': 'Name only → asks for number',
         'category': '3p_calls_v1',
         'type': 'sequence',
-        'message': "cmd_reset_history\nCall Joe's Pizza and ask about their catering options.",
+        'message': "cmd_reset_history
+Call Joe's Pizza and ask about their catering options.",
         'pass_criteria': 'Asmi either finds a number via web search and confirms in chat, or asks the user for the number. Does not silently fail.',
-        'messages': ["cmd_reset_history\nCall Joe's Pizza and ask about their catering options."],
+        'messages': ["cmd_reset_history
+Call Joe's Pizza and ask about their catering options."],
         'id': '3pc_02',
     },
     {
         'name': 'Quiet hours → override accepted',
         'category': '3p_calls_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nCall (412) 555-0123 and ask if they have a table for 2 tonight at 7pm.\ncall anyway',
+        'message': 'cmd_reset_history
+Call (412) 555-0123 and ask if they have a table for 2 tonight at 7pm.
+call anyway',
         'pass_criteria': "Asmi's first chat message flags quiet hours. After 'call anyway', Asmi confirms it will proceed — no re-prompting.",
         'manual_check': 'Run after 10pm local time.',
-        'messages': ['cmd_reset_history\nCall (412) 555-0123 and ask if they have a table for 2 tonight at 7pm.\ncall anyway'],
+        'messages': ['cmd_reset_history
+Call (412) 555-0123 and ask if they have a table for 2 tonight at 7pm.
+call anyway'],
         'id': '3pc_03',
     },
     {
         'name': 'Quiet hours → override declined',
         'category': '3p_calls_v1',
         'type': 'sequence',
-        'message': "cmd_reset_history\nCall (412) 555-0199 right now.\ndon't bother",
+        'message': "cmd_reset_history
+Call (412) 555-0199 right now.
+don't bother",
         'pass_criteria': "Asmi's first chat message flags quiet hours. After 'don't bother', Asmi confirms no call will be made. No further prompting.",
         'manual_check': 'Run after 10pm local time.',
-        'messages': ["cmd_reset_history\nCall (412) 555-0199 right now.\ndon't bother"],
+        'messages': ["cmd_reset_history
+Call (412) 555-0199 right now.
+don't bother"],
         'id': '3pc_04',
     },
     {
         'name': "3P doesn't answer",
         'category': '3p_calls_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nCall (412) 555-0000 and ask about their hours.',
+        'message': 'cmd_reset_history
+Call (412) 555-0000 and ask about their hours.',
         'pass_criteria': 'Asmi sends a chat message reporting no answer. Message should offer to retry or ask how to proceed — not go silent.',
-        'messages': ['cmd_reset_history\nCall (412) 555-0000 and ask about their hours.'],
+        'messages': ['cmd_reset_history
+Call (412) 555-0000 and ask about their hours.'],
         'id': '3pc_05',
     },
     {
@@ -885,37 +912,49 @@ TEST_CASES = [
         'name': 'PDF from chat history',
         'category': 'pdf_v1',
         'type': 'sequence',
-        'message': "cmd_reset_history\nCan you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please.",
+        'message': "cmd_reset_history
+Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please.",
         'pass_criteria': 'Asmi responds in chat with research, options, or next steps. If PDF is generated, a file is delivered in chat.',
-        'messages': ["cmd_reset_history\nCan you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please."],
+        'messages': ["cmd_reset_history
+Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please."],
         'id': 'pdf_01',
     },
     {
         'name': 'PDF from call content',
         'category': 'pdf_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nMake me a plan PDF from what we just discussed.',
+        'message': 'cmd_reset_history
+Make me a plan PDF from what we just discussed.',
         'pass_criteria': "Asmi either delivers a PDF file in chat or explains why one can't be generated. Should not confirm delivery if no file arrives.",
         'manual_check': 'Run after completing an ad hoc call in the same session.',
-        'messages': ['cmd_reset_history\nMake me a plan PDF from what we just discussed.'],
+        'messages': ['cmd_reset_history
+Make me a plan PDF from what we just discussed.'],
         'id': 'pdf_02',
     },
     {
         'name': 'False confirm — no delivery (regression)',
         'category': 'pdf_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history\nCan you send me a PDF summary of my tasks?',
+        'message': 'cmd_reset_history
+Can you send me a PDF summary of my tasks?',
         'pass_criteria': "REGRESSION: If Asmi says 'Sending now' or 'Here you go' but no PDF file arrives in chat within 60s, flag as bug.",
-        'messages': ['cmd_reset_history\nCan you send me a PDF summary of my tasks?'],
+        'messages': ['cmd_reset_history
+Can you send me a PDF summary of my tasks?'],
         'id': 'pdf_03',
     },
     {
         'name': 'Multi-task PDF with status',
         'category': 'pdf_v1',
         'type': 'sequence',
-        'message': "cmd_reset_history\nFind me flights from Pittsburgh to NYC next Friday under $200.\nAlso add oat milk and greek yogurt to my grocery list.\nNow give me a PDF of everything we've worked on with their status.",
+        'message': "cmd_reset_history
+Find me flights from Pittsburgh to NYC next Friday under $200.
+Also add oat milk and greek yogurt to my grocery list.
+Now give me a PDF of everything we've worked on with their status.",
         'pass_criteria': 'PDF delivered as file in chat. Covers both tasks (flight search + grocery list) with status for each.',
-        'messages': ["cmd_reset_history\nFind me flights from Pittsburgh to NYC next Friday under $200.\nAlso add oat milk and greek yogurt to my grocery list.\nNow give me a PDF of everything we've worked on with their status."],
+        'messages': ["cmd_reset_history
+Find me flights from Pittsburgh to NYC next Friday under $200.
+Also add oat milk and greek yogurt to my grocery list.
+Now give me a PDF of everything we've worked on with their status."],
         'id': 'pdf_04',
     },
 ]
