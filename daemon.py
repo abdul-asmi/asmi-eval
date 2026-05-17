@@ -238,57 +238,69 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
     from config import EVAL_DIR, REPORTS_DIR
     from commands import CATEGORIES
 
+    env = os.environ.copy()
+    if extra_env:
+        env.update({k: str(v) for k, v in extra_env.items() if v is not None})
+    old_snapshot = os.environ.get("ASMI_TEST_CASES_JSON")
+    if env.get("ASMI_TEST_CASES_JSON"):
+        os.environ["ASMI_TEST_CASES_JSON"] = env["ASMI_TEST_CASES_JSON"]
+
     arg = cmd.strip().removeprefix("run").strip()
     try:
-        _all_tc_for_routing = _load_test_cases()
-    except Exception:
-        _all_tc_for_routing = []
-    dynamic_categories = {t.get("category") for t in _all_tc_for_routing if t.get("category")}
-    if not arg or arg == "all":
-        proc_cmd = [sys.executable, "run_eval.py"]
-        label = "full suite"
-    elif "," in arg:
-        parts = [p.strip() for p in arg.split(",") if p.strip()]
-        if parts and all(p in dynamic_categories for p in parts):
-            proc_cmd = [sys.executable, "run_eval.py", "--categories", arg]
-            label = f"categories: {arg}"
-        else:
-            proc_cmd = [sys.executable, "run_eval.py", "--ids", arg]
-            label = f"tests: {arg}"
-    elif arg in dynamic_categories:
-        proc_cmd = [sys.executable, "run_eval.py", "--category", arg]
-        label = f"category: {arg}"
-    else:
-        proc_cmd = [sys.executable, "run_eval.py", "--id", arg]
-        label = f"test: {arg}"
-
-    # Refresh the in-memory id → category mapping so progress uses latest dashboard edits
-    _refresh_tc_map()
-
-    # Count total tests for progress reporting
-    try:
-        _all_tc = _all_tc_for_routing or _load_test_cases()
+        try:
+            _all_tc_for_routing = _load_test_cases()
+        except Exception:
+            _all_tc_for_routing = []
+        dynamic_categories = {t.get("category") for t in _all_tc_for_routing if t.get("category")}
         if not arg or arg == "all":
-            total_count = len(_all_tc)
+            proc_cmd = [sys.executable, "run_eval.py"]
+            label = "full suite"
         elif "," in arg:
-            parts = [c.strip() for c in arg.split(',') if c.strip()]
+            parts = [p.strip() for p in arg.split(",") if p.strip()]
             if parts and all(p in dynamic_categories for p in parts):
-                total_count = len([t for t in _all_tc if t["category"] in parts])
+                proc_cmd = [sys.executable, "run_eval.py", "--categories", arg]
+                label = f"categories: {arg}"
             else:
-                total_count = len([t for t in _all_tc if t["id"] in parts])
+                proc_cmd = [sys.executable, "run_eval.py", "--ids", arg]
+                label = f"tests: {arg}"
         elif arg in dynamic_categories:
-            total_count = len([t for t in _all_tc if t["category"] == arg])
+            proc_cmd = [sys.executable, "run_eval.py", "--category", arg]
+            label = f"category: {arg}"
         else:
-            total_count = 1
-    except Exception:
-        total_count = 0
+            proc_cmd = [sys.executable, "run_eval.py", "--id", arg]
+            label = f"test: {arg}"
+
+        # Refresh the in-memory id → category mapping so progress uses latest dashboard edits
+        _refresh_tc_map()
+
+        # Count total tests for progress reporting
+        try:
+            _all_tc = _all_tc_for_routing or _load_test_cases()
+            if not arg or arg == "all":
+                total_count = len(_all_tc)
+            elif "," in arg:
+                parts = [c.strip() for c in arg.split(',') if c.strip()]
+                if parts and all(p in dynamic_categories for p in parts):
+                    total_count = len([t for t in _all_tc if t["category"] in parts])
+                else:
+                    total_count = len([t for t in _all_tc if t["id"] in parts])
+            elif arg in dynamic_categories:
+                total_count = len([t for t in _all_tc if t["category"] == arg])
+            else:
+                total_count = 1
+        except Exception:
+            total_count = 0
+    finally:
+        if old_snapshot is None:
+            os.environ.pop("ASMI_TEST_CASES_JSON", None)
+        else:
+            os.environ["ASMI_TEST_CASES_JSON"] = old_snapshot
 
     # Reset progress state for this run
     global _progress_state
     _progress_state = {"current_test": None, "current_category": None, "completed": 0, "total": total_count}
     _post_progress()
 
-    env = os.environ.copy()
     stop_fd, stop_path = tempfile.mkstemp(prefix="asmi_eval_stop_", suffix=".flag")
     skip_fd, skip_path = tempfile.mkstemp(prefix="asmi_eval_skip_", suffix=".json")
     os.close(stop_fd)
@@ -301,8 +313,6 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
         json.dump([], f)
     env["ASMI_STOP_FILE"] = stop_path
     env["ASMI_SKIP_FILE"] = skip_path
-    if extra_env:
-        env.update({k: str(v) for k, v in extra_env.items() if v is not None})
 
     proc = subprocess.Popen(
         proc_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -525,6 +535,7 @@ def run():
                     response = _run_with_stop(cmd, extra_env={
                         "ASMI_INTERACTIVE_AUTO_CONTINUE": pending.get("interactive_auto_continue", "1"),
                         "ASMI_HANDLE": target_handle,
+                        "ASMI_TEST_CASES_JSON": json.dumps(pending.get("test_cases") or []),
                     })
                 except Exception as e:
                     response = f"❌ Error: {e}"

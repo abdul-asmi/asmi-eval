@@ -3602,6 +3602,10 @@ class Handler(BaseHTTPRequestHandler):
             asmi_handle = (str(data.get("asmi_handle") or "").strip() or None)
             if asmi_target in ASMI_TARGET_HANDLES:
                 asmi_handle = ASMI_TARGET_HANDLES[asmi_target]
+            try:
+                test_cases_snapshot = load_test_cases()
+            except Exception:
+                test_cases_snapshot = []
             _run_queue = _build_run_queue(data)
             _skip_requested = set()
             _pending_run = {
@@ -3612,6 +3616,7 @@ class Handler(BaseHTTPRequestHandler):
                 "interactive_auto_continue": bool(data.get("interactive_auto_continue", True)),
                 "asmi_target": asmi_target,
                 "asmi_handle": asmi_handle,
+                "test_cases": test_cases_snapshot,
                 "ts":       time.time(),
             }
             _run_output  = ""

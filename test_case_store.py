@@ -95,6 +95,15 @@ def load_test_cases() -> list[dict[str, Any]]:
     """
     Load test cases from GitHub if configured, otherwise from local `test_cases.py`.
     """
+    snapshot = os.environ.get("ASMI_TEST_CASES_JSON", "").strip()
+    if snapshot:
+        try:
+            data = json.loads(snapshot)
+            if isinstance(data, list):
+                return [item for item in data if isinstance(item, dict)]
+        except Exception:
+            pass
+
     gh = _gh_env()
     if gh:
         token, repo, path = gh
