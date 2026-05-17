@@ -30,6 +30,7 @@ from zoneinfo import ZoneInfo
 
 import google.genai as genai
 from report import generate as generate_report
+from test_case_store import _extract_test_cases
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-preview")
 
@@ -135,10 +136,7 @@ def load_test_cases():
     else:
         with open(LOCAL_FILE) as f:
             src = f.read()
-    match = re.search(r'TEST_CASES\s*=\s*(\[.*\])', src, re.DOTALL)
-    if not match:
-        return []
-    return ast.literal_eval(match.group(1))
+    return _extract_test_cases(src)
 
 
 def save_test_cases(cases: list):

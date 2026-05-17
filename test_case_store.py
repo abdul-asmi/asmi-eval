@@ -45,7 +45,7 @@ def _extract_test_cases(src: str) -> list[dict[str, Any]]:
     match = re.search(r"TEST_CASES\s*=\s*(\[.*\])", src, re.DOTALL)
     if not match:
         return []
-    val = ast.literal_eval(match.group(1))
+    val = _literal_eval_test_list(match.group(1))
     if not isinstance(val, list):
         return []
     out: list[dict[str, Any]] = []
@@ -53,6 +53,42 @@ def _extract_test_cases(src: str) -> list[dict[str, Any]]:
         if isinstance(item, dict):
             out.append(item)
     return out
+
+
+def _literal_eval_test_list(list_src: str):
+    try:
+        return ast.literal_eval(list_src)
+    except (SyntaxError, ValueError):
+        return ast.literal_eval(_escape_raw_newlines_in_strings(list_src))
+
+
+def _escape_raw_newlines_in_strings(src: str) -> str:
+    out = []
+    quote = None
+    escaped = False
+
+    for ch in src:
+        if quote:
+            if escaped:
+                out.append(ch)
+                escaped = False
+            elif ch == "\\":
+                out.append(ch)
+                escaped = True
+            elif ch == quote:
+                out.append(ch)
+                quote = None
+            elif ch == "\n":
+                out.append("\\n")
+            else:
+                out.append(ch)
+            continue
+
+        out.append(ch)
+        if ch in {"'", '"'}:
+            quote = ch
+
+    return "".join(out)
 
 
 def load_test_cases() -> list[dict[str, Any]]:
@@ -65,6 +101,6 @@ def load_test_cases() -> list[dict[str, Any]]:
         src = _gh_get_file(token, repo, path)
         return _extract_test_cases(src)
 
-    from test_cases import TEST_CASES  # local import to avoid side-effects at module import time
-
-    return list(TEST_CASES)
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_cases.py")
+    with open(path, encoding="utf-8") as f:
+        return _extract_test_cases(f.read())
