@@ -360,8 +360,6 @@ Need to plan a birthday party'],
         'name': 'Multi-part task → all covered',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-I need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.',
         'pass_criteria': 'Asmi acknowledges all 3 tasks in chat. Follow-up messages cover each item with status or next steps.',
         'messages': ['cmd_reset_history
 I need to sort out a few things — renew my car insurance, book a dentist appointment, and find a good electrician nearby.'],
