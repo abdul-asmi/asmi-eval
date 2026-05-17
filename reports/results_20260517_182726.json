@@ -1,0 +1,34 @@
+[
+  {
+    "id": "3pc_05",
+    "name": "3P doesn't answer",
+    "category": "3p_calls_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history\nCall (412) 555-0000 and ask about their hours."
+    ],
+    "responses": [
+      "Setting up your dinner reservation, flight search, grocery updates, and task summary.",
+      "I've added the oat milk and Greek yogurt to your grocery list. Regarding the rest, I need a quick hand from you to make them happen:",
+      "\u2022 Dinner: Since it's already past 6 PM, could you let me know what time you'd like me to aim for at HK Dim Sum instead?\n\u2022 Flights: To get those Pittsburgh to NYC options under $200, I just need your return date for the trip next Friday.",
+      "\ud83d\udccb Your active tasks summary",
+      "I've updated your list and have 4 active tasks currently in progress.",
+      "\u2022 Groceries: Oat milk and greek yogurt have been added to your list.",
+      "\u2022 Travel: Honolulu trip options are ready, and I've found $150 flights to NYC for next Friday.",
+      "\u2022 Dinner: HK Dim Sum is picked for your 6 PM reservation in Pittsburgh.",
+      "\u26a0\ufe0f Confirming the HK Dim Sum reservation will finalize your dinner plans for tonight.",
+      "Should I proceed with booking your 6 PM dinner reservation?"
+    ],
+    "verdict": "FAIL",
+    "reason": "Asmi did not attempt the requested phone call or report any result (no answer or otherwise), instead focusing on unrelated grocery and reservation tasks.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 10/1 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T22:26:40.009424+00:00",
+    "finished_at": "2026-05-17T22:27:13.192113+00:00",
+    "matched_responses": "none found"
+  }
+]
