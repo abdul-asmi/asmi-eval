@@ -59,6 +59,11 @@ REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports"
 OVERALL_ANALYSIS_FILE = os.path.join(REPORTS_DIR, "overall_analysis.json")
 USE_GITHUB = bool(GH_TOKEN and GH_REPO)
 
+ASMI_TARGET_HANDLES = {
+    "dev": "+14082307921",
+    "prod": "+14082303488",
+}
+
 CATEGORIES = [
     "sticky_message","call_dedup","call_summary","language_pref",
     "location_memory","onboarding","capability","threep_nudge","interactive","generated",
@@ -2048,8 +2053,10 @@ async function runByCategory(cat) {
 
 async function _triggerRun(payload) {
   payload = {...payload, interactive_auto_continue: payload.interactive_auto_continue ?? interactiveAutoContinue};
-  payload.asmi_handle = payload.asmi_handle || getAsmiHandle();
-  const targetName = Object.values(ASMI_TARGETS).find(t => t.handle === payload.asmi_handle)?.label || payload.asmi_handle;
+  const target = getAsmiTarget();
+  payload.asmi_target = payload.asmi_target || target.key;
+  payload.asmi_handle = payload.asmi_handle || target.handle;
+  const targetName = target.label;
   const label = payload.id ? `test: ${payload.id}` :
                 payload.ids ? `${payload.ids.length} selected tests` :
                 payload.category ? `category: ${payload.category}` :
@@ -2344,10 +2351,14 @@ function initAsmiTarget() {
 }
 
 function getAsmiHandle() {
+  return getAsmiTarget().handle;
+}
+
+function getAsmiTarget() {
   const sel = document.getElementById('asmiTargetSelect');
   const key = sel ? sel.value : (localStorage.getItem('asmiTarget') || 'dev');
   const target = ASMI_TARGETS[key] || ASMI_TARGETS.dev;
-  return target.handle;
+  return {...target, key};
 }
 
 function onAsmiTargetChange() {
@@ -2552,7 +2563,8 @@ async function saveAndRunGenerated() {
 
   // Trigger run for category "generated"
   document.getElementById('genRunStatus').textContent = 'Queued for daemon…';
-  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({category:'generated', asmi_handle:getAsmiHandle()})});
+  const target = getAsmiTarget();
+  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({category:'generated', asmi_target:target.key, asmi_handle:target.handle})});
   const data = await res.json();
   if (!data.ok) { alert('Run failed'); btn.disabled = false; return; }
   document.getElementById('genRunStatus').textContent = 'Queued for daemon…';
@@ -2579,7 +2591,8 @@ async function runSingleGenerated(idx) {
   resultEl.style.display = 'block';
   resultEl.innerHTML = '<span style="color:#7c3aed;font-size:0.82rem;">Sending to daemon…</span>';
 
-  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: test.id, asmi_handle:getAsmiHandle()})});
+  const target = getAsmiTarget();
+  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: test.id, asmi_target:target.key, asmi_handle:target.handle})});
   const data = await res.json();
   if (!data.ok) { resultEl.innerHTML = '<span style="color:red">Run failed</span>'; if (btn) btn.disabled = false; return; }
 
@@ -3396,13 +3409,18 @@ class Handler(BaseHTTPRequestHandler):
             if not (ids or rid or cat or cats):
                 self._json({"ok": False, "error": "No tests selected"})
                 return
+            asmi_target = (str(data.get("asmi_target") or "").strip().lower() or None)
+            asmi_handle = (str(data.get("asmi_handle") or "").strip() or None)
+            if asmi_target in ASMI_TARGET_HANDLES:
+                asmi_handle = ASMI_TARGET_HANDLES[asmi_target]
             _pending_run = {
                 "category": cat,
                 "categories": cats,
                 "id":       rid,
                 "ids":      ids,
                 "interactive_auto_continue": bool(data.get("interactive_auto_continue", True)),
-                "asmi_handle": (str(data.get("asmi_handle") or "").strip() or None),
+                "asmi_target": asmi_target,
+                "asmi_handle": asmi_handle,
                 "ts":       time.time(),
             }
             _run_output  = ""
@@ -3411,7 +3429,7 @@ class Handler(BaseHTTPRequestHandler):
             _run_results = []
             _run_result_stem = ""
             mac_online = (time.time() - _last_heartbeat) < 90
-            self._json({"ok": True, "mac_online": mac_online})
+            self._json({"ok": True, "mac_online": mac_online, "asmi_target": asmi_target, "asmi_handle": asmi_handle})
         elif path == "/api/output":
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)

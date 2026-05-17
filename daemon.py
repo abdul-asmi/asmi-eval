@@ -37,6 +37,11 @@ from config import (
 from commands import handle
 from imessage import send_imessage
 
+ASMI_TARGET_HANDLES = {
+    "dev": "+14082307921",
+    "prod": "+14082303488",
+}
+
 _MAC_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
 
 
@@ -484,8 +489,9 @@ def run():
                 else:
                     cmd = f"run {rid or cat or 'all'}"
                 ts  = datetime.now().strftime("%H:%M:%S")
-                target_handle = pending.get("asmi_handle") or ""
-                target_label = f" target={target_handle}" if target_handle else ""
+                target_key = (pending.get("asmi_target") or "").strip().lower() if isinstance(pending.get("asmi_target"), str) else ""
+                target_handle = ASMI_TARGET_HANDLES.get(target_key) or pending.get("asmi_handle") or ""
+                target_label = f" target={target_key or 'custom'}:{target_handle}" if target_handle else ""
                 print(f"\n  [{ts}] UI run request: {cmd}{target_label}")
                 _ack_run_to_server(pending)
                 try:

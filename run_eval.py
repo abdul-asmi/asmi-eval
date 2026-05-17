@@ -43,6 +43,9 @@ def main():
     args = parser.parse_args()
 
     test_cases = load_test_cases()
+    asmi_handle = os.environ.get("ASMI_HANDLE", "").strip()
+    if asmi_handle:
+        print(f"  Target Asmi handle: {asmi_handle}")
 
     # ── list mode ─────────────────────────────────────────────────────────────
     if args.list:
