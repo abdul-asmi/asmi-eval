@@ -896,8 +896,32 @@ main { padding: 24px; max-width: 1300px; margin: 0 auto; }
 .action-btn { background:none; border:none; cursor:pointer; font-size:0.9rem;
               padding:3px 5px; border-radius:4px; color:#64748b; }
 .action-btn:hover { background:#f1f5f9; color:#1e293b; }
-.drag-handle { cursor: grab; user-select: none; }
+.drag-handle { cursor: grab; user-select: none; vertical-align:middle; }
 .drag-handle:active { cursor: grabbing; }
+.drag-grip {
+    display:inline-grid;
+    grid-template-columns:repeat(2, 4px);
+    grid-auto-rows:4px;
+    gap:3px 4px;
+    width:12px;
+    height:18px;
+    align-content:center;
+    justify-content:center;
+    pointer-events:none;
+}
+.drag-grip::before {
+    content:"";
+    width:4px;
+    height:4px;
+    border-radius:999px;
+    background:currentColor;
+    box-shadow:
+        8px 0 0 currentColor,
+        0 7px 0 currentColor,
+        8px 7px 0 currentColor,
+        0 14px 0 currentColor,
+        8px 14px 0 currentColor;
+}
 .test-table input[type=checkbox], .cat-row input[type=checkbox] {
     width:14px; height:14px; cursor:pointer; margin:0;
 }
@@ -1639,7 +1663,7 @@ function render() {
         <button class="action-btn drag-handle" draggable="true" onclick="event.stopPropagation()" ondragstart="dragStartCategory(event, '${cat}')" ondragend="endDrag()"
                 title="Drag category" aria-label="Drag category"
                 style="padding:2px 6px;margin-right:6px;color:#94a3b8;cursor:grab;font-size:1rem;line-height:1;">
-          ⋮⋮
+          <span class="drag-grip" aria-hidden="true"></span>
         </button>
         <button class="action-btn" onclick="toggleCat('${cat}')" style="padding:2px 6px;margin-right:4px;color:${m.color}">${chevron}</button>
         <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
@@ -1688,7 +1712,9 @@ function renderRow(t, cat) {
       ondragover="dragOverTest(event)" ondrop="dropTest(event, '${t.id}')">
     <td onclick="event.stopPropagation()">
       <button class="action-btn drag-handle" draggable="true" onclick="event.stopPropagation()" ondragstart="dragStartTest(event, '${t.id}')" ondragend="endDrag()"
-              title="Drag test" style="padding:2px 4px;margin-right:4px;cursor:grab;">⋮⋮</button>
+              title="Drag test" aria-label="Drag test" style="padding:2px 4px;margin-right:4px;cursor:grab;">
+        <span class="drag-grip" aria-hidden="true"></span>
+      </button>
       <input type="checkbox" id="testchk_${t.id}" onchange="toggleTestSelection('${t.id}', this.checked)" ${checked}>
     </td>
     <td class="id-cell">${esc(t.id)}</td>
