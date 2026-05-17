@@ -182,6 +182,15 @@ CSV_COLUMNS = [
     "note",
 ]
 
+SIMPLE_CSV_COLUMNS = [
+    "category",
+    "type",
+    "message",
+    "pass_criteria",
+    "id",
+    "name",
+]
+
 
 def _split_cell_list(val: str) -> list[str]:
     if val is None:
@@ -226,9 +235,24 @@ def _as_bool(val):
 
 def _csv_template_bytes() -> bytes:
     buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, extrasaction="ignore")
+    w = csv.DictWriter(buf, fieldnames=SIMPLE_CSV_COLUMNS, extrasaction="ignore")
     w.writeheader()
     # include a single example row with the most common fields
+    w.writerow({
+        "category": "onboarding",
+        "type": "single",
+        "message": "Hi, what can you do?",
+        "pass_criteria": "Exactly one helpful response arrives.",
+        "id": "",
+        "name": "",
+    })
+    return buf.getvalue().encode("utf-8")
+
+
+def _csv_full_template_bytes() -> bytes:
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, extrasaction="ignore")
+    w.writeheader()
     w.writerow({
         "id": "onboard_99",
         "name": "Example: onboarding greeting",
@@ -272,19 +296,25 @@ def _import_tests_from_csv(csv_text: str) -> tuple[list[dict], list[str]]:
     for idx, row in enumerate(reader, start=2):  # header is line 1
         if not row:
             continue
-        tid = (row.get("id") or "").strip()
-        if not tid:
-            warnings.append(f"Row {idx}: missing id (skipped)")
-            continue
-        tc = {k: (row.get(k) or "").strip() for k in CSV_COLUMNS}
-        tc["id"] = tid
-        # Required-ish fields
-        if not tc.get("name"):
-            warnings.append(f"Row {idx}: id={tid} missing name")
-        if not tc.get("category"):
-            warnings.append(f"Row {idx}: id={tid} missing category")
+        # Pull any known columns if present; ignore the rest.
+        tc = {}
+        for k in CSV_COLUMNS:
+            if k in row:
+                tc[k] = (row.get(k) or "").strip()
+        # Minimal columns support
+        tc.setdefault("category", (row.get("category") or "").strip())
+        tc.setdefault("type", (row.get("type") or "").strip())
+        tc.setdefault("message", (row.get("message") or "").strip())
+        tc.setdefault("pass_criteria", (row.get("pass_criteria") or "").strip())
+        tc.setdefault("id", (row.get("id") or "").strip())
+        tc.setdefault("name", (row.get("name") or "").strip())
+
         if not tc.get("type"):
-            warnings.append(f"Row {idx}: id={tid} missing type")
+            tc["type"] = "single"
+        if not tc.get("category"):
+            tc["category"] = "misc"
+        if not tc.get("pass_criteria"):
+            tc["pass_criteria"] = "TODO: define pass_criteria"
 
         # Lists
         if tc.get("messages"):
@@ -316,6 +346,24 @@ def _import_tests_from_csv(csv_text: str) -> tuple[list[dict], list[str]]:
         ttype = (tc.get("type") or "").strip()
         if ttype == "single" and not tc.get("message") and isinstance(tc.get("messages"), list) and tc["messages"]:
             tc["message"] = tc["messages"][0]
+        if ttype in {"burst", "sequence"} and not tc.get("messages") and tc.get("message"):
+            tc["messages"] = [tc["message"]]
+        if ttype == "interactive":
+            if not tc.get("start_message") and tc.get("message"):
+                tc["start_message"] = tc["message"]
+            tc.pop("message", None)
+
+        # Auto-generate name if missing
+        if not tc.get("name"):
+            base = (
+                tc.get("start_message")
+                or (tc.get("messages")[0] if isinstance(tc.get("messages"), list) and tc.get("messages") else "")
+                or tc.get("message")
+                or ""
+            )
+            base = " ".join(str(base).split())
+            tc["name"] = (base[:60] + "…") if len(base) > 60 else (base or "Untitled test")
+
         cases.append(tc)
     return cases, warnings
 
@@ -917,7 +965,15 @@ textarea { resize: vertical; min-height: 70px; }
   <div class="tab-menu" id="menuMain" style="display:flex;">
     <button class="btn btn-outline" onclick="toggleGenerate()" style="font-size:0.75rem;padding:3px 8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;white-space:nowrap">Generate Test Cases with AI</button>
     <button class="btn btn-primary" onclick="toggleNew()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">+ Add a test case</button>
+    <div style="display:flex;align-items:center;gap:6px;padding:0 2px;">
+      <span style="font-size:0.72rem;color:#334155;font-weight:700;">Target</span>
+      <select id="asmiTargetSelect" onchange="onAsmiTargetChange()" style="font-size:0.75rem;padding:3px 8px;border:1px solid #d1d5db;border-radius:6px;background:white;">
+        <option value="dev">Dev</option>
+        <option value="prod">Prod</option>
+      </select>
+    </div>
     <button class="btn btn-outline" onclick="downloadCSVTemplate()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">⬇ Template (CSV)</button>
+    <button class="btn btn-outline" onclick="showTemplateHelp()" title="How to use the CSV template" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">i</button>
     <button class="btn btn-outline" onclick="exportTestsCSV()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">⬇ Export (CSV)</button>
     <input type="file" id="csvImportInput" accept=".csv,text/csv" style="display:none" onchange="importTestsCSV(event)">
     <button class="btn btn-outline" onclick="document.getElementById('csvImportInput').click()" style="font-size:0.75rem;padding:3px 8px;white-space:nowrap">⬆ Upload (CSV)</button>
@@ -1000,8 +1056,8 @@ textarea { resize: vertical; min-height: 70px; }
       <div id="new_wait_wrap" style="display:none">
         <label>Response Speed</label>
         <select id="new_wait_preset">
-          <option value="60">Fast — simple reply expected (60s)</option>
-          <option value="120" selected>Normal — default (120s)</option>
+          <option value="60" selected>Default — (60s)</option>
+          <option value="120">Normal — (120s)</option>
           <option value="180">Slow — Asmi needs to make a call (180s)</option>
           <option value="300">Very Slow — complex task or research (300s)</option>
         </select>
@@ -1101,6 +1157,40 @@ textarea { resize: vertical; min-height: 70px; }
   </div>
 </main>
 <div id="toast"></div>
+<div id="templateHelpModal" onclick="if(event.target.id==='templateHelpModal') hideTemplateHelp()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.65);z-index:9999;padding:24px;overflow:auto;">
+  <div style="max-width:860px;margin:40px auto;background:white;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.3);border:1px solid #e2e8f0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e2e8f0;">
+      <div style="font-weight:800;color:#0f172a;">CSV Template Help</div>
+      <button class="btn btn-outline" onclick="hideTemplateHelp()" style="font-size:0.75rem;padding:3px 10px;">✕ Close</button>
+    </div>
+    <div style="padding:16px 18px;color:#334155;line-height:1.55;font-size:0.92rem;">
+      <div style="font-weight:800;margin-bottom:6px;">Fastest workflow (3–4 columns)</div>
+      <div style="margin-bottom:12px;">You can upload a CSV with just: <code>category</code>, <code>type</code>, <code>message</code>, <code>pass_criteria</code>. Leave <code>id</code>/<code>name</code> blank — the system will generate them.</div>
+
+      <div style="font-weight:800;margin:12px 0 6px;">Types & required columns</div>
+      <ul style="margin:0 0 12px 18px;">
+        <li><code>single</code>: requires <code>message</code></li>
+        <li><code>burst</code>: requires <code>messages</code> (or use <code>message</code> and it becomes a 1-item list)</li>
+        <li><code>sequence</code>: requires <code>messages</code> (or use <code>message</code> and it becomes a 1-item list)</li>
+        <li><code>burst_with_setup</code>: requires <code>setup_message</code> + <code>messages</code></li>
+        <li><code>dedup</code>: requires <code>message</code> (optional <code>dedup_message</code>)</li>
+        <li><code>interactive</code>: requires <code>start_message</code> (if you only provide <code>message</code>, it becomes <code>start_message</code>). Recommended: <code>followups</code>. Optional: <code>stop_when</code>, <code>max_turns</code>, <code>auto_continue</code>.</li>
+      </ul>
+
+      <div style="font-weight:800;margin:12px 0 6px;">List formatting in cells</div>
+      <div style="margin-bottom:12px;">For <code>messages</code>, <code>followups</code>, <code>stop_when</code>: use multiple lines in the cell (best) or separate items with <code>|</code>. (Commas also work for <code>stop_when</code>.)</div>
+
+      <div style="font-weight:800;margin:12px 0 6px;">Timing defaults</div>
+      <div style="margin-bottom:12px;">If a test row has no <code>wait</code>, the default timeout is <b>60 seconds</b>. You can override per test with the <code>wait</code> column. Other knobs include <code>burst_delay</code>, <code>sequence_delay</code>, <code>dedup_delay</code>, <code>setup_wait</code>.</div>
+
+      <div style="font-weight:800;margin:12px 0 6px;">Updating existing tests</div>
+      <div style="margin-bottom:12px;">If you include an <code>id</code> that already exists, upload will <b>update</b> that test (upsert). If <code>id</code> is blank, upload will <b>create</b> a new test and auto-generate an id.</div>
+
+      <div style="font-weight:800;margin:12px 0 6px;">Power users</div>
+      <div>Download the full template: <a href="/api/tests/template_full.csv">template_full.csv</a></div>
+    </div>
+  </div>
+</div>
 <script>
 let tests = [];
 let _editingId = null;
@@ -1109,6 +1199,11 @@ let _sortBy = 'default';
 let _categoryOrder = [];
 let _responsesViewMode = 'transcript';
 let _dragState = null;
+
+const ASMI_TARGETS = {
+  dev:  {label: 'Dev',  handle: '+14082307921'},
+  prod: {label: 'Prod', handle: '+14082303488'},
+};
 
 const CAT_META = {
   onboarding:         {label:'Onboarding',        color:'#7c3aed', bg:'#f5f3ff'},
@@ -1133,7 +1228,7 @@ const CAT_META = {
   guardrails:         {label:'Guardrails',         color:'#991b1b', bg:'#fee2e2'},
   generated:          {label:'Generated',          color:'#334155', bg:'#f1f5f9'},
 };
-const CAT_ORDER = [
+const KNOWN_CAT_ORDER = [
   'onboarding','capability','sticky_message','call_dedup','cadence_control',
   'call_summary','voicemail','task_reliability','task_specific_call','threep_nudge',
   'location_memory','language_pref','timezone','checklist','chat_brevity','chat_flow',
@@ -1141,9 +1236,23 @@ const CAT_ORDER = [
   'personalization','reengagement','guardrails','generated',
 ];
 
+function _allCategories(list = tests) {
+  const set = new Set();
+  (list || []).forEach(t => { if (t && t.category) set.add(t.category); });
+  return Array.from(set);
+}
+
+function _sortedCategories(cats) {
+  const set = new Set(cats || []);
+  const ordered = [];
+  KNOWN_CAT_ORDER.forEach(c => { if (set.has(c)) ordered.push(c); });
+  const rest = Array.from(set).filter(c => !ordered.includes(c)).sort((a,b) => (a||'').localeCompare(b||''));
+  return ordered.concat(rest);
+}
+
 function _catOptions(selected = '', includeAll = false, includeAdd = true) {
   let html = includeAll ? '<option value="">All categories</option>' : '';
-  Array.from(new Set(CAT_ORDER)).forEach(c => {
+  _sortedCategories(_allCategories()).forEach(c => {
     const m = CAT_META[c] || {label:c};
     html += `<option value="${c}" ${selected===c?'selected':''}>${m.label}</option>`;
   });
@@ -1169,7 +1278,7 @@ function _confirmNewCategory() {
   const input = document.getElementById('new_cat_input');
   const name = input.value.trim();
   if (!name) { alert('Enter a category name'); return; }
-  if (CAT_ORDER.includes(name)) {
+  if (_allCategories().includes(name)) {
     alert('Category already exists');
     return;
   }
@@ -1177,7 +1286,6 @@ function _confirmNewCategory() {
   const el = document.getElementById('new_category');
   const btn = document.getElementById('new_cat_btn');
 
-  CAT_ORDER.push(name);
   CAT_META[name] = {label: name.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), color: '#64748b', bg: '#f1f5f9'};
   _initCatDropdowns();
 
@@ -1332,13 +1440,14 @@ function autoGenerateId() {
 
 async function load() {
   _initCatDropdowns();
+  initAsmiTarget();
   showTab('main');
   document.getElementById('testList').innerHTML = '<p style="color:#94a3b8;padding:20px">Loading test cases…</p>';
   try {
     const res = await fetch('/api/tests');
     tests = await res.json();
     if (tests.error) throw new Error(tests.error);
-    collapsedCats = new Set(CAT_ORDER);
+    collapsedCats = new Set(_allCategories());
     selectedTestIds = new Set();
     render();
   } catch(e) {
@@ -1372,9 +1481,7 @@ function render() {
     bycat[t.category].push(t);
   });
 
-  const filteredCatOrder = _categoryOrderFromTests(filtered);
-  const orderedCats = filteredCatOrder
-    .concat(Object.keys(bycat).filter(c => !filteredCatOrder.includes(c)));
+  const orderedCats = _sortedCategories(Object.keys(bycat));
 
   if (!orderedCats.length) {
     document.getElementById('testList').innerHTML = '<p style="color:#94a3b8;padding:20px">No tests match filter.</p>';
@@ -1409,6 +1516,8 @@ function render() {
           <input type="checkbox" id="catchk_${cat}" data-cat-select="${cat}" onclick="toggleCategorySelection('${cat}', this.checked)" ${checked}>
           <span style="background:${m.bg};padding:2px 10px;border-radius:99px">${m.label}</span>
         </label>
+        <button class="action-btn" onclick="event.stopPropagation(); renameCategory('${cat}')" title="Rename category" style="margin-left:6px;padding:2px 6px;color:#64748b">✎</button>
+        <button class="action-btn" onclick="event.stopPropagation(); deleteCategory('${cat}')" title="Delete category" style="padding:2px 6px;color:#ef4444">🗑</button>
         <span style="color:#94a3b8;font-weight:400;margin-left:6px">${items.length} test${items.length!==1?'s':''}</span>
       </td>
       <td style="text-align:right"></td>
@@ -1884,6 +1993,7 @@ async function runByCategory(cat) {
 
 async function _triggerRun(payload) {
   payload = {...payload, interactive_auto_continue: payload.interactive_auto_continue ?? interactiveAutoContinue};
+  payload.asmi_handle = payload.asmi_handle || getAsmiHandle();
   const label = payload.id ? `test: ${payload.id}` :
                 payload.ids ? `${payload.ids.length} selected tests` :
                 payload.category ? `category: ${payload.category}` :
@@ -2169,12 +2279,44 @@ function toast(msg) {
   setTimeout(() => el.classList.remove('show'), 3000);
 }
 
+function initAsmiTarget() {
+  const saved = (localStorage.getItem('asmiTarget') || '').trim();
+  const initial = saved in ASMI_TARGETS ? saved : 'dev';
+  const sel = document.getElementById('asmiTargetSelect');
+  if (!sel) return;
+  sel.value = initial;
+}
+
+function getAsmiHandle() {
+  const sel = document.getElementById('asmiTargetSelect');
+  const key = sel ? sel.value : (localStorage.getItem('asmiTarget') || 'dev');
+  const target = ASMI_TARGETS[key] || ASMI_TARGETS.dev;
+  return target.handle;
+}
+
+function onAsmiTargetChange() {
+  const sel = document.getElementById('asmiTargetSelect');
+  if (!sel) return;
+  localStorage.setItem('asmiTarget', sel.value);
+  toast(`Target set: ${(ASMI_TARGETS[sel.value]||ASMI_TARGETS.dev).label}`);
+}
+
 function downloadCSVTemplate() {
   window.location.href = '/api/tests/template.csv';
 }
 
 function exportTestsCSV() {
   window.location.href = '/api/tests/export.csv';
+}
+
+function showTemplateHelp() {
+  const el = document.getElementById('templateHelpModal');
+  if (el) el.style.display = 'block';
+}
+
+function hideTemplateHelp() {
+  const el = document.getElementById('templateHelpModal');
+  if (el) el.style.display = 'none';
 }
 
 async function importTestsCSV(ev) {
@@ -2189,17 +2331,59 @@ async function importTestsCSV(ev) {
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Import failed');
-    if (Array.isArray(data.warnings) && data.warnings.length) {
-      console.log('CSV import warnings:', data.warnings);
-      toast(`Imported ${data.count || 0} row(s) (see console for warnings)`);
-    } else {
-      toast(`Imported ${data.count || 0} row(s)`);
-    }
+    const created = data.created ?? 0;
+    const updated = data.updated ?? 0;
+    const gen = Array.isArray(data.generated_ids) ? data.generated_ids : [];
+    if (Array.isArray(data.warnings) && data.warnings.length) console.log('CSV import warnings:', data.warnings);
+    if (gen.length) console.log('Generated ids:', gen);
+    toast(`Imported ${data.count || 0} row(s): ${created} created, ${updated} updated${gen.length ? ' (ids generated; see console)' : ''}`);
     await load();
   } catch(e) {
     alert('CSV import failed: ' + e.message);
   } finally {
     ev.target.value = '';
+  }
+}
+
+async function renameCategory(cat) {
+  const next = prompt(`Rename category "${cat}" to:`, cat);
+  if (!next) return;
+  const name = next.trim();
+  if (!name) return;
+  if (name === cat) return;
+  tests.forEach(t => { if (t.category === cat) t.category = name; });
+  try {
+    const res = await fetch('/api/tests', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(tests),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    toast(`Renamed "${cat}" → "${name}"`);
+    await load();
+  } catch(e) {
+    alert('Rename failed: ' + e.message);
+  }
+}
+
+async function deleteCategory(cat) {
+  const items = tests.filter(t => t.category === cat);
+  if (!items.length) return;
+  if (!confirm(`Delete category "${cat}" and ALL ${items.length} test(s) in it? This cannot be undone.`)) return;
+  tests = tests.filter(t => t.category !== cat);
+  try {
+    const res = await fetch('/api/tests', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(tests),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    toast(`Deleted category "${cat}" (${items.length} tests)`);
+    await load();
+  } catch(e) {
+    alert('Delete failed: ' + e.message);
   }
 }
 
@@ -2875,6 +3059,9 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/tests/template.csv":
                 content = _csv_template_bytes()
                 self._csv(content, filename="test_cases_template.csv")
+            elif path == "/api/tests/template_full.csv":
+                content = _csv_full_template_bytes()
+                self._csv(content, filename="test_cases_template_full.csv")
             elif path == "/api/tests/export.csv":
                 cases = load_test_cases()
                 content = _tests_to_csv_bytes(cases)
@@ -3042,15 +3229,70 @@ class Handler(BaseHTTPRequestHandler):
                     mode = "upsert"
                 incoming, warnings = _import_tests_from_csv(csv_text)
                 existing = load_test_cases()
+                existing_by_id = {t.get("id"): t for t in existing if t.get("id")}
+
+                def _cat_prefix(cat: str) -> str:
+                    s = "".join(ch for ch in (cat or "").lower() if ch.isalnum())
+                    s = (s[:3] or "tst").lower()
+                    return s
+
+                def _next_id(prefix: str, used: set[str]) -> str:
+                    import re as _re
+                    pat = _re.compile(rf"^{_re.escape(prefix)}_(\\d+)$")
+                    max_n = 0
+                    for tid in used:
+                        m = pat.match(str(tid))
+                        if not m:
+                            continue
+                        try:
+                            max_n = max(max_n, int(m.group(1)))
+                        except Exception:
+                            pass
+                    n = max_n + 1
+                    cand = f"{prefix}_{str(n).zfill(2)}"
+                    while cand in used:
+                        n += 1
+                        cand = f"{prefix}_{str(n).zfill(2)}"
+                    return cand
+
+                used_ids = set(existing_by_id.keys())
+                generated_ids = []
+                created = 0
+                updated = 0
+
+                normalized_incoming = []
+                for row_idx, tc in enumerate(incoming, start=2):
+                    if not isinstance(tc, dict):
+                        continue
+                    tid = (tc.get("id") or "").strip() if tc.get("id") is not None else ""
+                    if not tid:
+                        prefix = _cat_prefix(tc.get("category") or "misc")
+                        tid = _next_id(prefix, used_ids)
+                        tc["id"] = tid
+                        generated_ids.append({"row": row_idx, "id": tid})
+                    if tid in existing_by_id:
+                        updated += 1
+                    else:
+                        created += 1
+                    used_ids.add(tid)
+                    normalized_incoming.append(tc)
+
                 if mode == "replace":
-                    merged = incoming
+                    merged = normalized_incoming
                 else:
-                    by_id = {t.get("id"): t for t in existing if t.get("id")}
-                    for tc in incoming:
+                    by_id = dict(existing_by_id)
+                    for tc in normalized_incoming:
                         by_id[tc["id"]] = tc
                     merged = list(by_id.values())
                 save_test_cases(merged)
-                self._json({"ok": True, "count": len(incoming), "warnings": warnings})
+                self._json({
+                    "ok": True,
+                    "count": len(normalized_incoming),
+                    "created": created,
+                    "updated": updated,
+                    "generated_ids": generated_ids,
+                    "warnings": warnings,
+                })
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
         elif path == "/api/run":
@@ -3082,6 +3324,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id":       rid,
                 "ids":      ids,
                 "interactive_auto_continue": bool(data.get("interactive_auto_continue", True)),
+                "asmi_handle": (str(data.get("asmi_handle") or "").strip() or None),
                 "ts":       time.time(),
             }
             _run_output  = ""

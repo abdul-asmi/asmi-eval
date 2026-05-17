@@ -8,9 +8,10 @@
 import sqlite3
 import subprocess
 import time
+import os
 from datetime import datetime, timezone, timedelta
 
-from config import CHAT_DB, ASMI_HANDLE, POLL_INTERVAL
+from config import CHAT_DB, ASMI_HANDLE as _CFG_ASMI_HANDLE, POLL_INTERVAL
 
 # Mac Absolute Time epoch (2001-01-01 UTC)
 _MAC_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
@@ -29,8 +30,14 @@ def _from_mac_ts(ns: int) -> datetime:
 
 # ─── Send ─────────────────────────────────────────────────────────────────────
 
-def send_imessage(message: str, handle: str = ASMI_HANDLE) -> bool:
+def _resolve_handle(handle: str | None) -> str:
+    env_handle = os.environ.get("ASMI_HANDLE", "").strip()
+    return (handle or env_handle or _CFG_ASMI_HANDLE).strip()
+
+
+def send_imessage(message: str, handle: str | None = None) -> bool:
     """Send an iMessage using AppleScript. Returns True on success."""
+    handle = _resolve_handle(handle)
     # Escape double quotes in message body
     safe_msg = message.replace('"', '\\"')
     script = f'''
@@ -93,7 +100,7 @@ def wait_for_responses(
     sent_at: datetime,
     count: int = 1,
     timeout: int = 150,
-    handle: str = ASMI_HANDLE,
+    handle: str | None = None,
     max_responses: int = 10,
     drain_all: bool = False,
     return_raw: bool = False,
@@ -104,6 +111,7 @@ def wait_for_responses(
     Collect up to `max_responses` replies that arrive after the user message.
     Returns list of response texts (may be fewer than `count` if timeout reached).
     """
+    handle = _resolve_handle(handle)
     since_ns      = _mac_ts(sent_at)
     deadline      = time.time() + timeout
     collected     = []
@@ -147,7 +155,7 @@ def send_and_wait(
     message: str,
     count: int = 1,
     timeout: int = 150,
-    handle: str = ASMI_HANDLE,
+    handle: str | None = None,
 ) -> list[str]:
     """Send one message and wait for `count` responses. Returns response texts."""
     sent_at = datetime.now(timezone.utc)
@@ -163,7 +171,7 @@ def send_burst(
     burst_delay: float = 1.0,
     expected_responses: int = None,
     timeout: int = 240,
-    handle: str = ASMI_HANDLE,
+    handle: str | None = None,
 ) -> list[str]:
     """
     Send multiple messages rapidly (burst_delay seconds apart),
@@ -193,7 +201,7 @@ def send_sequence(
     messages: list[str],
     sequence_delay: float = 12.0,
     timeout_per: int = 120,
-    handle: str = ASMI_HANDLE,
+    handle: str | None = None,
 ) -> list[str]:
     """
     Send messages one at a time, waiting for a response to each before sending the next.

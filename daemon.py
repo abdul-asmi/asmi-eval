@@ -484,6 +484,7 @@ def run():
                 try:
                     response = _run_with_stop(cmd, extra_env={
                         "ASMI_INTERACTIVE_AUTO_CONTINUE": pending.get("interactive_auto_continue", "1"),
+                        "ASMI_HANDLE": pending.get("asmi_handle") or "",
                     })
                 except Exception as e:
                     response = f"❌ Error: {e}"

@@ -6,8 +6,8 @@ ASMI_HANDLE = "+14082307921"          # Asmi's iMessage number
 GEMINI_API_KEY = "REDACTED_GEMINI_API_KEY"
 GEMINI_MODEL   = "models/gemini-3.1-flash-lite-preview"
 
-RESPONSE_TIMEOUT   = 150   # seconds to wait for a single response
-BURST_WAIT         = 240   # seconds to wait when expecting multiple responses
+RESPONSE_TIMEOUT   = 60    # default seconds to wait for a single response
+BURST_WAIT         = 60    # default seconds to wait when expecting multiple responses
 POLL_INTERVAL      = 3     # seconds between chat.db polls
 BURST_SEND_DELAY   = 1.0   # seconds between rapid-fire sends (default)
 SEQUENCE_DELAY     = 12.0  # seconds between sequential task sends
