@@ -1,0 +1,20 @@
+[
+  {
+    "id": "nudge_01",
+    "name": "First call includes 3P nudge",
+    "category": "threep_nudge",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local Italian restaurant in Pittsburgh and ask if they take reservations"
+    ],
+    "responses": [],
+    "verdict": "FAIL",
+    "reason": "Asmi provided no response to the task within the captured response pool.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-08T16:41:39.096959+00:00",
+    "finished_at": "2026-05-08T16:43:12.168368+00:00",
+    "matched_responses": "none found"
+  }
+]

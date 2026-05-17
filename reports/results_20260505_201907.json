@@ -1,0 +1,26 @@
+[
+  {
+    "id": "preonb_02",
+    "name": "Pre-onboarding: Ask for first call, user says NO once \u2192 NO TEXT-ONLY MODE (CRITICAL)",
+    "category": "onboarding",
+    "type": "sequence",
+    "tasks_sent": [
+      "Hi, I want help with my tasks",
+      "No, I prefer not to have a call right now"
+    ],
+    "responses": [
+      "Top Plumbers in Pittsburgh",
+      "Fair enough, no pressure. I\u2019m not a fan of unsolicited calls either."
+    ],
+    "verdict": "FAIL",
+    "reason": "Only got 2/3 responses \u2014 1 dropped or timed out.",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Only got 2/3 responses \u2014 1 dropped or timed out."
+    },
+    "manual_check": "Verify no \"Would you change your mind?\" or second call ask appears.",
+    "note": "This is a regression \u2014 some flows ask twice. Must ask only once.",
+    "started_at": "2026-05-06T00:17:59.647182+00:00",
+    "finished_at": "2026-05-06T00:19:02.013848+00:00"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "lang_03",
+    "name": "Explicit language in request: no re-ask",
+    "category": "language_pref",
+    "type": "single",
+    "tasks_sent": [
+      "Call a restaurant in Pittsburgh in English and ask about their menu"
+    ],
+    "responses": [
+      "Consider it done. I'll get the full scoop on their menu for you.",
+      "Let's do a quick 2-min call first so I can show you how I handle these. Free now?"
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-07T17:40:16.082596+00:00",
+    "finished_at": "2026-05-07T17:40:31.247633+00:00"
+  }
+]

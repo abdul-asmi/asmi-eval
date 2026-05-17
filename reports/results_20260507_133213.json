@@ -1,0 +1,53 @@
+[
+  {
+    "id": "interactive_02",
+    "name": "Interactive: Pittsburgh pharmacy call with location clarification",
+    "category": "interactive",
+    "type": "interactive",
+    "tasks_sent": [
+      "Call a pharmacy near me and ask if they have flu shots available",
+      "I am in Pittsburgh, PA.",
+      "Use the nearest major pharmacy chain."
+    ],
+    "responses": [
+      "I'll handle the pharmacy hunt for you. Those hold times are a nightmare.",
+      "Let's jump on a 2-min call first so I can get this sorted for you live. Free now?"
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-07T17:30:46.943020+00:00",
+    "transcript": [
+      {
+        "turn": 1,
+        "user": "Call a pharmacy near me and ask if they have flu shots available",
+        "responses": [
+          "I'll handle the pharmacy hunt for you. Those hold times are a nightmare.",
+          "Let's jump on a 2-min call first so I can get this sorted for you live. Free now?"
+        ],
+        "started_at": "2026-05-07T17:30:46.943139+00:00",
+        "finished_at": "2026-05-07T17:31:14.196049+00:00"
+      },
+      {
+        "turn": 2,
+        "user": "I am in Pittsburgh, PA.",
+        "responses": [],
+        "started_at": "2026-05-07T17:31:14.196189+00:00",
+        "finished_at": "2026-05-07T17:31:23.382611+00:00"
+      },
+      {
+        "turn": 3,
+        "user": "Use the nearest major pharmacy chain.",
+        "responses": [],
+        "started_at": "2026-05-07T17:31:23.382650+00:00",
+        "finished_at": "2026-05-07T17:31:32.557100+00:00"
+      }
+    ],
+    "auto_continue": true,
+    "max_turns": 3,
+    "max_responses": 10,
+    "finished_at": "2026-05-07T17:31:32.557135+00:00"
+  }
+]

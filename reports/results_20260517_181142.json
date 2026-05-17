@@ -1,0 +1,24 @@
+[
+  {
+    "id": "cap_01",
+    "name": "What can you do: calling clearly mentioned",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "What can you help me with?"
+    ],
+    "responses": [
+      "I'm your extra set of hands. I can make calls, book things, and hunt down info.",
+      "Think of me for tracking tasks or finding the best spots nearby while you're busy.",
+      "Need me to handle something specific right now?"
+    ],
+    "verdict": "FAIL",
+    "reason": "While the response mentions Asmi \"can make calls,\" it fails to explain the *kind* of calls Asmi can make (e.g., outbound calls to businesses), as required by the pass criteria.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T22:10:02.931389+00:00",
+    "finished_at": "2026-05-17T22:11:18.264211+00:00",
+    "matched_responses": "\"I'm your extra set of hands. I can make calls, book things, and hunt down info.\""
+  }
+]

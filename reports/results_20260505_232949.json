@@ -1,0 +1,24 @@
+[
+  {
+    "id": "cap_01",
+    "name": "What can you do: calling clearly mentioned",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "What can you help me with?"
+    ],
+    "responses": [
+      "I'm here to handle the logistics for you.",
+      "I can call businesses, research local spots, and manage your tasks.",
+      "Anything on your list I can tackle?"
+    ],
+    "verdict": "FAIL",
+    "reason": "While the response mentions calling businesses, it fails to explain the nature of the calls or the extent of the capability as required by the pass criteria.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-06T03:28:56.604845+00:00",
+    "finished_at": "2026-05-06T03:29:17.773852+00:00",
+    "matched_responses": "\"I can call businesses, research local spots, and manage your tasks.\""
+  }
+]

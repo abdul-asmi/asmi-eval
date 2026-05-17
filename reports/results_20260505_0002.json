@@ -1,0 +1,27 @@
+[
+  {
+    "id": "dedup_01",
+    "name": "Exact duplicate call within 2 seconds \u2192 only one call fires",
+    "category": "call_dedup",
+    "type": "dedup",
+    "tasks_sent": [
+      "Call a local pharmacy in Pittsburgh and ask if they have flu shots available",
+      "Call a local pharmacy in Pittsburgh and ask if they have flu shots available"
+    ],
+    "responses": [
+      "Searching for the best pharmacies in Pittsburgh for you.",
+      "Top-Rated Pharmacies in Pittsburgh",
+      "TOP PICK\n\u2022 Schiller's Apothecary \u2022 4.9 stars (712 reviews)\n811 S Aiken Ave \u2022 Delivery available\nThis is the clear favorite with a near-perfect rating and the highest volume of positive reviews in the city."
+    ],
+    "verdict": "FAIL",
+    "reason": "Dedup failed \u2014 got 3 responses, expected 1.",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Dedup failed \u2014 got 3 responses, expected 1."
+    },
+    "manual_check": "Open ElevenLabs dashboard \u2014 confirm only 1 call was initiated.",
+    "note": null,
+    "started_at": "2026-05-05T04:02:11.347591+00:00",
+    "finished_at": "2026-05-05T04:02:34.631337+00:00"
+  }
+]

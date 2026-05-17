@@ -1,0 +1,22 @@
+[
+  {
+    "id": "nudge_02",
+    "name": "Second call does NOT repeat the 3P nudge",
+    "category": "threep_nudge",
+    "type": "single",
+    "tasks_sent": [
+      "Call the nearest pharmacy in Pittsburgh and ask about flu shots"
+    ],
+    "responses": [
+      "Retrieved pharmacy details and updating your preferences."
+    ],
+    "verdict": "PASS",
+    "reason": "The response directly confirms the action is proceeding without including the mandatory first-time onboarding disclaimer or 3P nudge.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-05T20:09:39.177410+00:00",
+    "finished_at": "2026-05-05T20:09:57.319515+00:00",
+    "matched_responses": "Retrieved pharmacy details and updating your preferences."
+  }
+]

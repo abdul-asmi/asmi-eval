@@ -1,0 +1,24 @@
+[
+  {
+    "id": "onboard_01",
+    "name": "First message gets exactly one response",
+    "category": "onboarding",
+    "type": "single",
+    "tasks_sent": [
+      "Hi, what can you do?"
+    ],
+    "responses": [
+      "I'm here to handle the logistics so you don't have to.",
+      "I can make calls, find info, and manage your tasks or schedule.",
+      "Want me to ring Alla Famiglia first to check on that patio?"
+    ],
+    "verdict": "FAIL",
+    "reason": "Asmi sent three separate messages in response to a single prompt, failing the requirement to provide exactly one response.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T22:03:57.255271+00:00",
+    "finished_at": "2026-05-17T22:05:12.559331+00:00",
+    "matched_responses": "\"I'm here to handle the logistics so you don't have to.\", \"I can make calls, find info, and manage your tasks or schedule.\", \"Want me to ring Alla Famiglia first to check on that patio?\""
+  }
+]

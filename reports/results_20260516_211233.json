@@ -1,0 +1,23 @@
+[
+  {
+    "id": "checklist_01",
+    "name": "Checklist: User shares multi-step task \u2192 Asmi creates checklist",
+    "category": "checklist",
+    "type": "single",
+    "tasks_sent": [
+      "I need to plan a birthday party. Steps: 1) Find a venue, 2) Book catering, 3) Send invites, 4) Arrange decorations"
+    ],
+    "responses": [
+      "I've started looking into your birthday plans\u2014I'll have some ideas ready for you shortly. As for the dentist in Pittsburgh, I'm still waiting to hear which insurance provider you use so I can narrow down the best in-network options.",
+      "To get those birthday plans moving, what kind of vibe are you going for this year: something low-key, or are we looking for a proper celebration?"
+    ],
+    "verdict": "FAIL",
+    "reason": "Asmi failed to break the user's provided steps into a checklist or acknowledge the specific tasks listed, instead opting to ask a follow-up question about the party vibe.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T01:11:52.902305+00:00",
+    "finished_at": "2026-05-17T01:12:11.027330+00:00",
+    "matched_responses": "\"I've started looking into your birthday plans\u2014I'll have some ideas ready for you shortly.\" and \"To get those birthday plans moving, what kind of vibe are you going for this year: something low-key, or are we looking for a proper celebration?\""
+  }
+]

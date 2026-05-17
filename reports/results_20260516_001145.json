@@ -1,0 +1,21 @@
+[
+  {
+    "id": "sticky_02",
+    "name": "Single research task with Sunday-specific detail",
+    "category": "sticky_message",
+    "type": "single",
+    "tasks_sent": [
+      "What are the best coffee shops in downtown Pittsburgh that are open on Sundays?"
+    ],
+    "responses": [
+      "Searching for the best Sunday coffee spots in downtown Pittsburgh for you."
+    ],
+    "verdict": "UNCLEAR",
+    "reason": "Judge error: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-16T04:11:27.849446+00:00",
+    "finished_at": "2026-05-16T04:11:40.024677+00:00"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "cap_04",
+    "name": "Mid-task: framing of what Asmi is about to do is accurate",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local restaurant in Pittsburgh and get me a reservation for 2 people tonight at 7pm"
+    ],
+    "responses": [
+      "I'm on it."
+    ],
+    "verdict": "FAIL",
+    "reason": "The response is generic and fails to mention that Asmi is calling the restaurant on the user's behalf, failing to accurately frame the specific action being taken.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-05T18:47:46.770751+00:00",
+    "finished_at": "2026-05-05T18:47:58.902802+00:00",
+    "matched_responses": "\"I'm on it.\""
+  }
+]

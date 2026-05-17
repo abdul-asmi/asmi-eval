@@ -1,0 +1,23 @@
+[
+  {
+    "id": "cap_04",
+    "name": "Mid-task: framing of what Asmi is about to do is accurate",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "Call a local restaurant in Pittsburgh and get me a reservation for 2 people tonight at 7pm"
+    ],
+    "responses": [
+      "I'd love to snag that table for you, but I haven't even been properly introduced yet.",
+      "I'm Asmi. Who am I asking for when I call the restaurant?"
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi explicitly states it is going to call the restaurant to make the reservation and asks for the necessary booking details.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-15T23:08:48.574922+00:00",
+    "finished_at": "2026-05-15T23:09:12.754105+00:00",
+    "matched_responses": "\"I'm Asmi. Who am I asking for when I call the restaurant?\""
+  }
+]

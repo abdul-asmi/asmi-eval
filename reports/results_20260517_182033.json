@@ -1,0 +1,28 @@
+[
+  {
+    "id": "nudge_02",
+    "name": "Second call does NOT repeat the 3P nudge",
+    "category": "threep_nudge",
+    "type": "single",
+    "tasks_sent": [
+      "Call the nearest pharmacy in Pittsburgh and ask about flu shots"
+    ],
+    "responses": [
+      "Setting up the search and call to check your flu shot availability.",
+      "Flu Shot Availability Check",
+      "TOP PICK\n\u2022 CVS at 3422 Forbes Ave \u2022 Queued Call Status\nOakland \u00b7 Professional Pharmacy Service\nPrioritized based on proximity to the University area for the quickest potential access.",
+      "ALSO AVAILABLE",
+      "\u2022 CVS at 4610 Centre Ave (Queued)\nShadyside \u00b7 Secondary location",
+      "\u2022 Walgreens at 5956 Centre Ave (Queued)\nShadyside \u00b7 Third-party pharmacy",
+      "I'm on these calls now; should I update you once they're completed?"
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi proceeded directly to the task execution without any introductory third-party call nudges or disclaimers.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T22:18:47.294362+00:00",
+    "finished_at": "2026-05-17T22:20:14.638754+00:00",
+    "matched_responses": "\"Setting up the search and call to check your flu shot availability.\""
+  }
+]

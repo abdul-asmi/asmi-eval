@@ -1,0 +1,26 @@
+[
+  {
+    "id": "dedup_01",
+    "name": "Exact duplicate call within 2 seconds \u2192 only one call fires",
+    "category": "call_dedup",
+    "type": "dedup",
+    "tasks_sent": [
+      "Call a local pharmacy in Pittsburgh and ask if they have flu shots available",
+      "Call a local pharmacy in Pittsburgh and ask if they have flu shots available"
+    ],
+    "responses": [
+      "I'm finding a local pharmacy and will give them a call to check on flu shots for you.",
+      "I've queued up calls to Hilltop Pharmacy, North Shore Health Mart, and Waltmire Pharmacy. I'll check if they have flu shots in stock and whether you can just walk in or need an appointment."
+    ],
+    "verdict": "FAIL",
+    "reason": "Dedup failed \u2014 got 2 responses, expected 1.",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Dedup failed \u2014 got 2 responses, expected 1."
+    },
+    "manual_check": "Open ElevenLabs dashboard \u2014 confirm only 1 call was initiated.",
+    "note": null,
+    "started_at": "2026-05-05T17:11:04.269984+00:00",
+    "finished_at": "2026-05-05T17:11:33.617743+00:00"
+  }
+]

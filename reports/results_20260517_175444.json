@@ -1,0 +1,20 @@
+[
+  {
+    "id": "cap_02",
+    "name": "Calling capability described accurately and specifically",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "Can you make phone calls on my behalf?"
+    ],
+    "responses": [],
+    "verdict": "FAIL",
+    "reason": "Asmi did not provide any response to the task within the captured session, making it impossible to evaluate the accuracy or specificity of the description.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T21:53:37.673026+00:00",
+    "finished_at": "2026-05-17T21:54:37.930085+00:00",
+    "matched_responses": "none found"
+  }
+]
