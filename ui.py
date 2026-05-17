@@ -1642,7 +1642,7 @@ function render() {
                 style="padding:2px 6px;margin-right:6px;color:#94a3b8;cursor:grab;font-size:1.05rem;line-height:1;min-width:24px;text-align:center;">
           <span class="drag-handle-glyph" aria-hidden="true">⋮⋮</span>
         </button>
-        <button class="action-btn" onclick="toggleCat('${cat}')" style="padding:2px 6px;margin-right:4px;color:${m.color}">${chevron}</button>
+        <button class="action-btn cat-toggle-btn" onclick="toggleCat('${cat}')" style="padding:2px 6px;margin-right:4px;color:${m.color}">${chevron}</button>
         <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="catchk_${cat}" data-cat-select="${cat}" onclick="toggleCategorySelection('${cat}', this.checked)" ${checked}>
           <span style="background:${m.bg};padding:2px 10px;border-radius:99px">${m.label}</span>
@@ -1664,7 +1664,7 @@ function render() {
         <th>Name</th>
         <th style="width:100px">Type</th>
         <th>Message preview</th>
-        <th style="width:68px"></th>
+        <th style="width:96px"></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
@@ -1700,6 +1700,7 @@ function renderRow(t, cat) {
     <td class="msg-cell" title="${preview}">${preview}</td>
     <td onclick="event.stopPropagation()" style="white-space:nowrap">
       <button class="action-btn" onclick="editRow('${t.id}')" title="Edit">✎</button>
+      <button class="action-btn" onclick="duplicateTest(${idx})" title="Duplicate">⧉</button>
       <button class="action-btn" onclick="deleteTest(${idx})" title="Delete">🗑</button>
     </td>
   </tr>
@@ -1764,6 +1765,7 @@ function renderRow(t, cat) {
         <div class="form-actions">
           <button class="btn btn-run" onclick="runById('${t.id}')">▶ Run this test</button>
           <button class="btn btn-success" onclick="saveAll()">💾 Save</button>
+          <button class="btn btn-outline" onclick="duplicateTest(${idx})">⧉ Duplicate</button>
           <button class="btn btn-danger" onclick="deleteTest(${idx})">Delete</button>
           <button class="btn btn-outline" onclick="editRow('${t.id}')">✕ Close</button>
         </div>
@@ -1851,7 +1853,7 @@ function _applyCollapsed() {
   });
   // Update chevron icons
   document.querySelectorAll('.cat-row[data-cat-header]').forEach(row => {
-    const btn = row.querySelector('.action-btn');
+    const btn = row.querySelector('.cat-toggle-btn');
     if (btn) {
       const cat = row.getAttribute('data-cat-header');
       btn.textContent = collapsedCats.has(cat) ? '▸' : '▾';
@@ -1870,6 +1872,36 @@ function updateMsgs(idx, val) {
 
 function updateInteractiveFollowups(idx, val) {
   tests[idx].followups = val.split('\\n').map(s=>s.trim()).filter(Boolean);
+}
+
+function _categoryPrefix(category) {
+  const cleaned = String(category || 'misc').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return (cleaned.substring(0, 3) || 'tst');
+}
+
+function _nextTestId(category) {
+  const prefix = _categoryPrefix(category);
+  const existing = new Set(tests.map(t => t.id));
+  let seq = 1;
+  let id = '';
+  do {
+    id = prefix + '_' + String(seq).padStart(2, '0');
+    seq++;
+  } while (existing.has(id));
+  return id;
+}
+
+function duplicateTest(idx) {
+  const src = tests[idx];
+  if (!src) return;
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.id = _nextTestId(copy.category || 'misc');
+  copy.name = (copy.name || copy.id || 'Test') + ' copy';
+  tests.splice(idx + 1, 0, copy);
+  if (copy.category) collapsedCats.delete(copy.category);
+  render();
+  setTimeout(() => editRow(copy.id), 0);
+  toast('Duplicated test — edit it, then Save');
 }
 
 function toggleNew() {
@@ -1937,10 +1969,7 @@ function addNew() {
 
   if (!tc.name) { alert('Name is required'); return; }
 
-  const existingIds = tests.filter(t => t.category === category).map(t => t.id);
-  let seq = 1;
-  while (existingIds.includes(category.substring(0,3).toLowerCase() + '_' + String(seq).padStart(2,'0'))) seq++;
-  tc.id = category.substring(0,3).toLowerCase() + '_' + String(seq).padStart(2,'0');
+  tc.id = _nextTestId(category);
 
   tests.push(tc);
   toggleNew();
