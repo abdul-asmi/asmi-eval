@@ -388,8 +388,6 @@ Can you help me cancel my gym membership?'],
         'name': 'Missed call → retry logic',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-Please call my landlord about the noise complaint I filed last week.',
         'pass_criteria': 'Asmi sends a chat update about the call attempt. Message should offer to retry or ask how to proceed — not go silent.',
         'messages': ['cmd_reset_history
 Please call my landlord about the noise complaint I filed last week.'],
