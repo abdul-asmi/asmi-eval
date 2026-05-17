@@ -1,0 +1,23 @@
+[
+  {
+    "id": "cap_02",
+    "name": "Calling capability described accurately and specifically",
+    "category": "capability",
+    "type": "single",
+    "tasks_sent": [
+      "Can you make phone calls on my behalf?"
+    ],
+    "responses": [
+      "I definitely can.",
+      "I'll handle the call to check on that outdoor seating for you. Want me to start with Alla Famiglia?"
+    ],
+    "verdict": "FAIL",
+    "reason": "The response is vague and fails to meet the criteria of accurately and specifically describing that Asmi calls businesses or services on the user's behalf.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T22:02:24.724057+00:00",
+    "finished_at": "2026-05-17T22:03:39.994693+00:00",
+    "matched_responses": "\"I definitely can.\""
+  }
+]
