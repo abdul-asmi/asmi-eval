@@ -903,6 +903,7 @@ Can you help me book a flight to Honalulu from Hyderabad departing June 1st to J
         'messages': ['cmd_reset_history
 Make me a plan PDF from what we just discussed.'],
         'id': 'pdf_02',
+        'precondition': 'Discuss some task in call',
     },
     {
         'name': 'False confirm — no delivery (regression)',
