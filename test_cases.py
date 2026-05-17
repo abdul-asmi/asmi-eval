@@ -8,7 +8,7 @@ TEST_CASES = [
         'id': 'onboard_01',
         'name': 'First message gets exactly one response',
         'category': 'onboarding',
-        'type': 'single',
+        'type': 'sequence',
         'message': 'Hi, what can you do?',
         'wait': 60,
         'expected_responses': 5,
