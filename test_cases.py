@@ -351,8 +351,6 @@ TEST_CASES = [
         'name': 'Simple task → immediate call',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-Need to plan a birthday party',
         'pass_criteria': 'Asmi responds in chat acknowledging the task and either asks clarifying questions or proposes next steps.',
         'messages': ['cmd_reset_history
 Need to plan a birthday party'],
