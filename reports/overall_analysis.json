@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-05-16 21:10:54 ET",
+  "updated_at": "2026-05-16 21:12:33 ET",
   "source_run_count": 82,
-  "latest_stem": "20260516_211054",
+  "latest_stem": "20260516_211233",
   "text": "OVERALL_SCORE: 27/146 passed (18.5%)\nSUMMARY: Across all recorded runs, the system has 76 failures and 43 unclear outcomes. The current cumulative pass rate is 18.5%.\nHITS:\n- Total passed outcomes so far: 27.\n- Stable categories with fewer failures are visible where fail counts remain low outside the top failing categories.\nMISSES:\n- Most repeated failing tests: dedup_01 (7), sticky_01 (6), nudge_01 (5).\n- Most affected categories: sticky_message (12), onboarding (11), call_dedup (10).\nBEHAVIOR_PATTERN:\nRecent failures cluster around repeated scenarios rather than random spread, which suggests a few persistent behavior gaps.\nGAPS:\n- Repeated failure reasons observed:\n- Only got 0/4 responses \u2014 4 dropped or timed out. (3)\n- Asmi asked for clarification but did not wait for the user's response before concluding the task, failing to actually secure an appointment  (3)\n- Although Asmi acknowledged the end of the request with \"Fair enough,\" it immediately violated the criteria by opening a new, irrelevant topi (3)\nRECOMMENDATION:\nPrioritize fixes for the top failing tests/categories, then re-run only those categories to validate lift before full-suite regression."
 }
