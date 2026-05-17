@@ -195,7 +195,7 @@ SIMPLE_CSV_COLUMNS = [
 def _split_cell_list(val: str) -> list[str]:
     if val is None:
         return []
-    s = str(val)
+    s = str(val).replace("\\n", "\n")
     if not s.strip():
         return []
     if "\n" in s:
@@ -2051,6 +2051,7 @@ async function runByCategory(cat) {
 async function _triggerRun(payload) {
   payload = {...payload, interactive_auto_continue: payload.interactive_auto_continue ?? interactiveAutoContinue};
   payload.asmi_handle = payload.asmi_handle || getAsmiHandle();
+  const targetName = Object.values(ASMI_TARGETS).find(t => t.handle === payload.asmi_handle)?.label || payload.asmi_handle;
   const label = payload.id ? `test: ${payload.id}` :
                 payload.ids ? `${payload.ids.length} selected tests` :
                 payload.category ? `category: ${payload.category}` :
@@ -2066,8 +2067,8 @@ async function _triggerRun(payload) {
       toast(data.error || 'Run request failed');
       return;
     }
-    toast(`Queued ${label}…`);
-    _openOutput(`Queued ${label}…`);
+    toast(`Queued ${label} on ${targetName}…`);
+    _openOutput(`Queued ${label} on ${targetName}…`);
   } catch(e) {
     toast('Failed to queue run: ' + e.message);
   }
@@ -2553,7 +2554,7 @@ async function saveAndRunGenerated() {
 
   // Trigger run for category "generated"
   document.getElementById('genRunStatus').textContent = 'Queued for daemon…';
-  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({category:'generated'})});
+  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({category:'generated', asmi_handle:getAsmiHandle()})});
   const data = await res.json();
   if (!data.ok) { alert('Run failed'); btn.disabled = false; return; }
   document.getElementById('genRunStatus').textContent = 'Queued for daemon…';
@@ -2580,7 +2581,7 @@ async function runSingleGenerated(idx) {
   resultEl.style.display = 'block';
   resultEl.innerHTML = '<span style="color:#7c3aed;font-size:0.82rem;">Sending to daemon…</span>';
 
-  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: test.id})});
+  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: test.id, asmi_handle:getAsmiHandle()})});
   const data = await res.json();
   if (!data.ok) { resultEl.innerHTML = '<span style="color:red">Run failed</span>'; if (btn) btn.disabled = false; return; }
 

@@ -233,18 +233,23 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
     from commands import CATEGORIES
 
     arg = cmd.strip().removeprefix("run").strip()
+    try:
+        _all_tc_for_routing = _load_test_cases()
+    except Exception:
+        _all_tc_for_routing = []
+    dynamic_categories = {t.get("category") for t in _all_tc_for_routing if t.get("category")}
     if not arg or arg == "all":
         proc_cmd = [sys.executable, "run_eval.py"]
         label = "full suite"
     elif "," in arg:
         parts = [p.strip() for p in arg.split(",") if p.strip()]
-        if all(p in CATEGORIES for p in parts):
+        if parts and all(p in dynamic_categories for p in parts):
             proc_cmd = [sys.executable, "run_eval.py", "--categories", arg]
             label = f"categories: {arg}"
         else:
             proc_cmd = [sys.executable, "run_eval.py", "--ids", arg]
             label = f"tests: {arg}"
-    elif arg in CATEGORIES:
+    elif arg in dynamic_categories:
         proc_cmd = [sys.executable, "run_eval.py", "--category", arg]
         label = f"category: {arg}"
     else:
@@ -256,16 +261,16 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
 
     # Count total tests for progress reporting
     try:
-        _all_tc = _load_test_cases()
+        _all_tc = _all_tc_for_routing or _load_test_cases()
         if not arg or arg == "all":
             total_count = len(_all_tc)
         elif "," in arg:
             parts = [c.strip() for c in arg.split(',') if c.strip()]
-            if all(p in CATEGORIES for p in parts):
+            if parts and all(p in dynamic_categories for p in parts):
                 total_count = len([t for t in _all_tc if t["category"] in parts])
             else:
                 total_count = len([t for t in _all_tc if t["id"] in parts])
-        elif arg in CATEGORIES:
+        elif arg in dynamic_categories:
             total_count = len([t for t in _all_tc if t["category"] == arg])
         else:
             total_count = 1
@@ -479,12 +484,14 @@ def run():
                 else:
                     cmd = f"run {rid or cat or 'all'}"
                 ts  = datetime.now().strftime("%H:%M:%S")
-                print(f"\n  [{ts}] UI run request: {cmd}")
+                target_handle = pending.get("asmi_handle") or ""
+                target_label = f" target={target_handle}" if target_handle else ""
+                print(f"\n  [{ts}] UI run request: {cmd}{target_label}")
                 _ack_run_to_server(pending)
                 try:
                     response = _run_with_stop(cmd, extra_env={
                         "ASMI_INTERACTIVE_AUTO_CONTINUE": pending.get("interactive_auto_continue", "1"),
-                        "ASMI_HANDLE": pending.get("asmi_handle") or "",
+                        "ASMI_HANDLE": target_handle,
                     })
                 except Exception as e:
                     response = f"❌ Error: {e}"

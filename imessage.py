@@ -233,7 +233,6 @@ def send_sequence(
                 max_responses=10,
                 drain_all=True,
                 return_raw=True,
-                silence_after=8.0,
             )
             new_msgs = []
             for m in msgs:

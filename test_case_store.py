@@ -42,7 +42,7 @@ def _gh_get_file(token: str, repo: str, path: str) -> str:
 
 
 def _extract_test_cases(src: str) -> list[dict[str, Any]]:
-    match = re.search(r"TEST_CASES\\s*=\\s*(\\[.*\\])", src, re.DOTALL)
+    match = re.search(r"TEST_CASES\s*=\s*(\[.*\])", src, re.DOTALL)
     if not match:
         return []
     val = ast.literal_eval(match.group(1))
@@ -68,4 +68,3 @@ def load_test_cases() -> list[dict[str, Any]]:
     from test_cases import TEST_CASES  # local import to avoid side-effects at module import time
 
     return list(TEST_CASES)
-
