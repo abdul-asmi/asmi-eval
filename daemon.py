@@ -19,6 +19,7 @@ import sqlite3
 import ssl
 import sys
 import time
+import tempfile
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone, timedelta
@@ -288,6 +289,18 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
     _post_progress()
 
     env = os.environ.copy()
+    stop_fd, stop_path = tempfile.mkstemp(prefix="asmi_eval_stop_", suffix=".flag")
+    skip_fd, skip_path = tempfile.mkstemp(prefix="asmi_eval_skip_", suffix=".json")
+    os.close(stop_fd)
+    os.close(skip_fd)
+    try:
+        os.unlink(stop_path)
+    except FileNotFoundError:
+        pass
+    with open(skip_path, "w", encoding="utf-8") as f:
+        json.dump([], f)
+    env["ASMI_STOP_FILE"] = stop_path
+    env["ASMI_SKIP_FILE"] = skip_path
     if extra_env:
         env.update({k: str(v) for k, v in extra_env.items() if v is not None})
 
@@ -298,20 +311,29 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
 
     output_lines = []
     stop_flag = False
+    requested_skips = set()
 
     def check_stop_periodically():
-        """Background thread: check for stop signal every 5s."""
+        """Background thread: mirror UI stop/skip signals into files for run_eval.py."""
         nonlocal stop_flag
         while not stop_flag:
-            if _check_stop():
-                print(f"\n  [stop] killing run_eval.py (pid={proc.pid})")
-                proc.terminate()
+            data = _poll_railway_full()
+            skips = data.get("skip_ids") or []
+            if skips:
+                requested_skips.update(str(x).strip() for x in skips if str(x).strip())
                 try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                stop_flag = True
-                break
+                    with open(skip_path, "w", encoding="utf-8") as f:
+                        json.dump(sorted(requested_skips), f)
+                except Exception:
+                    pass
+            if data.get("stop"):
+                if not os.path.exists(stop_path):
+                    print(f"\n  [stop] graceful stop requested (pid={proc.pid}); will judge captured results")
+                    try:
+                        with open(stop_path, "w", encoding="utf-8") as f:
+                            f.write("stop")
+                    except Exception:
+                        pass
             time.sleep(5)
 
     # Start background thread for stop checking
@@ -332,6 +354,11 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
     finally:
         stop_flag = True
         proc.wait()
+        for path in (stop_path, skip_path):
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
 
     output = "".join(output_lines)
     m = _re.search(r'Raw results:\s*(\S+results_\S+\.json)', output)

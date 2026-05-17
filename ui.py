@@ -47,6 +47,8 @@ _run_results     = []     # list of result dicts from results_*.json
 _run_result_stem = ""     # stem for latest posted results, e.g. 20260506_001311
 _stop_requested  = False  # True when the user clicks Stop
 _run_progress    = {}     # dict {current_test, current_category, completed, total}
+_run_queue       = []     # ordered list of {id, name, category, status}
+_skip_requested  = set()  # test IDs to skip before they start
 
 PORT      = int(os.environ.get("PORT", 8765))
 GH_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
@@ -157,6 +159,56 @@ def save_test_cases(cases: list):
         src = re.sub(r'TEST_CASES\s*=\s*\[.*\]', new_list, src, flags=re.DOTALL)
         with open(LOCAL_FILE, "w") as f:
             f.write(src)
+
+
+def _build_run_queue(data: dict) -> list[dict]:
+    try:
+        cases = load_test_cases()
+    except Exception:
+        cases = []
+    by_id = {t.get("id"): t for t in cases if t.get("id")}
+    selected = []
+    ids = data.get("ids")
+    cats = data.get("categories")
+    rid = str(data.get("id")).strip() if data.get("id") is not None else ""
+    cat = str(data.get("category")).strip() if data.get("category") is not None else ""
+    if isinstance(ids, list):
+        selected = [str(x).strip() for x in ids if str(x).strip()]
+    elif rid:
+        selected = [rid]
+    elif isinstance(cats, list):
+        cat_set = {str(x).strip() for x in cats if str(x).strip()}
+        selected = [t.get("id") for t in cases if t.get("category") in cat_set and t.get("id")]
+    elif cat:
+        selected = [t.get("id") for t in cases if t.get("category") == cat and t.get("id")]
+    queue = []
+    for tid in selected:
+        tc = by_id.get(tid, {})
+        queue.append({
+            "id": tid,
+            "name": tc.get("name", tid),
+            "category": tc.get("category", ""),
+            "status": "queued",
+        })
+    return queue
+
+
+def _queue_with_status() -> list[dict]:
+    current = (_run_progress or {}).get("current_test")
+    completed = int((_run_progress or {}).get("completed", 0) or 0)
+    out = []
+    for idx, item in enumerate(_run_queue):
+        row = dict(item)
+        if row["id"] in _skip_requested:
+            row["status"] = "skip"
+        elif current and row["id"] == current:
+            row["status"] = "running"
+        elif idx < completed:
+            row["status"] = "done"
+        else:
+            row["status"] = "queued"
+        out.append(row)
+    return out
 
 
 CSV_COLUMNS = [
@@ -1164,6 +1216,19 @@ textarea { resize: vertical; min-height: 70px; }
   </div>
 </main>
 <div id="toast"></div>
+<div id="runQueuePanel" style="display:none;position:fixed;right:18px;bottom:18px;width:min(360px,calc(100vw - 36px));background:#ffffff;border:1px solid #d8b4fe;border-radius:12px;box-shadow:0 16px 40px rgba(15,23,42,.22);z-index:9998;overflow:hidden;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f5f3ff;border-bottom:1px solid #e9d5ff;">
+    <div>
+      <div style="font-weight:800;color:#0f172a;font-size:0.88rem;">Run Monitor</div>
+      <div id="runQueueMeta" style="font-size:0.74rem;color:#64748b;margin-top:1px;"></div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button class="btn btn-danger" id="queueStopBtn" onclick="stopRun()" style="font-size:0.72rem;padding:3px 8px;">Stop + judge</button>
+      <button class="btn btn-outline" onclick="hideRunQueuePanel()" style="font-size:0.72rem;padding:3px 8px;">Hide</button>
+    </div>
+  </div>
+  <div id="runQueueList" style="max-height:300px;overflow:auto;padding:8px;display:grid;gap:6px;"></div>
+</div>
 <div id="templateHelpModal" onclick="if(event.target.id==='templateHelpModal') hideTemplateHelp()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.65);z-index:9999;padding:24px;overflow:auto;">
   <div style="max-width:860px;margin:40px auto;background:white;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.3);border:1px solid #e2e8f0;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e2e8f0;">
@@ -2074,6 +2139,7 @@ async function _triggerRun(payload) {
     }
     toast(`Queued ${label} on ${targetName}…`);
     _openOutput(`Queued ${label} on ${targetName}…`);
+    renderRunQueuePanel({status:'running', queue:data.queue || []});
   } catch(e) {
     toast('Failed to queue run: ' + e.message);
   }
@@ -2106,7 +2172,65 @@ async function stopRun() {
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('outputStatus').textContent = 'Stopping…';
   try { await fetch('/api/stop', {method:'POST'}); } catch(e) {}
-  toast('Stop signal sent — daemon will halt after current test');
+  toast('Stop signal sent — judging captured results so far');
+}
+
+function hideRunQueuePanel() {
+  const el = document.getElementById('runQueuePanel');
+  if (el) el.style.display = 'none';
+}
+
+async function skipQueuedTest(id) {
+  try {
+    const res = await fetch('/api/skip-test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      renderRunQueuePanel({status:'running', queue:data.queue || []});
+      toast(`Will skip ${id}`);
+    }
+  } catch(e) {
+    toast('Skip failed: ' + e.message);
+  }
+}
+
+function renderRunQueuePanel(data) {
+  const panel = document.getElementById('runQueuePanel');
+  const list = document.getElementById('runQueueList');
+  const meta = document.getElementById('runQueueMeta');
+  if (!panel || !list || !meta) return;
+  const queue = data.queue || [];
+  if (!queue.length && data.status !== 'running') {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  const running = queue.find(x => x.status === 'running');
+  const remaining = queue.filter(x => x.status === 'queued').length;
+  meta.textContent = running ? `Running ${running.id} · ${remaining} queued` : `${remaining} queued`;
+  list.innerHTML = queue.map(item => {
+    const status = item.status || 'queued';
+    const colors = {
+      running: ['#dbeafe', '#1d4ed8', 'Running'],
+      queued: ['#f8fafc', '#475569', 'Queued'],
+      done: ['#dcfce7', '#166534', 'Done'],
+      skip: ['#fee2e2', '#991b1b', 'Skip'],
+    }[status] || ['#f8fafc', '#475569', status];
+    const canSkip = status === 'queued';
+    return `<div style="display:flex;gap:8px;align-items:center;border:1px solid #e2e8f0;border-radius:8px;padding:8px;background:white;">
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:2px;">
+          <span style="font-family:monospace;font-weight:800;color:#0f172a;font-size:0.78rem;">${esc(item.id || '')}</span>
+          <span style="background:${colors[0]};color:${colors[1]};border-radius:99px;padding:1px 7px;font-size:0.68rem;font-weight:800;">${colors[2]}</span>
+        </div>
+        <div style="color:#334155;font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(item.name || '')}</div>
+      </div>
+      ${canSkip ? `<button class="btn btn-outline" onclick="skipQueuedTest('${esc(item.id || '')}')" style="font-size:0.7rem;padding:2px 8px;">Skip</button>` : ''}
+    </div>`;
+  }).join('');
 }
 
 function _cleanOutput(text) {
@@ -2122,6 +2246,7 @@ async function _pollOutput() {
   try {
     const res  = await fetch('/api/output');
     const data = await res.json();
+    renderRunQueuePanel(data);
     const secs = Math.round((Date.now() - _runStart) / 1000);
     if (!_activeTestId)
       document.getElementById('outputElapsed').textContent = `${secs}s elapsed`;
@@ -3162,7 +3287,7 @@ class Handler(BaseHTTPRequestHandler):
                 run = _pending_run
                 stop = _stop_requested
                 _stop_requested = False
-                self._json({"run": run, "stop": stop})
+                self._json({"run": run, "stop": stop, "skip_ids": sorted(_skip_requested)})
             elif path == "/api/output":
                 self._json({
                     "status":   _run_status,
@@ -3170,6 +3295,7 @@ class Handler(BaseHTTPRequestHandler):
                     "results":  _run_results,
                     "elapsed":  int(time.time() - _run_started) if _run_started else 0,
                     "progress": _run_progress,
+                    "queue":    _queue_with_status(),
                 })
             elif path == "/api/progress":
                 self._json(_run_progress)
@@ -3298,7 +3424,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
     def do_POST(self):
-        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _run_result_stem, _stop_requested, _run_progress
+        global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _run_result_stem, _stop_requested, _run_progress, _run_queue, _skip_requested
         path = urlparse(self.path).path
         if path == "/api/tests":
             length = int(self.headers.get("Content-Length", 0))
@@ -3413,6 +3539,8 @@ class Handler(BaseHTTPRequestHandler):
             asmi_handle = (str(data.get("asmi_handle") or "").strip() or None)
             if asmi_target in ASMI_TARGET_HANDLES:
                 asmi_handle = ASMI_TARGET_HANDLES[asmi_target]
+            _run_queue = _build_run_queue(data)
+            _skip_requested = set()
             _pending_run = {
                 "category": cat,
                 "categories": cats,
@@ -3429,7 +3557,7 @@ class Handler(BaseHTTPRequestHandler):
             _run_results = []
             _run_result_stem = ""
             mac_online = (time.time() - _last_heartbeat) < 90
-            self._json({"ok": True, "mac_online": mac_online, "asmi_target": asmi_target, "asmi_handle": asmi_handle})
+            self._json({"ok": True, "mac_online": mac_online, "asmi_target": asmi_target, "asmi_handle": asmi_handle, "queue": _queue_with_status()})
         elif path == "/api/output":
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
@@ -3496,8 +3624,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": str(e)})
         elif path == "/api/stop":
             _stop_requested = True
-            _run_status     = "stopped"
             self._json({"ok": True})
+        elif path == "/api/skip-test":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                data = json.loads(body) if length else {}
+            except Exception:
+                data = {}
+            tid = str(data.get("id") or "").strip()
+            if tid:
+                _skip_requested.add(tid)
+            self._json({"ok": True, "skip_ids": sorted(_skip_requested), "queue": _queue_with_status()})
         elif path == "/api/ack-run":
             _pending_run = None
             self._json({"ok": True})

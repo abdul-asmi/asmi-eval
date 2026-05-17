@@ -6,12 +6,30 @@
 import time
 from datetime import datetime, timezone
 import os
+import json
 
 from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, CMD_ONBOARD, CATEGORY_RUN_ORDER
 from imessage import send_and_wait, send_burst, send_sequence, send_imessage, wait_for_responses
 from judge import judge_with_context, judge_response_count
 
 JUDGE_DELAY = 4  # seconds between Gemini calls (free tier safe)
+
+
+def _stop_requested() -> bool:
+    path = os.environ.get("ASMI_STOP_FILE", "").strip()
+    return bool(path and os.path.exists(path))
+
+
+def _skip_ids() -> set[str]:
+    path = os.environ.get("ASMI_SKIP_FILE", "").strip()
+    if not path or not os.path.exists(path):
+        return set()
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return {str(x).strip() for x in data if str(x).strip()}
+    except Exception:
+        return set()
 
 
 def _interactive_auto_continue(tc: dict) -> bool:
@@ -311,6 +329,13 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
     results      = []
     last_category = None
     for tc in to_run:
+        if tc["id"] in _skip_ids():
+            print(f"\n  ⏭ Skipping [{tc['id']}] by request")
+            continue
+        if _stop_requested():
+            print("\n  ⏹ Stop requested — judging captured results so far")
+            break
+
         cat = tc["category"]
 
         # Before the first onboarding test in a full run, reset Asmi to fresh state
@@ -329,6 +354,9 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
 
         r = collect(tc)
         results.append(r)
+        if _stop_requested():
+            print("\n  ⏹ Stop requested — judging captured results so far")
+            break
         time.sleep(5)  # brief pause between tests
 
     # Phase 2 — batch judge all at once
