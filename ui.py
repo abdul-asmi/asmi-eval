@@ -2154,7 +2154,7 @@ async function runById(id) {
   const inlineEl = document.getElementById('result_' + id);
   if (inlineEl) {
     inlineEl.className = 'inline-result running';
-    inlineEl.innerHTML = '<span class="inline-running-dots">Running</span>';
+    inlineEl.innerHTML = _inlineRunningHtml(0);
   }
   const btn = document.getElementById('runbtn_' + id);
   if (btn) btn.disabled = true;
@@ -2252,7 +2252,7 @@ function renderRunQueuePanel(data) {
   const meta = document.getElementById('runQueueMeta');
   if (!panel || !list || !meta) return;
   const queue = data.queue || [];
-  const isRunning = data.status === 'running';
+  const isRunning = data.status === 'running' || (_pollTimer && _runStart && data.status !== 'done' && data.status !== 'stopped');
   const hasActiveItems = queue.some(x => ['running', 'queued', 'skip'].includes(x.status || 'queued'));
   if (!isRunning && !hasActiveItems) {
     panel.style.display = 'none';
@@ -2314,7 +2314,7 @@ async function _pollOutput() {
       if (_activeTestId) {
         const inlineEl = document.getElementById('result_' + _activeTestId);
         if (inlineEl && inlineEl.classList.contains('running'))
-          inlineEl.innerHTML = `<span class="inline-running-dots">Running</span> <span style="color:#94a3b8;font-size:0.78rem">${secs}s</span>`;
+          inlineEl.innerHTML = _inlineRunningHtml(secs);
       }
       // Update progress bar
       if (!_activeTestId && data.progress && data.progress.total > 0) {
@@ -2382,6 +2382,13 @@ async function _pollOutput() {
       _refreshHistoryTabs();
     }
   } catch(e) {}
+}
+
+function _inlineRunningHtml(secs) {
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <div><span class="inline-running-dots">Running</span> <span style="color:#94a3b8;font-size:0.78rem">${secs}s</span></div>
+    <button class="btn btn-danger" onclick="event.stopPropagation(); stopRun()" style="font-size:0.75rem;padding:4px 10px;">Stop + judge</button>
+  </div>`;
 }
 
 async function _refreshHistoryTabs() {
