@@ -747,9 +747,6 @@ call anyway'],
         'name': 'Quiet hours → override declined',
         'category': '3p_calls_v1',
         'type': 'sequence',
-        'message': "cmd_reset_history
-Call (412) 555-0199 right now.
-don't bother",
         'pass_criteria': "Asmi's first chat message flags quiet hours. After 'don't bother', Asmi confirms no call will be made. No further prompting.",
         'manual_check': 'Run after 10pm local time.',
         'messages': ["cmd_reset_history
