@@ -1360,8 +1360,10 @@ function _allCategories(list = tests) {
 
 function _sortedCategories(cats) {
   const set = new Set(cats || []);
+  const currentOrder = _categoryOrderFromTests(tests).filter(c => set.has(c));
   const ordered = [];
-  KNOWN_CAT_ORDER.forEach(c => { if (set.has(c)) ordered.push(c); });
+  currentOrder.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
+  KNOWN_CAT_ORDER.forEach(c => { if (set.has(c) && !ordered.includes(c)) ordered.push(c); });
   const rest = Array.from(set).filter(c => !ordered.includes(c)).sort((a,b) => (a||'').localeCompare(b||''));
   return ordered.concat(rest);
 }
@@ -1626,15 +1628,8 @@ function render() {
       <td colspan="6" style="color:${m.color}">
         <button class="action-btn drag-handle" draggable="true" onclick="event.stopPropagation()" ondragstart="dragStartCategory(event, '${cat}')" ondragend="endDrag()"
                 title="Drag category" aria-label="Drag category"
-                style="padding:1px 4px;margin-right:6px;color:#64748b;cursor:grab;">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <circle cx="2" cy="2" r="1.15" fill="currentColor"></circle>
-            <circle cx="6" cy="2" r="1.15" fill="currentColor"></circle>
-            <circle cx="10" cy="2" r="1.15" fill="currentColor"></circle>
-            <circle cx="2" cy="6" r="1.15" fill="currentColor"></circle>
-            <circle cx="6" cy="6" r="1.15" fill="currentColor"></circle>
-            <circle cx="10" cy="6" r="1.15" fill="currentColor"></circle>
-          </svg>
+                style="padding:2px 6px;margin-right:6px;color:#94a3b8;cursor:grab;font-size:1rem;line-height:1;">
+          ⋮⋮
         </button>
         <button class="action-btn" onclick="toggleCat('${cat}')" style="padding:2px 6px;margin-right:4px;color:${m.color}">${chevron}</button>
         <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
