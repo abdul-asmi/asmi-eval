@@ -369,8 +369,6 @@ I need to sort out a few things — renew my car insurance, book a dentist appoi
         'name': 'Task → call deferred, never comes (regression)',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-Can you call someone and check on my prescription refill at the pharmacy?',
         'pass_criteria': 'REGRESSION: Asmi should send a chat update within 3 min. If no message received, flag as bug.',
         'manual_check': 'Wait 3 min after sending. Check if any follow-up chat message arrived.',
         'messages': ['cmd_reset_history
