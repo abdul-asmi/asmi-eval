@@ -940,10 +940,6 @@ Can you send me a PDF summary of my tasks?'],
         'name': 'Multi-task PDF with status',
         'category': 'pdf_v1',
         'type': 'sequence',
-        'message': "cmd_reset_history
-Find me flights from Pittsburgh to NYC next Friday under $200.
-Also add oat milk and greek yogurt to my grocery list.
-Now give me a PDF of everything we've worked on with their status.",
         'pass_criteria': 'PDF delivered as file in chat. Covers both tasks (flight search + grocery list) with status for each.',
         'messages': ["cmd_reset_history
 Find me flights from Pittsburgh to NYC next Friday under $200.
