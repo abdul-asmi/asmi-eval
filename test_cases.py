@@ -110,6 +110,46 @@ Call (412) 555-0000 and ask about their hours.'],
         'id': '3pc_05',
     },
     {
+        'name': 'PDF from chat history',
+        'category': 'pdf_v1',
+        'type': 'sequence',
+        'pass_criteria': 'Asmi responds in chat with research, options, or next steps. If PDF is generated, a file is delivered in chat.',
+        'messages': ["cmd_reset_history
+Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please."],
+        'id': 'pdf_01',
+    },
+    {
+        'name': 'PDF from call content',
+        'category': 'pdf_v1',
+        'type': 'sequence',
+        'pass_criteria': "Asmi either delivers a PDF file in chat or explains why one can't be generated. Should not confirm delivery if no file arrives.",
+        'manual_check': 'Run after completing an ad hoc call in the same session.',
+        'messages': ['cmd_reset_history
+Make me a plan PDF from what we just discussed.'],
+        'id': 'pdf_02',
+        'precondition': 'Discuss some task in call',
+    },
+    {
+        'name': 'False confirm — no delivery (regression)',
+        'category': 'pdf_v1',
+        'type': 'sequence',
+        'pass_criteria': "REGRESSION: If Asmi says 'Sending now' or 'Here you go' but no PDF file arrives in chat within 60s, flag as bug.",
+        'messages': ['cmd_reset_history
+Can you send me a PDF summary of my tasks?'],
+        'id': 'pdf_03',
+    },
+    {
+        'name': 'Multi-task PDF with status',
+        'category': 'pdf_v1',
+        'type': 'sequence',
+        'pass_criteria': 'PDF delivered as file in chat. Covers both tasks (flight search + grocery list) with status for each.',
+        'messages': ["cmd_reset_history
+Find me flights from Pittsburgh to NYC next Friday under $200.
+Also add oat milk and greek yogurt to my grocery list.
+Now give me a PDF of everything we've worked on with their status."],
+        'id': 'pdf_04',
+    },
+    {
         'id': 'interactive_01',
         'name': 'Interactive: Los Angeles closing time with missing restaurant name',
         'category': 'interactive',
@@ -884,45 +924,5 @@ Call (412) 555-0000 and ask about their hours.'],
         'wait': 120,
         'expected_responses': 3,
         'pass_criteria': 'After user says "London", all time references in messages 2 and 3 use GMT/BST. Call inquiry uses London time. Reminder is set for 9pm GMT/BST — not US time. No re-asking for timezone.',
-    },
-    {
-        'name': 'PDF from chat history',
-        'category': 'pdf_v1',
-        'type': 'sequence',
-        'pass_criteria': 'Asmi responds in chat with research, options, or next steps. If PDF is generated, a file is delivered in chat.',
-        'messages': ["cmd_reset_history
-Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please."],
-        'id': 'pdf_01',
-    },
-    {
-        'name': 'PDF from call content',
-        'category': 'pdf_v1',
-        'type': 'sequence',
-        'pass_criteria': "Asmi either delivers a PDF file in chat or explains why one can't be generated. Should not confirm delivery if no file arrives.",
-        'manual_check': 'Run after completing an ad hoc call in the same session.',
-        'messages': ['cmd_reset_history
-Make me a plan PDF from what we just discussed.'],
-        'id': 'pdf_02',
-        'precondition': 'Discuss some task in call',
-    },
-    {
-        'name': 'False confirm — no delivery (regression)',
-        'category': 'pdf_v1',
-        'type': 'sequence',
-        'pass_criteria': "REGRESSION: If Asmi says 'Sending now' or 'Here you go' but no PDF file arrives in chat within 60s, flag as bug.",
-        'messages': ['cmd_reset_history
-Can you send me a PDF summary of my tasks?'],
-        'id': 'pdf_03',
-    },
-    {
-        'name': 'Multi-task PDF with status',
-        'category': 'pdf_v1',
-        'type': 'sequence',
-        'pass_criteria': 'PDF delivered as file in chat. Covers both tasks (flight search + grocery list) with status for each.',
-        'messages': ["cmd_reset_history
-Find me flights from Pittsburgh to NYC next Friday under $200.
-Also add oat milk and greek yogurt to my grocery list.
-Now give me a PDF of everything we've worked on with their status."],
-        'id': 'pdf_04',
     },
 ]
