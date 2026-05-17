@@ -433,7 +433,7 @@ TEST_CASES = [
         'category': 'task_specific_call',
         'type': 'single',
         'message': 'I need to schedule an appointment with my dentist in Pittsburgh — can you call and find availability for next week?',
-        'wait': 180,
+        'wait': 20,
         'pass_criteria': 'Asmi calls with context: "I\'m calling on behalf of [user] to check availability for next week." Call result mentions availability/scheduling.',
         'precondition': 'Account post-onboarded with at least 1 prior interaction.',
     },
