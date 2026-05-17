@@ -912,8 +912,6 @@ Call (412) 555-0000 and ask about their hours.'],
         'name': 'PDF from chat history',
         'category': 'pdf_v1',
         'type': 'sequence',
-        'message': "cmd_reset_history
-Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please.",
         'pass_criteria': 'Asmi responds in chat with research, options, or next steps. If PDF is generated, a file is delivered in chat.',
         'messages': ["cmd_reset_history
 Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please."],
