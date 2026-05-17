@@ -1186,6 +1186,50 @@ textarea { resize: vertical; min-height: 70px; }
       <div style="font-weight:800;margin:12px 0 6px;">Updating existing tests</div>
       <div style="margin-bottom:12px;">If you include an <code>id</code> that already exists, upload will <b>update</b> that test (upsert). If <code>id</code> is blank, upload will <b>create</b> a new test and auto-generate an id.</div>
 
+      <div style="font-weight:800;margin:12px 0 6px;">Asmi reset/test commands</div>
+      <div style="margin-bottom:10px;">If you include these in <code>message</code>/<code>messages</code>/<code>start_message</code>, they are <b>control commands</b>, not evaluation tasks.</div>
+      <div style="display:grid;gap:8px;margin-bottom:12px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_onboard</div>
+          <div style="flex:1;">Triggers the onboarding flow from scratch. Known quirk: doesn't reset timezone, doesn't clear name on iMessage.</div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_onboard')">Copy</button>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_onboard_skip</div>
+          <div style="flex:1;">Skips pre-onboarding. Run it twice (send, wait for response, send again) before testing adhoc call flows.</div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_onboard_skip')">Copy</button>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_reset_history</div>
+          <div style="flex:1;">Clears all messages from current chat session. Preserves user profile and call history.</div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_reset_history')">Copy</button>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_message_then_call_mode</div>
+          <div style="flex:1;">Switches Asmi to message-then-call mode for testing check-in modes and reminder deduping.</div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_message_then_call_mode')">Copy</button>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_message_only_mode</div>
+          <div style="flex:1;">Switches Asmi to message-only mode (no calls) — same testing purpose.</div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_message_only_mode')">Copy</button>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_call_audio_test</div>
+          <div style="flex:1;">Sends a random call from your account to you as a voice note — for testing call audio.</div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_call_audio_test')">Copy</button>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_user_call_legal</div>
+          <div style="flex:1;">Resets your legal/consent permissions and re-triggers the consent flow.</div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_user_call_legal')">Copy</button>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText(['cmd_onboard','cmd_onboard_skip','cmd_reset_history','cmd_message_then_call_mode','cmd_message_only_mode','cmd_call_audio_test','cmd_user_call_legal'].join('\\n'))">Copy all</button>
+          <span style="color:#64748b;font-size:0.82rem;">(Paste into your <code>message</code>/<code>messages</code> cells.)</span>
+        </div>
+      </div>
+
       <div style="font-weight:800;margin:12px 0 6px;">Power users</div>
       <div>Download the full template: <a href="/api/tests/template_full.csv">template_full.csv</a></div>
     </div>
@@ -2317,6 +2361,28 @@ function showTemplateHelp() {
 function hideTemplateHelp() {
   const el = document.getElementById('templateHelpModal');
   if (el) el.style.display = 'none';
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Copied');
+    return;
+  } catch(e) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('Copied');
+  } catch(e) {
+    alert('Copy failed');
+  }
 }
 
 async function importTestsCSV(ev) {

@@ -11,12 +11,27 @@ You are evaluating responses from Asmi, an AI personal assistant accessible via 
 Asmi handles real-world tasks: web research, restaurant/appointment/travel booking,
 outbound phone calls to businesses, and sending emails.
 Be strict but fair. Only mark PASS if the criteria are clearly met.
+
+Control commands may appear in the task list. These are setup/reset/testing messages
+that start with `cmd_` (examples below). They are NOT the user task being evaluated
+unless the pass_criteria explicitly asks you to judge the command behavior.
+
+Known control commands (examples):
+- cmd_onboard: restart onboarding flow (quirks: may not reset timezone/name)
+- cmd_onboard_skip: skip pre-onboarding (often run twice)
+- cmd_reset_history: clear chat messages (profile preserved)
+- cmd_message_then_call_mode: switch mode for check-in/reminder tests
+- cmd_message_only_mode: switch to message-only (no calls)
+- cmd_call_audio_test: generate a random call audio test
+- cmd_user_call_legal: reset consent/legal flow
 """
 
 # ── Standard judge (direct responses) ─────────────────────────────────────────
 
 _PROMPT = """
 {system}
+
+IMPORTANT: Tasks starting with `cmd_` are control commands (setup/reset) and should not be judged as the user request unless pass_criteria says so.
 
 ══ TEST ══════════════════════════════
 Name: {test_name}
@@ -45,6 +60,8 @@ or VERDICT: FAIL / VERDICT: UNCLEAR with REASON.
 
 _PROMPT_WITH_CONTEXT = """
 {system}
+
+IMPORTANT: Tasks starting with `cmd_` are control commands (setup/reset) and should not be judged as the user request unless pass_criteria says so.
 
 IMPORTANT CONTEXT: This eval ran 28 tests back-to-back in a single iMessage thread.
 Asmi's responses may not be in order — a response captured during one test might
@@ -95,7 +112,7 @@ def judge(test_name, category, tasks, responses, pass_criteria):
         system        = SYSTEM_CONTEXT,
         test_name     = test_name,
         category      = category,
-        tasks         = "\n".join(f"  {i+1}. {t}" for i, t in enumerate(tasks)),
+        tasks         = _format_tasks(tasks),
         responses     = "\n".join(f"  {i+1}. {r}" for i, r in enumerate(valid)),
         pass_criteria = pass_criteria,
     )
@@ -119,7 +136,7 @@ def judge_with_context(test_name, category, tasks, captured, all_responses, pass
         system        = SYSTEM_CONTEXT,
         test_name     = test_name,
         category      = category,
-        tasks         = "\n".join(f"  {i+1}. {t}" for i, t in enumerate(tasks)),
+        tasks         = _format_tasks(tasks),
         captured      = "\n".join(f"  - {r}" for r in valid_captured) if valid_captured else "  (none captured)",
         pass_criteria = pass_criteria,
         total         = len(all_responses),
@@ -167,3 +184,13 @@ def judge_response_count(test_name, responses, expected):
     if actual >= expected:
         return {"verdict": "PASS", "reason": f"Got {actual}/{expected} responses."}
     return {"verdict": "FAIL", "reason": f"Only got {actual}/{expected} responses — {expected - actual} dropped or timed out."}
+
+
+def _format_tasks(tasks) -> str:
+    out = []
+    for i, t in enumerate(tasks or []):
+        txt = str(t)
+        if txt.strip().startswith("cmd_"):
+            txt = f"{txt}  (CONTROL COMMAND: setup/reset/test)"
+        out.append(f"  {i+1}. {txt}")
+    return "\n".join(out) if out else "  (none)"
