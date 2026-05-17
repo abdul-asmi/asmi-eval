@@ -24,6 +24,8 @@ Known control commands (examples):
 - cmd_message_only_mode: switch to message-only (no calls)
 - cmd_call_audio_test: generate a random call audio test
 - cmd_user_call_legal: reset consent/legal flow
+- cmd_el_voice: configure ElevenLabs voice style from a description
+- cmd_el_voice_call: configure ElevenLabs call voice style from a description
 """
 
 # ── Standard judge (direct responses) ─────────────────────────────────────────

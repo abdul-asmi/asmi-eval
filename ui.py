@@ -1296,8 +1296,18 @@ textarea { resize: vertical; min-height: 70px; }
           <div style="flex:1;">Resets your legal/consent permissions and re-triggers the consent flow.</div>
           <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_user_call_legal')">Copy</button>
         </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_el_voice</div>
+          <div style="flex:1;">Sets the ElevenLabs voice style from a description. Usage Asmi may show: <code>cmdelvoice &lt;description&gt;</code>. Example: <code>cmdelvoice professional male narrator with british accent</code>.</div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_el_voice')">Copy</button>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_el_voice_call</div>
+          <div style="flex:1;">Sets the ElevenLabs call voice style from a description. Usage Asmi may show: <code>cmdelvoicecall &lt;description&gt;</code>. Example: <code>cmdelvoicecall professional male narrator with british accent</code>.</div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_el_voice_call')">Copy</button>
+        </div>
         <div style="display:flex;gap:10px;align-items:center;">
-          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText(['cmd_onboard','cmd_onboard_skip','cmd_reset_history','cmd_message_then_call_mode','cmd_message_only_mode','cmd_call_audio_test','cmd_user_call_legal'].join('\\n'))">Copy all</button>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText(['cmd_onboard','cmd_onboard_skip','cmd_reset_history','cmd_message_then_call_mode','cmd_message_only_mode','cmd_call_audio_test','cmd_user_call_legal','cmd_el_voice','cmd_el_voice_call'].join('\\n'))">Copy all</button>
           <span style="color:#64748b;font-size:0.82rem;">(Paste into your <code>message</code>/<code>messages</code> cells.)</span>
         </div>
       </div>
