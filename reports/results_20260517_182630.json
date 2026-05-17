@@ -1,0 +1,27 @@
+[
+  {
+    "id": "pdf_04",
+    "name": "Multi-task PDF with status",
+    "category": "pdf_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history\nFind me flights from Pittsburgh to NYC next Friday under $200.\nAlso add oat milk and greek yogurt to my grocery list.\nNow give me a PDF of everything we've worked on with their status."
+    ],
+    "responses": [
+      "Found some $150 flights! I'll prep that PDF for you.",
+      "Oat milk and Greek yogurt are on the list.",
+      "Which restaurant should I book for tonight?"
+    ],
+    "verdict": "FAIL",
+    "reason": "Asmi failed to deliver the actual PDF file containing the status of the tasks as requested.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 3/1 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T22:25:08.386185+00:00",
+    "finished_at": "2026-05-17T22:26:23.660244+00:00",
+    "matched_responses": "\"Found some $150 flights! I'll prep that PDF for you.\", \"Oat milk and Greek yogurt are on the list.\""
+  }
+]
