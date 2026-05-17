@@ -1,0 +1,6 @@
+{
+  "updated_at": "2026-05-17 19:02:18 ET",
+  "source_run_count": 1,
+  "latest_stem": "20260517_190218",
+  "text": "OVERALL_SCORE: 1/1 passed (100.0%)\nSUMMARY: Across all recorded runs, the system has 0 failures and 0 unclear outcomes. The current cumulative pass rate is 100.0%.\nHITS:\n- Total passed outcomes so far: 1.\n- Stable categories with fewer failures are visible where fail counts remain low outside the top failing categories.\nMISSES:\n- Most repeated failing tests: none.\n- Most affected categories: none.\nBEHAVIOR_PATTERN:\nRecent failures cluster around repeated scenarios rather than random spread, which suggests a few persistent behavior gaps.\nGAPS:\n- Repeated failure reasons observed:\n- none\nRECOMMENDATION:\nPrioritize fixes for the top failing tests/categories, then re-run only those categories to validate lift before full-suite regression."
+}
