@@ -596,6 +596,55 @@ Actually forget that — call the plumber at (412) 555-0177 instead.'],
         'pass_criteria': 'After user rejects first call, text-only mode active. When task appears that benefits from call, Asmi suggests: "I can call them and check availability for you — would that help?" Includes 3P framing in the suggestion.',
     },
     {
+        'name': 'Number in message → call placed',
+        'category': '3p_calls_v1',
+        'type': 'sequence',
+        'pass_criteria': 'Asmi responds in chat confirming it found a number or is looking one up. Does not ask the user to provide the number.',
+        'messages': ['cmd_reset_history
+Call nearest chinese restaurant and book a table for 2 for 6PM'],
+        'id': '3pc_01',
+    },
+    {
+        'name': 'Name only → asks for number',
+        'category': '3p_calls_v1',
+        'type': 'sequence',
+        'pass_criteria': 'Asmi either finds a number via web search and confirms in chat, or asks the user for the number. Does not silently fail.',
+        'messages': ["cmd_reset_history
+Call Joe's Pizza and ask about their catering options."],
+        'id': '3pc_02',
+    },
+    {
+        'name': 'Quiet hours → override accepted',
+        'category': '3p_calls_v1',
+        'type': 'sequence',
+        'pass_criteria': "Asmi's first chat message flags quiet hours. After 'call anyway', Asmi confirms it will proceed — no re-prompting.",
+        'manual_check': 'Run after 10pm local time.',
+        'messages': ['cmd_reset_history
+Call (412) 555-0123 and ask if they have a table for 2 tonight at 7pm.
+call anyway'],
+        'id': '3pc_03',
+    },
+    {
+        'name': 'Quiet hours → override declined',
+        'category': '3p_calls_v1',
+        'type': 'sequence',
+        'pass_criteria': "Asmi's first chat message flags quiet hours. After 'don't bother', Asmi confirms no call will be made. No further prompting.",
+        'manual_check': 'Run after 10pm local time.',
+        'messages': ["cmd_reset_history
+Call (412) 555-0199 right now.
+don't bother"],
+        'id': '3pc_04',
+    },
+    {
+        'name': "3P doesn't answer",
+        'category': '3p_calls_v1',
+        'type': 'sequence',
+        'pass_criteria': 'Asmi sends a chat message reporting no answer. Message should offer to retry or ask how to proceed — not go silent.',
+        'messages': ['cmd_reset_history
+Call (412) 555-0000 and ask about their hours.'],
+        'id': '3pc_05',
+    },
+    {
         'id': 'chat_01',
         'name': 'Chat brevity: Responses are concise — one thought per message',
         'category': 'chat_brevity',
@@ -700,55 +749,6 @@ Actually forget that — call the plumber at (412) 555-0177 instead.'],
         'message': 'Call a restaurant in Los Angeles and ask what time they close today',
         'wait': 120,
         'pass_criteria': 'Asmi captures timezone (Pacific) from location. Call phrasing mentions appropriate time reference. No separate timezone ask.',
-    },
-    {
-        'name': 'Number in message → call placed',
-        'category': '3p_calls_v1',
-        'type': 'sequence',
-        'pass_criteria': 'Asmi responds in chat confirming it found a number or is looking one up. Does not ask the user to provide the number.',
-        'messages': ['cmd_reset_history
-Call nearest chinese restaurant and book a table for 2 for 6PM'],
-        'id': '3pc_01',
-    },
-    {
-        'name': 'Name only → asks for number',
-        'category': '3p_calls_v1',
-        'type': 'sequence',
-        'pass_criteria': 'Asmi either finds a number via web search and confirms in chat, or asks the user for the number. Does not silently fail.',
-        'messages': ["cmd_reset_history
-Call Joe's Pizza and ask about their catering options."],
-        'id': '3pc_02',
-    },
-    {
-        'name': 'Quiet hours → override accepted',
-        'category': '3p_calls_v1',
-        'type': 'sequence',
-        'pass_criteria': "Asmi's first chat message flags quiet hours. After 'call anyway', Asmi confirms it will proceed — no re-prompting.",
-        'manual_check': 'Run after 10pm local time.',
-        'messages': ['cmd_reset_history
-Call (412) 555-0123 and ask if they have a table for 2 tonight at 7pm.
-call anyway'],
-        'id': '3pc_03',
-    },
-    {
-        'name': 'Quiet hours → override declined',
-        'category': '3p_calls_v1',
-        'type': 'sequence',
-        'pass_criteria': "Asmi's first chat message flags quiet hours. After 'don't bother', Asmi confirms no call will be made. No further prompting.",
-        'manual_check': 'Run after 10pm local time.',
-        'messages': ["cmd_reset_history
-Call (412) 555-0199 right now.
-don't bother"],
-        'id': '3pc_04',
-    },
-    {
-        'name': "3P doesn't answer",
-        'category': '3p_calls_v1',
-        'type': 'sequence',
-        'pass_criteria': 'Asmi sends a chat message reporting no answer. Message should offer to retry or ask how to proceed — not go silent.',
-        'messages': ['cmd_reset_history
-Call (412) 555-0000 and ask about their hours.'],
-        'id': '3pc_05',
     },
     {
         'id': 'edge_01',
