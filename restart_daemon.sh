@@ -11,12 +11,17 @@ echo "Asmi Eval daemon restart"
 echo "Repo: $EVAL_DIR"
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    STASH_NAME="auto-stash before daemon restart $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Saving local generated changes so git pull cannot get blocked..."
+    git stash push -u -m "$STASH_NAME" >/dev/null || true
+  fi
+
   echo "Pulling latest main..."
   if ! git pull --rebase; then
     echo ""
-    echo "git pull failed because local files changed."
-    echo "Run this once, then retry ./restart_daemon.sh:"
-    echo "  git stash push -u -m \"local daemon restart stash\""
+    echo "git pull failed. Your local files were auto-stashed if needed."
+    echo "Check with: git status"
     exit 1
   fi
 fi
@@ -41,4 +46,3 @@ else
   tail -80 "$LOG" || true
   exit 1
 fi
-

@@ -1,5 +1,12 @@
 config.py
 daemon.log
+ui.log
+ui_test.log
+.latest_results_path
+reports/.latest_results_path
+reports/overall_analysis.json
+reports/report_*.html
+reports/results_*.json
 __pycache__/
 .DS_Store
 .claude/
