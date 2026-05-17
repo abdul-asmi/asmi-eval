@@ -2252,15 +2252,19 @@ function renderRunQueuePanel(data) {
   const meta = document.getElementById('runQueueMeta');
   if (!panel || !list || !meta) return;
   const queue = data.queue || [];
-  if (!queue.length && data.status !== 'running') {
+  const isRunning = data.status === 'running';
+  const hasActiveItems = queue.some(x => ['running', 'queued', 'skip'].includes(x.status || 'queued'));
+  if (!isRunning && !hasActiveItems) {
     panel.style.display = 'none';
     return;
   }
   panel.style.display = 'block';
   const running = queue.find(x => x.status === 'running');
   const remaining = queue.filter(x => x.status === 'queued').length;
-  meta.textContent = running ? `Running ${running.id} · ${remaining} queued` : `${remaining} queued`;
-  list.innerHTML = queue.map(item => {
+  meta.textContent = running ? `Running ${running.id} · ${remaining} queued` :
+                     isRunning ? 'Collecting responses…' :
+                     `${remaining} queued`;
+  const rows = queue.length ? queue.map(item => {
     const status = item.status || 'queued';
     const colors = {
       running: ['#dbeafe', '#1d4ed8', 'Running'],
@@ -2279,7 +2283,10 @@ function renderRunQueuePanel(data) {
       </div>
       ${canSkip ? `<button class="btn btn-outline" onclick="skipQueuedTest('${esc(item.id || '')}')" style="font-size:0.7rem;padding:2px 8px;">Skip</button>` : ''}
     </div>`;
-  }).join('');
+  }).join('') : '';
+  list.innerHTML = rows || (isRunning ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:white;color:#475569;font-size:0.8rem;">
+    Waiting for final responses… You can still stop and judge captured responses so far.
+  </div>` : '');
 }
 
 function _cleanOutput(text) {
