@@ -12,6 +12,7 @@ TEST_CASES = [
         'message': 'Need to make a plan for engagement part for a friend in LA',
         'manual_check': 'Check if the call got triggered after saying yes',
         'id': 'lau_01',
+        'wait': 20,
     },
     {
         'id': 'interactive_01',
