@@ -397,9 +397,6 @@ Please call my landlord about the noise complaint I filed last week.'],
         'name': 'Mid-task pivot',
         'category': 'adhoc_call_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-Can you call my landlord at (412) 555-0166 about the broken heater?
-Actually forget that — call the plumber at (412) 555-0177 instead.',
         'pass_criteria': "Asmi's chat response acknowledges the pivot cleanly. No reference to the cancelled task continuing. Confirms new task.",
         'messages': ['cmd_reset_history
 Can you call my landlord at (412) 555-0166 about the broken heater?
