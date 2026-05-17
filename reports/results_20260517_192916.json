@@ -1,0 +1,33 @@
+[
+  {
+    "id": "onboard_03",
+    "name": "Onboarding completes correctly end-to-end",
+    "category": "onboarding",
+    "type": "sequence",
+    "tasks_sent": [
+      "Hi",
+      "My name is Abdul",
+      "I'm in Pittsburgh, PA",
+      "What can you do for me?"
+    ],
+    "responses": [
+      "Hey! Good to see you.",
+      "Still thinking about that birthday party?",
+      "Before your first call, just want to inform you how I handle your conversations.",
+      "Asmi saves your conversations to build your memory over time, so nothing slips through the cracks.\n\nLooks good or want to know more?",
+      "Liked \"My name is Abdul\"",
+      "Pittsburgh sounds like a great spot, but I need your okay on the memory storage policy before we can get started. Good?",
+      "I can help you manage tasks and keep track of your preferences. Anyway\u2014need your okay on this before we can move forward. Good?"
+    ],
+    "verdict": "FAIL",
+    "reason": "Only got 7/8 responses \u2014 1 dropped or timed out.",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Only got 7/8 responses \u2014 1 dropped or timed out."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T23:26:42.664025+00:00",
+    "finished_at": "2026-05-17T23:29:10.560354+00:00"
+  }
+]
