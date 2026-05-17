@@ -5,7 +5,7 @@
 
 TEST_CASES = [
     {
-        'id': 'onboard_03',
+        'id': 'onboard_01',
         'name': 'Onboarding completes correctly end-to-end',
         'category': 'onboarding',
         'type': 'sequence',
