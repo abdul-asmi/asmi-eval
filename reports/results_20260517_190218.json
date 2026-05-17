@@ -1,0 +1,28 @@
+[
+  {
+    "id": "adh_01",
+    "name": "Simple task \u2192 immediate call",
+    "category": "adhoc_call_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history",
+      "Need to plan a birthday party"
+    ],
+    "responses": [
+      "\u2713 Chat history and planning canvas cleared.",
+      "Bold move starting a party on a Sunday night. I like the energy.",
+      "I\u2019m Asmi. Who am I planning this for and what do you do when you aren't being a party architect?"
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi acknowledged the party planning task and asked relevant clarifying questions to help move the process forward.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 3/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T23:00:17.473758+00:00",
+    "finished_at": "2026-05-17T23:01:53.936969+00:00",
+    "matched_responses": "\"Bold move starting a party on a Sunday night. I like the energy.\" and \"I\u2019m Asmi. Who am I planning this for and what do you do when you aren't being a party architect?\""
+  }
+]
