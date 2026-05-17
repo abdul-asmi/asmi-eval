@@ -11,7 +11,7 @@ BURST_WAIT         = 60    # default seconds to wait when expecting multiple res
 POLL_INTERVAL      = 3     # seconds between chat.db polls
 BURST_SEND_DELAY   = 1.0   # seconds between rapid-fire sends (default)
 SEQUENCE_DELAY     = 12.0  # seconds between sequential task sends
-SILENCE_AFTER      = 60.0  # seconds of silence after last response before stopping capture
+SILENCE_AFTER      = 30.0  # seconds of silence after last response before stopping capture
 
 import os
 CHAT_DB = os.path.expanduser("~/Library/Messages/chat.db")
