@@ -931,8 +931,6 @@ Make me a plan PDF from what we just discussed.'],
         'name': 'False confirm — no delivery (regression)',
         'category': 'pdf_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-Can you send me a PDF summary of my tasks?',
         'pass_criteria': "REGRESSION: If Asmi says 'Sending now' or 'Here you go' but no PDF file arrives in chat within 60s, flag as bug.",
         'messages': ['cmd_reset_history
 Can you send me a PDF summary of my tasks?'],
