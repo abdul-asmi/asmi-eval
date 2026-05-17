@@ -898,7 +898,15 @@ main { padding: 24px; max-width: 1300px; margin: 0 auto; }
 .action-btn:hover { background:#f1f5f9; color:#1e293b; }
 .drag-handle { cursor: grab; user-select: none; vertical-align:middle; }
 .drag-handle:active { cursor: grabbing; }
-.drag-handle-glyph { display:inline-block; pointer-events:none; letter-spacing:-2px; font-weight:800; }
+.drag-handle-glyph {
+    display:inline-block;
+    pointer-events:none;
+    white-space:pre;
+    letter-spacing:1px;
+    line-height:5px;
+    font-size:14px;
+    font-weight:800;
+}
 .test-table input[type=checkbox], .cat-row input[type=checkbox] {
     width:14px; height:14px; cursor:pointer; margin:0;
 }
@@ -1640,7 +1648,9 @@ function render() {
         <button class="action-btn drag-handle" draggable="true" onclick="event.stopPropagation()" ondragstart="dragStartCategory(event, '${cat}')" ondragend="endDrag()"
                 title="Drag category" aria-label="Drag category"
                 style="padding:2px 6px;margin-right:6px;color:#94a3b8;cursor:grab;font-size:1.05rem;line-height:1;min-width:24px;text-align:center;">
-          <span class="drag-handle-glyph" aria-hidden="true">⋮⋮</span>
+          <span class="drag-handle-glyph" aria-hidden="true">••
+••
+••</span>
         </button>
         <button class="action-btn cat-toggle-btn" onclick="toggleCat('${cat}')" style="padding:2px 6px;margin-right:4px;color:${m.color}">${chevron}</button>
         <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
@@ -1690,7 +1700,9 @@ function renderRow(t, cat) {
     <td onclick="event.stopPropagation()">
       <button class="action-btn drag-handle" draggable="true" onclick="event.stopPropagation()" ondragstart="dragStartTest(event, '${t.id}')" ondragend="endDrag()"
               title="Drag test" aria-label="Drag test" style="padding:2px 4px;margin-right:4px;color:#64748b;cursor:grab;font-size:1.05rem;line-height:1;min-width:24px;text-align:center;">
-        <span class="drag-handle-glyph" aria-hidden="true">⋮⋮</span>
+        <span class="drag-handle-glyph" aria-hidden="true">••
+••
+••</span>
       </button>
       <input type="checkbox" id="testchk_${t.id}" onchange="toggleTestSelection('${t.id}', this.checked)" ${checked}>
     </td>
