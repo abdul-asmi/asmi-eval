@@ -43,9 +43,13 @@ def _split_lines(val) -> list[str]:
     if val is None:
         return []
     if isinstance(val, list):
-        return [str(v).strip() for v in val if str(v).strip()]
+        out = []
+        for v in val:
+            out.extend(_split_lines(v))
+        return out
     if isinstance(val, str):
-        return [s.strip() for s in val.splitlines() if s.strip()]
+        s = val.replace("\\n", "\n")
+        return [line.strip() for part in s.split("|") for line in part.splitlines() if line.strip()]
     return [str(val).strip()] if str(val).strip() else []
 
 
@@ -85,7 +89,7 @@ def collect(tc: dict) -> dict:
         result["responses"] = send_and_wait(msg, count=1, timeout=tc.get("wait", RESPONSE_TIMEOUT))
 
     elif test_type == "burst":
-        msgs     = tc["messages"]
+        msgs     = _split_lines(tc["messages"])
         expected = tc.get("expected_responses", len(msgs))
         result["tasks_sent"] = msgs
         result["responses"]  = send_burst(msgs, burst_delay=tc.get("burst_delay", BURST_SEND_DELAY),
@@ -95,7 +99,7 @@ def collect(tc: dict) -> dict:
 
     elif test_type == "burst_with_setup":
         setup = tc["setup_message"]
-        msgs  = tc["messages"]
+        msgs  = _split_lines(tc["messages"])
         expected = tc.get("expected_responses", len(msgs))
         result["tasks_sent"] = [setup] + msgs
         print(f"  → Setup: {setup}")
@@ -107,7 +111,7 @@ def collect(tc: dict) -> dict:
         result["count_verdict"] = cv
 
     elif test_type == "sequence":
-        msgs     = tc["messages"]
+        msgs     = _split_lines(tc["messages"])
         expected = tc.get("expected_responses", len(msgs))
         result["tasks_sent"] = msgs
         responses = send_sequence(msgs, sequence_delay=tc.get("sequence_delay", SEQUENCE_DELAY),
