@@ -921,8 +921,6 @@ Can you help me book a flight to Honalulu from Hyderabad departing June 1st to J
         'name': 'PDF from call content',
         'category': 'pdf_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-Make me a plan PDF from what we just discussed.',
         'pass_criteria': "Asmi either delivers a PDF file in chat or explains why one can't be generated. Should not confirm delivery if no file arrives.",
         'manual_check': 'Run after completing an ad hoc call in the same session.',
         'messages': ['cmd_reset_history
