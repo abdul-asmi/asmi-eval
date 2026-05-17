@@ -1,0 +1,29 @@
+[
+  {
+    "id": "preonb_01",
+    "name": "Pre-onboarding: Ask for first call, user says YES",
+    "category": "onboarding",
+    "type": "sequence",
+    "tasks_sent": [
+      "Hi, I want help with my tasks",
+      "Yes, I would love a first call"
+    ],
+    "responses": [
+      "Happy to help, but I need your okay to store our chat and build memory first. Good to go?",
+      "Great, calling you now!",
+      "Hey! That was a super quick call\u2014looks like I caught you at a bad time since we got disconnected immediately.",
+      "Do you want to try chatting again later today, or is there a better time for me to reach out so we can plan Abdul's party?"
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi correctly requested consent for memory in the first response and immediately confirmed and initiated the call after the user's affirmative response.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 4/3 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T23:29:26.357838+00:00",
+    "finished_at": "2026-05-17T23:31:19.901562+00:00",
+    "matched_responses": "\"Happy to help, but I need your okay to store our chat and build memory first. Good to go?\", \"Great, calling you now!\""
+  }
+]
