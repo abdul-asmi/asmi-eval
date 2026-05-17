@@ -1,0 +1,28 @@
+[
+  {
+    "id": "sticky_01",
+    "name": "Single research task arrives unprompted",
+    "category": "sticky_message",
+    "type": "single",
+    "tasks_sent": [
+      "Find me the top 3 Italian restaurants in Pittsburgh with their hours and ratings"
+    ],
+    "responses": [
+      "Searching for the best Italian spots in Pittsburgh for you.",
+      "Top Italian Spots in Pittsburgh",
+      "TOP PICK\n\u2022 Dish Osteria Bar \u2022 4.9 \u2b50 Rating\nSouth Side \u00b7 663 reviews \u00b7 Currently closed\nHighest rated option in the city for an authentic, intimate Sicilian experience.\nLink: https://do.asmiai.com/sQy8U",
+      "ALSO AVAILABLE",
+      "\u2022 Alla Famiglia (4.7 \u2b50)\nBrighton Heights \u00b7 1468 reviews \u00b7 Currently closed\nLink: https://do.asmiai.com/JvvUo",
+      "\u2022 DiAnoia's Eatery (4.6 \u2b50)\nStrip District \u00b7 2356 reviews \u00b7 Open today until 8 PM\nLink: https://do.asmiai.com/y8zYC",
+      "Does one of these look like the right spot for your meal?"
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi successfully provided 3 restaurant recommendations with both ratings and status information without requiring a follow-up prompt.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-17T22:15:05.223248+00:00",
+    "finished_at": "2026-05-17T22:16:35.576460+00:00",
+    "matched_responses": "Searching for the best Italian spots in Pittsburgh for you. Top Italian Spots in Pittsburgh TOP PICK \u2022 Dish Osteria Bar \u2022 4.9 \u2b50 Rating South Side \u00b7 663 reviews \u00b7 Currently closed Highest rated option in the city for an authentic, intimate Sicilian experience. Link: https://do.asmiai.com/sQy8U ALSO AVAILABLE \u2022 Alla Famiglia (4.7 \u2b50) Brighton Heights \u00b7 1468 reviews \u00b7 Currently closed Link: https://do.asmiai.com/JvvUo \u2022 DiAnoia's Eatery (4.6 \u2b50) Strip District \u00b7 2356 reviews \u00b7 Open today until 8 PM Link: https://do.asmiai.com/y8zYC Does one of these look like the right spot for your meal?"
+  }
+]
