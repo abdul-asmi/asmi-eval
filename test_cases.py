@@ -289,7 +289,7 @@ TEST_CASES = [
         'category': 'call_summary',
         'type': 'single',
         'message': 'Call a local restaurant in Pittsburgh and ask who their head chef is',
-        'wait': 180,
+        'wait': 50,
         'pass_criteria': "If the business didn't know or answer, Asmi reports that honestly. Does not invent a chef's name or any other fabricated detail.",
     },
     {
