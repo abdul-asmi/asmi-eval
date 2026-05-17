@@ -761,8 +761,6 @@ don't bother"],
         'name': "3P doesn't answer",
         'category': '3p_calls_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-Call (412) 555-0000 and ask about their hours.',
         'pass_criteria': 'Asmi sends a chat message reporting no answer. Message should offer to retry or ask how to proceed — not go silent.',
         'messages': ['cmd_reset_history
 Call (412) 555-0000 and ask about their hours.'],
