@@ -736,9 +736,6 @@ Call Joe's Pizza and ask about their catering options."],
         'name': 'Quiet hours → override accepted',
         'category': '3p_calls_v1',
         'type': 'sequence',
-        'message': 'cmd_reset_history
-Call (412) 555-0123 and ask if they have a table for 2 tonight at 7pm.
-call anyway',
         'pass_criteria': "Asmi's first chat message flags quiet hours. After 'call anyway', Asmi confirms it will proceed — no re-prompting.",
         'manual_check': 'Run after 10pm local time.',
         'messages': ['cmd_reset_history
