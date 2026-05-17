@@ -90,7 +90,7 @@ TEST_CASES = [
     },
     {
         'name': 'Simple task → immediate call',
-        'category': 'adhoc_call_v1',
+        'category': 'adhoc call',
         'type': 'sequence',
         'pass_criteria': 'Asmi asks for a call',
         'messages': ['cmd_reset_history
@@ -99,7 +99,7 @@ Need to plan a birthday party'],
     },
     {
         'name': 'Multi-part task → all covered',
-        'category': 'adhoc_call_v1',
+        'category': 'adhoc call',
         'type': 'sequence',
         'pass_criteria': 'Asmi acknowledges all 3 tasks in chat. Follow-up messages cover each item with status or next steps.',
         'messages': ['cmd_reset_history
@@ -108,7 +108,7 @@ I need to sort out a few things — renew my car insurance, book a dentist appoi
     },
     {
         'name': 'Task → call deferred, never comes (regression)',
-        'category': 'adhoc_call_v1',
+        'category': 'adhoc call',
         'type': 'sequence',
         'pass_criteria': 'REGRESSION: Asmi should send a chat update within 3 min. If no message received, flag as bug.',
         'manual_check': 'Wait 3 min after sending. Check if any follow-up chat message arrived.',
@@ -118,7 +118,7 @@ Can you call someone and check on my prescription refill at the pharmacy?'],
     },
     {
         'name': 'Domain bleed on call',
-        'category': 'adhoc_call_v1',
+        'category': 'adhoc call',
         'type': 'sequence',
         'pass_criteria': "Asmi's chat messages reference gym/membership only. No unrelated domain mentioned in reply.",
         'messages': ['cmd_reset_history
@@ -127,7 +127,7 @@ Can you help me cancel my gym membership?'],
     },
     {
         'name': 'Missed call → retry logic',
-        'category': 'adhoc_call_v1',
+        'category': 'adhoc call',
         'type': 'sequence',
         'pass_criteria': 'Asmi sends a chat update about the call attempt. Message should offer to retry or ask how to proceed — not go silent.',
         'messages': ['cmd_reset_history
@@ -136,7 +136,7 @@ Please call my landlord about the noise complaint I filed last week.'],
     },
     {
         'name': 'Mid-task pivot',
-        'category': 'adhoc_call_v1',
+        'category': 'adhoc call',
         'type': 'sequence',
         'pass_criteria': "Asmi's chat response acknowledges the pivot cleanly. No reference to the cancelled task continuing. Confirms new task.",
         'messages': ['cmd_reset_history
