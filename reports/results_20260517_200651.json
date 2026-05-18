@@ -1,0 +1,28 @@
+[
+  {
+    "id": "pdf_01",
+    "name": "PDF from chat history",
+    "category": "pdf_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history",
+      "Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please."
+    ],
+    "responses": [
+      "\u2713 Chat history and planning canvas cleared.",
+      "Setting up your travel search for Hawaii; I'll find the best flight and hotel options for you.",
+      "\ufffcHere's your Asmi Summary document from Asmi"
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi acknowledged the request and initiated the search process for both flights and hotels as instructed.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 3/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-18T00:04:32.785197+00:00",
+    "finished_at": "2026-05-18T00:06:45.324691+00:00",
+    "matched_responses": "\"Setting up your travel search for Hawaii; I'll find the best flight and hotel options for you.\""
+  }
+]
