@@ -175,6 +175,7 @@ Call (412) 555-0000 and ask about their hours.'],
         'messages': ["cmd_reset_history
 Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please."],
         'id': 'pdf_01',
+        'wait': 20,
     },
     {
         'name': 'PDF from call content',
