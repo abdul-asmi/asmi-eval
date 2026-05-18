@@ -1,0 +1,33 @@
+[
+  {
+    "id": "3pc_01",
+    "name": "Number in message \u2192 call placed",
+    "category": "3p_calls_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history",
+      "Call nearest chinese restaurant and book a table for 2 for 6PM"
+    ],
+    "responses": [
+      "\u2713 Chat history and planning canvas cleared.",
+      "Searching for top-rated Chinese dining options in Pittsburgh to help you with your 6 PM plans.",
+      "Top Chinese Dining in Pittsburgh",
+      "TOP PICK\n\u2022 Nan Xiang Soup Dumplings \u2022 4.8 \u2b50 1,234 reviews\n2773 Sidney St \u00b7 Highly-rated favorite\nWith the highest volume of reviews and a stellar 4.8 rating, this is the crowd-favorite for an exceptional meal.\nLink: https://do.asmiai.com/d8aW9",
+      "ALSO AVAILABLE",
+      "\u2022 HK Dim Sum (4.8 \u2b50)\n4520 Centre Ave \u00b7 Intimate and authentic\nLink: https://do.asmiai.com/p5Z6D",
+      "\u2022 Pepper Space (4.7 \u2b50)\n4609 Forbes Ave \u00b7 Highly-rated classic\nLink: https://do.asmiai.com/ZEVt9",
+      "Shall I help you book a table for 6 PM at Nan Xiang?"
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi successfully searched for and identified local restaurants without requiring the user to provide a phone number, meeting the requirement to look one up independently.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 8/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-18T00:29:44.283683+00:00",
+    "finished_at": "2026-05-18T00:31:35.792128+00:00",
+    "matched_responses": "\"Searching for top-rated Chinese dining options in Pittsburgh to help you with your 6 PM plans.\" and \"Shall I help you book a table for 6 PM at Nan Xiang?\""
+  }
+]
