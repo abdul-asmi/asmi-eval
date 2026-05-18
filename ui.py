@@ -162,10 +162,13 @@ def save_test_cases(cases: list):
 
 
 def _build_run_queue(data: dict) -> list[dict]:
-    try:
-        cases = load_test_cases()
-    except Exception:
-        cases = []
+    # Prefer client-provided snapshot so the queue reflects the exact current UI.
+    cases = data.get("test_cases") if isinstance(data.get("test_cases"), list) else None
+    if cases is None:
+        try:
+            cases = load_test_cases()
+        except Exception:
+            cases = []
     by_id = {t.get("id"): t for t in cases if t.get("id")}
     selected = []
     ids = data.get("ids")
@@ -1224,26 +1227,32 @@ textarea { resize: vertical; min-height: 70px; }
     <div id="analysisList" style="margin-top:16px;display:grid;gap:12px;"></div>
   </div>
 </main>
-<div id="toast"></div>
-<div id="runQueuePanel" style="display:none;position:fixed;right:18px;bottom:18px;width:min(360px,calc(100vw - 36px));background:#ffffff;border:1px solid #d8b4fe;border-radius:12px;box-shadow:0 16px 40px rgba(15,23,42,.22);z-index:9998;overflow:hidden;">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f5f3ff;border-bottom:1px solid #e9d5ff;">
-    <div>
-      <div style="font-weight:800;color:#0f172a;font-size:0.88rem;">Run Monitor</div>
-      <div id="runQueueMeta" style="font-size:0.74rem;color:#64748b;margin-top:1px;"></div>
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <button class="btn btn-danger" id="queueStopBtn" onclick="stopRun()" style="font-size:0.72rem;padding:3px 8px;">Stop + judge</button>
-      <button class="btn btn-outline" onclick="hideRunQueuePanel()" style="font-size:0.72rem;padding:3px 8px;">Hide</button>
-    </div>
-  </div>
-  <div id="runQueueList" style="max-height:300px;overflow:auto;padding:8px;display:grid;gap:6px;"></div>
-</div>
-<div id="templateHelpModal" onclick="if(event.target.id==='templateHelpModal') hideTemplateHelp()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.65);z-index:9999;padding:24px;overflow:auto;">
-  <div style="max-width:860px;margin:40px auto;background:white;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.3);border:1px solid #e2e8f0;">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e2e8f0;">
-      <div style="font-weight:800;color:#0f172a;">CSV Template Help</div>
-      <button class="btn btn-outline" onclick="hideTemplateHelp()" style="font-size:0.75rem;padding:3px 10px;">✕ Close</button>
-    </div>
+	<div id="toast"></div>
+	<div id="runQueuePanel" style="display:none;position:fixed;right:18px;bottom:18px;width:min(360px,calc(100vw - 36px));background:#ffffff;border:1px solid #d8b4fe;border-radius:12px;box-shadow:0 16px 40px rgba(15,23,42,.22);z-index:9998;overflow:hidden;">
+	  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f5f3ff;border-bottom:1px solid #e9d5ff;">
+	    <div>
+	      <div style="font-weight:800;color:#0f172a;font-size:0.88rem;">Run Monitor</div>
+	      <div id="runQueueMeta" style="font-size:0.74rem;color:#64748b;margin-top:1px;"></div>
+	    </div>
+	    <div style="display:flex;gap:6px;align-items:center;">
+	      <button class="btn btn-danger" id="queueStopBtn" onclick="stopRun()" style="font-size:0.72rem;padding:3px 8px;">Stop + judge</button>
+	      <button class="btn btn-outline" id="runQueueMinBtn" onclick="toggleRunQueueMinimized()" style="font-size:0.72rem;padding:3px 8px;">Minimize</button>
+	      <button class="btn btn-outline" onclick="hideRunQueuePanel()" style="font-size:0.72rem;padding:3px 8px;">Hide</button>
+	    </div>
+	  </div>
+	  <div id="runQueueList" style="max-height:300px;overflow:auto;padding:8px;display:grid;gap:6px;"></div>
+	</div>
+	<div id="runQueueLauncher" style="display:none;position:fixed;right:18px;bottom:18px;z-index:9998;">
+	  <button class="btn btn-outline" onclick="showRunQueuePanel()" style="background:#ffffff;border:1px solid #d8b4fe;box-shadow:0 10px 26px rgba(15,23,42,.18);font-size:0.78rem;padding:6px 10px;border-radius:999px;">
+	    Run Monitor
+	  </button>
+	</div>
+	<div id="templateHelpModal" onclick="if(event.target.id==='templateHelpModal') hideTemplateHelp()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.65);z-index:9999;padding:24px;overflow:auto;">
+	  <div style="max-width:860px;margin:40px auto;background:white;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.3);border:1px solid #e2e8f0;">
+	    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e2e8f0;">
+	      <div style="font-weight:800;color:#0f172a;">CSV Template Help</div>
+	      <button class="btn btn-outline" onclick="hideTemplateHelp()" style="font-size:0.75rem;padding:3px 10px;">✕ Close</button>
+	    </div>
     <div style="padding:16px 18px;color:#334155;line-height:1.55;font-size:0.92rem;">
       <div style="font-weight:800;margin-bottom:6px;">Fastest workflow (3–4 columns)</div>
       <div style="margin-bottom:12px;">You can upload a CSV with just: <code>category</code>, <code>type</code>, <code>messages</code>, <code>pass_criteria</code>. Leave <code>id</code>/<code>name</code> blank — the system will generate them. For a single-step test, put one line in <code>messages</code>.</div>
@@ -1575,14 +1584,16 @@ function autoGenerateId() {
   document.getElementById('new_id').value = `${cat}_${String(maxNum + 1).padStart(2, '0')}`;
 }
 
-async function load() {
-  _initCatDropdowns();
-  initAsmiTarget();
-  showTab('main');
-  document.getElementById('testList').innerHTML = '<p style="color:#94a3b8;padding:20px">Loading test cases…</p>';
-  try {
-    const res = await fetch('/api/tests');
-    tests = await res.json();
+	async function load() {
+	  _initCatDropdowns();
+	  initAsmiTarget();
+	  showTab('main');
+	  // Keep the Run Monitor control available even when idle.
+	  renderRunQueuePanel({status:'idle', queue:[]});
+	  document.getElementById('testList').innerHTML = '<p style="color:#94a3b8;padding:20px">Loading test cases…</p>';
+	  try {
+	    const res = await fetch('/api/tests');
+	    tests = await res.json();
     if (tests.error) throw new Error(tests.error);
     collapsedCats = new Set(_allCategories());
     selectedTestIds = new Set();
@@ -1720,8 +1731,8 @@ function renderRow(t, cat) {
     <td colspan="6">
       <div class="edit-form-inner">
         <div class="form-grid">
-          <div><label>ID</label><input type="text" value="${esc(t.id)}" onchange="update(${idx},'id',this.value)"></div>
-          <div><label>Name</label><input type="text" value="${esc(t.name)}" onchange="update(${idx},'name',this.value)"></div>
+          <div><label>ID</label><input type="text" value="${esc(t.id)}" oninput="update(${idx},'id',this.value)"></div>
+          <div><label>Name</label><input type="text" value="${esc(t.name)}" oninput="update(${idx},'name',this.value)"></div>
           <div><label>Category</label>
             <select onchange="update(${idx},'category',this.value)">${_catOptions(t.category)}</select>
           </div>
@@ -1733,10 +1744,10 @@ function renderRow(t, cat) {
           </div>
           ${t.start_message !== undefined || t.type === 'interactive' ? `
           <div class="form-full"><label>Start Message</label>
-            <input type="text" value="${esc(t.start_message || t.message || '')}" onchange="update(${idx},'start_message',this.value||undefined)">
+            <input type="text" value="${esc(t.start_message || t.message || '')}" oninput="update(${idx},'start_message',this.value||undefined)">
           </div>
           <div class="form-full"><label>Follow-up Replies (one per line)</label>
-            <textarea onchange="updateInteractiveFollowups(${idx},this.value)">${esc(followups)}</textarea>
+            <textarea oninput="updateInteractiveFollowups(${idx},this.value)">${esc(followups)}</textarea>
           </div>
           <div><label>Auto Continue</label>
             <select onchange="update(${idx},'auto_continue',this.value==='true')">
@@ -1748,15 +1759,15 @@ function renderRow(t, cat) {
             <input type="text" value="${t.max_turns || ''}" onchange="update(${idx},'max_turns',parseInt(this.value)||undefined)">
           </div>
           <div class="form-full"><label>Stop When</label>
-            <input type="text" value="${esc(Array.isArray(t.stop_when) ? t.stop_when.join('\\n') : (t.stop_when || ''))}" onchange="update(${idx},'stop_when',this.value||undefined)">
+            <input type="text" value="${esc(Array.isArray(t.stop_when) ? t.stop_when.join('\\n') : (t.stop_when || ''))}" oninput="update(${idx},'stop_when',this.value||undefined)">
           </div>` : ''}
           ${t.message !== undefined && t.type !== 'interactive' ? `
           <div class="form-full"><label>Message</label>
-            <input type="text" value="${esc(t.message||'')}" onchange="update(${idx},'message',this.value)">
+            <input type="text" value="${esc(t.message||'')}" oninput="update(${idx},'message',this.value)">
           </div>` : ''}
           ${t.messages !== undefined ? `
           <div class="form-full"><label>Messages (one per line)</label>
-            <textarea onchange="updateMsgs(${idx},this.value)">${esc(msgs)}</textarea>
+            <textarea oninput="updateMsgs(${idx},this.value)">${esc(msgs)}</textarea>
           </div>` : ''}
           <div><label>Wait (s)</label>
             <input type="text" value="${t.wait||60}" onchange="update(${idx},'wait',parseInt(this.value))">
@@ -1765,13 +1776,13 @@ function renderRow(t, cat) {
             <input type="text" value="${t.expected_responses||''}" onchange="update(${idx},'expected_responses',parseInt(this.value)||undefined)">
           </div>
           <div class="form-full"><label>Pass Criteria</label>
-            <textarea onchange="update(${idx},'pass_criteria',this.value)">${esc(t.pass_criteria||'')}</textarea>
+            <textarea oninput="update(${idx},'pass_criteria',this.value)">${esc(t.pass_criteria||'')}</textarea>
           </div>
           <div class="form-full"><label>Precondition</label>
-            <input type="text" value="${esc(t.precondition||'')}" onchange="update(${idx},'precondition',this.value||undefined)">
+            <input type="text" value="${esc(t.precondition||'')}" oninput="update(${idx},'precondition',this.value||undefined)">
           </div>
           <div class="form-full"><label>Notes</label>
-            <input type="text" value="${esc(t.note||t.manual_check||'')}" onchange="update(${idx},'note',this.value||undefined)">
+            <input type="text" value="${esc(t.note||t.manual_check||'')}" oninput="update(${idx},'note',this.value||undefined)">
           </div>
         </div>
         <div class="form-actions">
@@ -2019,13 +2030,66 @@ async function saveAll() {
   }
 }
 
-let _pollTimer      = null;
-let _runStart       = 0;
-let _activeTestId   = null;
-let _lastRunAnalysis = '';
-let _historyRefreshTimer = null;
-let selectedTestIds = new Set();
-let interactiveAutoContinue = true;
+	let _pollTimer      = null;
+	let _runStart       = 0;
+	let _activeTestId   = null;
+	let _lastRunAnalysis = '';
+	let _historyRefreshTimer = null;
+	let selectedTestIds = new Set();
+	let interactiveAutoContinue = true;
+
+	const _RUN_QUEUE_HIDDEN_KEY = 'asmi_runQueueHidden';
+	const _RUN_QUEUE_MIN_KEY = 'asmi_runQueueMinimized';
+	const _readBool = (key, fallback = false) => {
+	  try {
+	    const raw = localStorage.getItem(key);
+	    if (raw === null) return fallback;
+	    return raw === '1' || raw === 'true';
+	  } catch(e) {
+	    return fallback;
+	  }
+	};
+	const _writeBool = (key, val) => {
+	  try { localStorage.setItem(key, val ? '1' : '0'); } catch(e) {}
+	};
+	let _runQueueHidden = _readBool(_RUN_QUEUE_HIDDEN_KEY, false);
+	let _runQueueMinimized = _readBool(_RUN_QUEUE_MIN_KEY, false);
+
+	function _syncRunQueuePanel() {
+	  const panel = document.getElementById('runQueuePanel');
+	  const launcher = document.getElementById('runQueueLauncher');
+	  const list = document.getElementById('runQueueList');
+	  const minBtn = document.getElementById('runQueueMinBtn');
+	  if (!panel) return;
+	  if (_runQueueHidden) {
+	    panel.style.display = 'none';
+	    if (launcher) launcher.style.display = 'block';
+	    return;
+	  }
+	  if (launcher) launcher.style.display = 'none';
+	  panel.style.display = 'block';
+	  if (list) list.style.display = _runQueueMinimized ? 'none' : 'grid';
+	  if (minBtn) minBtn.textContent = _runQueueMinimized ? 'Expand' : 'Minimize';
+	}
+
+	function setRunQueueHidden(hidden) {
+	  _runQueueHidden = !!hidden;
+	  _writeBool(_RUN_QUEUE_HIDDEN_KEY, _runQueueHidden);
+	  _syncRunQueuePanel();
+	}
+
+	function toggleRunQueueMinimized() {
+	  _runQueueMinimized = !_runQueueMinimized;
+	  _writeBool(_RUN_QUEUE_MIN_KEY, _runQueueMinimized);
+	  _syncRunQueuePanel();
+	}
+
+	function showRunQueuePanel() {
+	  setRunQueueHidden(false);
+	  _runQueueMinimized = false;
+	  _writeBool(_RUN_QUEUE_MIN_KEY, _runQueueMinimized);
+	  _syncRunQueuePanel();
+	}
 
 async function runSelected() {
   const ids = tests.filter(t => selectedTestIds.has(t.id)).map(t => t.id);
@@ -2170,6 +2234,10 @@ async function _triggerRun(payload) {
   const target = getAsmiTarget();
   payload.asmi_target = payload.asmi_target || target.key;
   payload.asmi_handle = payload.asmi_handle || target.handle;
+  // Always send the in-memory test cases so the runner uses the exact messages
+  // currently shown in the UI (even if the user forgot to click Save).
+  // The server will still persist separately when Save is pressed.
+  payload.test_cases = Array.isArray(tests) ? tests : [];
   const targetName = target.label;
   const label = payload.id ? `test: ${payload.id}` :
                 payload.ids ? `${payload.ids.length} selected tests` :
@@ -2182,17 +2250,18 @@ async function _triggerRun(payload) {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (!data.ok) {
-      toast(data.error || 'Run request failed');
-      return;
-    }
-    toast(`Queued ${label} on ${targetName}…`);
-    _openOutput(`Queued ${label} on ${targetName}…`);
-    renderRunQueuePanel({status:'running', queue:data.queue || []});
-  } catch(e) {
-    toast('Failed to queue run: ' + e.message);
-  }
-}
+	    if (!data.ok) {
+	      toast(data.error || 'Run request failed');
+	      return;
+	    }
+	    toast(`Queued ${label} on ${targetName}…`);
+	    showRunQueuePanel();
+	    _openOutput(`Queued ${label} on ${targetName}…`);
+	    renderRunQueuePanel({status:'running', queue:data.queue || []});
+	  } catch(e) {
+	    toast('Failed to queue run: ' + e.message);
+	  }
+	}
 
 function _openOutput(label) {
   _runStart = Date.now();
@@ -2224,10 +2293,9 @@ async function stopRun() {
   toast('Stop signal sent — judging captured results so far');
 }
 
-function hideRunQueuePanel() {
-  const el = document.getElementById('runQueuePanel');
-  if (el) el.style.display = 'none';
-}
+	function hideRunQueuePanel() {
+	  setRunQueueHidden(true);
+	}
 
 async function skipQueuedTest(id) {
   try {
@@ -2246,24 +2314,40 @@ async function skipQueuedTest(id) {
   }
 }
 
-function renderRunQueuePanel(data) {
-  const panel = document.getElementById('runQueuePanel');
-  const list = document.getElementById('runQueueList');
-  const meta = document.getElementById('runQueueMeta');
-  if (!panel || !list || !meta) return;
-  const queue = data.queue || [];
-  const isRunning = data.status === 'running' || (_pollTimer && _runStart && data.status !== 'done' && data.status !== 'stopped');
-  const hasActiveItems = queue.some(x => ['running', 'queued', 'skip'].includes(x.status || 'queued'));
-  if (!isRunning && !hasActiveItems) {
-    panel.style.display = 'none';
-    return;
-  }
-  panel.style.display = 'block';
-  const running = queue.find(x => x.status === 'running');
-  const remaining = queue.filter(x => x.status === 'queued').length;
-  meta.textContent = running ? `Running ${running.id} · ${remaining} queued` :
-                     isRunning ? 'Collecting responses…' :
-                     `${remaining} queued`;
+	function renderRunQueuePanel(data) {
+	  const panel = document.getElementById('runQueuePanel');
+	  const list = document.getElementById('runQueueList');
+	  const meta = document.getElementById('runQueueMeta');
+	  const stopBtn = document.getElementById('queueStopBtn');
+	  if (!panel || !list || !meta) return;
+	  const queue = data.queue || [];
+	  const isRunning = data.status === 'running' || (_pollTimer && _runStart && data.status !== 'done' && data.status !== 'stopped');
+	  const hasActiveItems = queue.some(x => ['running', 'queued', 'skip'].includes(x.status || 'queued'));
+	  // Keep the monitor available even when idle: show an empty (minimizable)
+	  // panel, or the launcher if the user hid it.
+	  if (!isRunning && !hasActiveItems) {
+	    meta.textContent = 'Idle';
+	    list.innerHTML = `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:white;color:#475569;font-size:0.8rem;">No active runs.</div>`;
+	    if (stopBtn) stopBtn.style.display = 'none';
+	    if (!_runQueueHidden) {
+	      // Auto-minimize when idle so the UI doesn’t feel “in the way”.
+	      if (!_runQueueMinimized) {
+	        _runQueueMinimized = true;
+	        _writeBool(_RUN_QUEUE_MIN_KEY, _runQueueMinimized);
+	      }
+	    }
+	    _syncRunQueuePanel();
+	    return;
+	  }
+	  if (stopBtn) stopBtn.style.display = 'inline-block';
+	  // If a run is active, ensure the panel is visible (launcher -> panel).
+	  setRunQueueHidden(false);
+	  _syncRunQueuePanel();
+	  const running = queue.find(x => x.status === 'running');
+	  const remaining = queue.filter(x => x.status === 'queued').length;
+	  meta.textContent = running ? `Running ${running.id} · ${remaining} queued` :
+	                     isRunning ? 'Collecting responses…' :
+	                     `${remaining} queued`;
   const rows = queue.length ? queue.map(item => {
     const status = item.status || 'queued';
     const colors = {
@@ -2284,10 +2368,10 @@ function renderRunQueuePanel(data) {
       ${canSkip ? `<button class="btn btn-outline" onclick="skipQueuedTest('${esc(item.id || '')}')" style="font-size:0.7rem;padding:2px 8px;">Skip</button>` : ''}
     </div>`;
   }).join('') : '';
-  list.innerHTML = rows || (isRunning ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:white;color:#475569;font-size:0.8rem;">
-    Waiting for final responses… You can still stop and judge captured responses so far.
-  </div>` : '');
-}
+	  list.innerHTML = rows || (isRunning ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:white;color:#475569;font-size:0.8rem;">
+	    Waiting for final responses… You can still stop and judge captured responses so far.
+	  </div>` : '');
+	}
 
 function _cleanOutput(text) {
   // Strip the "Report: ..." trailing line from daemon output text
@@ -2994,7 +3078,8 @@ async function loadHistory(silent = false) {
         <td style="padding:12px;text-align:center;font-size:0.88rem;font-weight:700;color:${passColor};">${passPct}%</td>
         <td style="padding:12px;text-align:center;font-size:0.85rem;">
           ${run.has_report ? `<button class="btn btn-primary" style="padding:4px 10px;font-size:0.75rem;margin-right:4px;" onclick="location.href='/api/report/${run.stem}'">View</button>` : ''}
-          ${run.has_report ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:0.75rem;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;" onclick="location.href='/api/report/${run.stem}?dl=1'">Download</button>` : '<span style="color:#94a3b8">No report</span>'}
+          ${run.has_report ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:0.75rem;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;margin-right:4px;" onclick="location.href='/api/report/${run.stem}?dl=1'">Download</button>` : '<span style="color:#94a3b8;margin-right:8px">No report</span>'}
+          <button class="btn btn-danger" style="padding:4px 10px;font-size:0.75rem;" onclick="deleteRun('${run.stem}')">Delete</button>
         </td>
       </tr>`;
     });
@@ -3002,6 +3087,29 @@ async function loadHistory(silent = false) {
     historyList.innerHTML = html;
   } catch(e) {
     historyList.innerHTML = '<p style="color:#dc2626;padding:20px;text-align:center;">Failed to load reports: ' + e.message + '</p>';
+  }
+}
+
+async function deleteRun(stem) {
+  if (!stem) return;
+  if (!confirm(`Delete run ${formatTimestamp(stem)}?\n\nThis removes its saved results + report and it will no longer affect Analysis.`)) return;
+  try {
+    const res = await fetch('/api/delete-run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({stem}),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      toast(data.error || 'Delete failed');
+      return;
+    }
+    toast(`Deleted run ${formatTimestamp(stem)}`);
+    await loadHistory(true);
+    await loadResponses(true);
+    await loadAnalysis(true);
+  } catch(e) {
+    toast('Delete failed: ' + e.message);
   }
 }
 
@@ -3087,13 +3195,20 @@ function _normalizeTranscriptTurns(test, runStem) {
       finished_at: finishedAt,
     }];
   }
-  return tasks.map((task, idx) => ({
-    turn: idx + 1,
-    user: task,
-    responses: resps[idx] ? [resps[idx]] : [],
-    started_at: startedAt,
-    finished_at: finishedAt,
-  }));
+  // Fallback pairing: if we have more assistant responses than user tasks,
+  // attach the overflow to the final user turn so the transcript shows the
+  // full conversation.
+  return tasks.map((task, idx) => {
+    const isLast = idx === tasks.length - 1;
+    const turnResponses = isLast ? resps.slice(idx) : (resps[idx] ? [resps[idx]] : []);
+    return {
+      turn: idx + 1,
+      user: task,
+      responses: turnResponses,
+      started_at: startedAt,
+      finished_at: finishedAt,
+    };
+  });
 }
 
 function _renderTranscriptBlock(turn) {
@@ -3603,7 +3718,13 @@ class Handler(BaseHTTPRequestHandler):
             if asmi_target in ASMI_TARGET_HANDLES:
                 asmi_handle = ASMI_TARGET_HANDLES[asmi_target]
             try:
-                test_cases_snapshot = load_test_cases()
+                # Prefer client-provided test cases snapshot so runs use the
+                # exact messages the user sees (even if they haven't saved).
+                incoming = data.get("test_cases")
+                if isinstance(incoming, list):
+                    test_cases_snapshot = [t for t in incoming if isinstance(t, dict)]
+                else:
+                    test_cases_snapshot = load_test_cases()
             except Exception:
                 test_cases_snapshot = []
             _run_queue = _build_run_queue(data)
@@ -3693,6 +3814,33 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/stop":
             _stop_requested = True
             self._json({"ok": True})
+        elif path == "/api/delete-run":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                data = json.loads(body) if length else {}
+            except Exception:
+                data = {}
+            stem = str(data.get("stem") or "").strip()
+            if not re.match(r"^\d{8}_?\d{4,6}$", stem):
+                self._json({"ok": False, "error": "Invalid stem"})
+                return
+            removed = []
+            for name in (f"results_{stem}.json", f"report_{stem}.html"):
+                fp = os.path.join(REPORTS_DIR, name)
+                try:
+                    if os.path.exists(fp):
+                        os.remove(fp)
+                        removed.append(name)
+                except Exception:
+                    pass
+            # If the deleted run was the currently cached in-memory run, clear it
+            # so tabs don't show stale data.
+            if _run_result_stem == stem:
+                _run_results = []
+                _run_report_html = ""
+                _run_result_stem = ""
+            self._json({"ok": True, "removed": removed})
         elif path == "/api/skip-test":
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)

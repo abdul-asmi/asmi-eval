@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 import os
 import json
 
-from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, CMD_ONBOARD, CATEGORY_RUN_ORDER
-from imessage import send_and_wait, send_burst, send_sequence, send_imessage, wait_for_responses
+from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER
+from imessage import send_imessage, wait_for_responses
 from judge import judge_with_context, judge_response_count
 
 JUDGE_DELAY = 4  # seconds between Gemini calls (free tier safe)
@@ -52,6 +52,41 @@ def _split_lines(val) -> list[str]:
         return [line.strip() for part in s.split("|") for line in part.splitlines() if line.strip()]
     return [str(val).strip()] if str(val).strip() else []
 
+def _group_raw_responses_by_turn(sent_turns: list[dict], raw_msgs: list[dict]) -> list[dict]:
+    """
+    Assign each raw assistant message to the most recent user turn whose
+    started_at is <= message timestamp. Returns turns with responses filled.
+    """
+    turns = []
+    for t in sent_turns:
+        turns.append({
+            "turn": t["turn"],
+            "user": t["user"],
+            "responses": [],
+            "started_at": t["started_at"],
+            "finished_at": t.get("finished_at") or t["started_at"],
+        })
+
+    # Ensure chronological order for assignment.
+    raw_msgs = sorted(raw_msgs or [], key=lambda m: (m.get("timestamp") or ""))
+    for m in raw_msgs:
+        ts = m.get("timestamp")
+        text = (m.get("text") or "").strip()
+        if not ts or not text:
+            continue
+        # Find the latest turn whose started_at <= ts.
+        idx = None
+        for i in range(len(turns) - 1, -1, -1):
+            if turns[i]["started_at"] <= ts:
+                idx = i
+                break
+        if idx is None:
+            continue
+        turns[idx]["responses"].append(text)
+        # Track last response time for display sorting.
+        turns[idx]["finished_at"] = max(turns[idx]["finished_at"], ts)
+    return turns
+
 
 # ── Phase 1: collect responses ─────────────────────────────────────────────────
 
@@ -84,16 +119,75 @@ def collect(tc: dict) -> dict:
 
     if test_type == "single":
         msg = tc["message"]
+        expected = int(tc.get("expected_responses") or 1)
+        wait = tc.get("wait", RESPONSE_TIMEOUT)
+        silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
+        max_responses = int(tc.get("max_responses") or max(10, expected + 6))
+
         result["tasks_sent"] = [msg]
         print(f"  → {msg[:80]}")
-        result["responses"] = send_and_wait(msg, count=1, timeout=tc.get("wait", RESPONSE_TIMEOUT))
+        sent_at = datetime.now(timezone.utc)
+        ok = send_imessage(msg)
+        if not ok:
+            result["responses"] = []
+        else:
+            raw = wait_for_responses(
+                sent_at,
+                count=expected,
+                timeout=wait,
+                max_responses=max_responses,
+                drain_all=True,
+                return_raw=True,
+                silence_after=silence_after,
+            )
+            transcript = _group_raw_responses_by_turn([{
+                "turn": 1,
+                "user": msg,
+                "started_at": sent_at.isoformat(),
+                "finished_at": sent_at.isoformat(),
+            }], raw)
+            result["transcript"] = transcript
+            result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
+            cv = judge_response_count(tc["name"], result["responses"], expected)
+            result["count_verdict"] = cv
 
     elif test_type == "burst":
         msgs     = _split_lines(tc["messages"])
         expected = tc.get("expected_responses", len(msgs))
         result["tasks_sent"] = msgs
-        result["responses"]  = send_burst(msgs, burst_delay=tc.get("burst_delay", BURST_SEND_DELAY),
-                                          expected_responses=expected, timeout=tc.get("wait", BURST_WAIT))
+        # Collect a per-turn transcript using timestamps so multiple assistant
+        # replies to a single user message render correctly in the UI.
+        burst_delay = tc.get("burst_delay", BURST_SEND_DELAY)
+        wait = tc.get("wait", BURST_WAIT)
+        session_start = None
+        sent_turns = []
+        for i, msg in enumerate(msgs):
+            sent_at = datetime.now(timezone.utc)
+            if session_start is None:
+                session_start = sent_at
+            print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
+            send_imessage(msg)
+            sent_turns.append({
+                "turn": i + 1,
+                "user": msg,
+                "started_at": sent_at.isoformat(),
+                "finished_at": sent_at.isoformat(),
+            })
+            if i < len(msgs) - 1:
+                time.sleep(burst_delay)
+        silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
+        raw = wait_for_responses(
+            session_start or datetime.now(timezone.utc),
+            count=expected,
+            timeout=wait,
+            max_responses=max(10, expected + 6),
+            drain_all=True,
+            return_raw=True,
+            silence_after=silence_after,
+        )
+        transcript = _group_raw_responses_by_turn(sent_turns, raw)
+        result["transcript"] = transcript
+        result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
         cv = judge_response_count(tc["name"], result["responses"], expected)
         result["count_verdict"] = cv
 
@@ -103,21 +197,104 @@ def collect(tc: dict) -> dict:
         expected = tc.get("expected_responses", len(msgs))
         result["tasks_sent"] = [setup] + msgs
         print(f"  → Setup: {setup}")
+        setup_sent = datetime.now(timezone.utc)
         send_imessage(setup)
         time.sleep(tc.get("setup_wait", 20))
-        result["responses"] = send_burst(msgs, burst_delay=tc.get("burst_delay", BURST_SEND_DELAY),
-                                         expected_responses=expected, timeout=tc.get("wait", BURST_WAIT))
+        burst_delay = tc.get("burst_delay", BURST_SEND_DELAY)
+        wait = tc.get("wait", BURST_WAIT)
+        session_start = setup_sent
+        sent_turns = [{
+            "turn": 1,
+            "user": setup,
+            "started_at": setup_sent.isoformat(),
+            "finished_at": setup_sent.isoformat(),
+        }]
+        for i, msg in enumerate(msgs):
+            sent_at = datetime.now(timezone.utc)
+            print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
+            send_imessage(msg)
+            sent_turns.append({
+                "turn": i + 2,
+                "user": msg,
+                "started_at": sent_at.isoformat(),
+                "finished_at": sent_at.isoformat(),
+            })
+            if i < len(msgs) - 1:
+                time.sleep(burst_delay)
+        silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
+        raw = wait_for_responses(
+            session_start,
+            count=expected,
+            timeout=wait,
+            max_responses=max(10, expected + 6),
+            drain_all=True,
+            return_raw=True,
+            silence_after=silence_after,
+        )
+        transcript = _group_raw_responses_by_turn(sent_turns, raw)
+        result["transcript"] = transcript
+        result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
         cv = judge_response_count(tc["name"], result["responses"], expected)
         result["count_verdict"] = cv
 
     elif test_type == "sequence":
-        msgs     = _split_lines(tc["messages"])
-        expected = tc.get("expected_responses", len(msgs))
+        msgs = _split_lines(tc["messages"])
+        expected = int(tc.get("expected_responses") or len(msgs))
         result["tasks_sent"] = msgs
-        responses = send_sequence(msgs, sequence_delay=tc.get("sequence_delay", SEQUENCE_DELAY),
-                                  timeout_per=tc.get("wait", RESPONSE_TIMEOUT))
-        result["responses"] = [r for r in responses if r]
-        cv = judge_response_count(tc["name"], result["responses"], expected)
+        wait = tc.get("wait", RESPONSE_TIMEOUT)
+        silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
+        max_responses = int(tc.get("max_responses") or max(10, expected + 6))
+        sequence_delay = tc.get("sequence_delay", SEQUENCE_DELAY)
+
+        session_start = None
+        seen = set()
+        transcript = []
+        for i, msg in enumerate(msgs):
+            print(f"\n  → Step [{i+1}/{len(msgs)}]: {msg[:70]}")
+            sent_at = datetime.now(timezone.utc)
+            if session_start is None:
+                session_start = sent_at
+            ok = send_imessage(msg)
+            if not ok:
+                transcript.append({
+                    "turn": i + 1,
+                    "user": msg,
+                    "responses": [],
+                    "started_at": sent_at.isoformat(),
+                    "finished_at": sent_at.isoformat(),
+                })
+            else:
+                raw = wait_for_responses(
+                    session_start,
+                    count=1,
+                    timeout=wait,
+                    max_responses=max_responses,
+                    drain_all=True,
+                    return_raw=True,
+                    silence_after=silence_after,
+                )
+                new_msgs = []
+                for m in raw or []:
+                    key = (m.get("timestamp").isoformat() if m.get("timestamp") else "", m.get("text") or "")
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    new_msgs.append(m)
+                responses = [m.get("text") for m in new_msgs if (m.get("text") or "").strip()]
+                result["responses"].extend(responses)
+                transcript.append({
+                    "turn": i + 1,
+                    "user": msg,
+                    "responses": responses,
+                    "started_at": sent_at.isoformat(),
+                    "finished_at": (new_msgs[-1].get("timestamp").isoformat() if new_msgs else sent_at.isoformat()),
+                })
+            if i < len(msgs) - 1:
+                print(f"  (waiting {sequence_delay}s before next message…)")
+                time.sleep(sequence_delay)
+
+        result["transcript"] = transcript
+        cv = judge_response_count(tc["name"], [r for r in result["responses"] if r], expected)
         result["count_verdict"] = cv
 
     elif test_type == "dedup":
@@ -126,14 +303,41 @@ def collect(tc: dict) -> dict:
         delay = tc.get("dedup_delay", 2.0)
         expected = tc.get("expected_responses", 1)
         result["tasks_sent"] = [msg1, msg2]
-        sent_at = datetime.now(timezone.utc)
+        wait = tc.get("wait", RESPONSE_TIMEOUT)
+        silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
+        max_responses = int(tc.get("max_responses") or max(10, expected + 6))
+        session_start = datetime.now(timezone.utc)
+        transcript_seed = []
         print(f"  → Sending msg 1: {msg1[:70]}")
         send_imessage(msg1)
+        transcript_seed.append({
+            "turn": 1,
+            "user": msg1,
+            "started_at": session_start.isoformat(),
+            "finished_at": session_start.isoformat(),
+        })
         time.sleep(delay)
         print(f"  → Sending msg 2: {msg2[:70]}")
+        sent2_at = datetime.now(timezone.utc)
         send_imessage(msg2)
-        result["responses"] = wait_for_responses(sent_at, count=expected + 1,
-                                                 timeout=tc.get("wait", RESPONSE_TIMEOUT))
+        transcript_seed.append({
+            "turn": 2,
+            "user": msg2,
+            "started_at": sent2_at.isoformat(),
+            "finished_at": sent2_at.isoformat(),
+        })
+
+        raw = wait_for_responses(
+            session_start,
+            count=expected + 1,
+            timeout=wait,
+            max_responses=max_responses,
+            drain_all=True,
+            return_raw=True,
+            silence_after=silence_after,
+        )
+        result["transcript"] = _group_raw_responses_by_turn(transcript_seed, raw)
+        result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
         # Dedup count check
         actual = len([r for r in result["responses"] if r])
         if actual > expected:
