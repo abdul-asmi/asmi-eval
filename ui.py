@@ -119,6 +119,15 @@ def _gh_upsert_text_file(path: str, content: str, message: str):
     _gh_request("PUT", path, body)
 
 
+def _gh_delete_file(path: str, message: str):
+    """Delete a file from the repo via GitHub Contents API (best-effort)."""
+    existing = _gh_request("GET", path)
+    sha = existing.get("sha")
+    if not sha:
+        raise RuntimeError(f"Missing sha for {path}")
+    _gh_request("DELETE", path, {"message": message, "sha": sha})
+
+
 def _write_text(path: str, content: str):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp_path = f"{path}.tmp"
@@ -3826,6 +3835,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "Invalid stem"})
                 return
             removed = []
+            removed_remote = []
+            # 1) Delete local artifacts
             for name in (f"results_{stem}.json", f"report_{stem}.html"):
                 fp = os.path.join(REPORTS_DIR, name)
                 try:
@@ -3834,13 +3845,61 @@ class Handler(BaseHTTPRequestHandler):
                         removed.append(name)
                 except Exception:
                     pass
+            # 2) Delete repo-backed artifacts so they don't reappear on redeploy
+            if USE_GITHUB:
+                for rel in (f"reports/results_{stem}.json", f"reports/report_{stem}.html"):
+                    try:
+                        _gh_delete_file(rel, f"Delete eval artifacts {stem}")
+                        removed_remote.append(rel)
+                    except Exception:
+                        pass
+
+            # 3) Refresh latest pointer + cumulative analysis to reflect deletion
+            try:
+                os.makedirs(REPORTS_DIR, exist_ok=True)
+                files = sorted(
+                    glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+                    key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
+                    reverse=True,
+                )
+                latest_name = os.path.basename(files[0]) if files else ""
+                pointer_path = os.path.join(REPORTS_DIR, ".latest_results_path")
+                _write_text(pointer_path, latest_name)
+
+                analysis = _build_analysis_payload()
+                analysis_path = {
+                    "updated_at": _et_now_str("%Y-%m-%d %H:%M:%S ET"),
+                    "source_run_count": len(analysis.get("runs", [])),
+                    "latest_stem": analysis.get("runs", [{}])[0].get("stem", "") if analysis.get("runs") else "",
+                    "text": analysis.get("overall_analysis", ""),
+                }
+                _write_json(OVERALL_ANALYSIS_FILE, analysis_path)
+
+                if USE_GITHUB:
+                    try:
+                        with open(OVERALL_ANALYSIS_FILE, encoding="utf-8") as f:
+                            analysis_content = f.read()
+                        _gh_upsert_text_file(
+                            "reports/.latest_results_path",
+                            latest_name,
+                            f"Sync latest report pointer after delete {stem}",
+                        )
+                        _gh_upsert_text_file(
+                            "reports/overall_analysis.json",
+                            analysis_content,
+                            f"Sync cumulative analysis after delete {stem}",
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             # If the deleted run was the currently cached in-memory run, clear it
             # so tabs don't show stale data.
             if _run_result_stem == stem:
                 _run_results = []
                 _run_report_html = ""
                 _run_result_stem = ""
-            self._json({"ok": True, "removed": removed})
+            self._json({"ok": True, "removed": removed, "removed_remote": removed_remote})
         elif path == "/api/skip-test":
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
