@@ -64,12 +64,11 @@ TEST_CASES = [
         'pass_criteria': 'Asmi recognizes this task naturally needs a call. Suggests call FOR THIS TASK only (not general first call). User can accept or decline.',
     },
     {
-        'name': 'Simple task → immediate call',
+        'name': 'Simple task → immediate call → say yes',
         'category': 'adhoc call',
         'type': 'sequence',
         'pass_criteria': 'Asmi asks for a call',
-        'messages': ['cmd_reset_history
-Need to plan a birthday party'],
+        'messages': ['cmd_reset_history', 'Need to plan a birthday party', 'Sure'],
         'id': 'adh_01',
     },
     {
