@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-05-17 20:11:40 ET",
-  "source_run_count": 26,
-  "latest_stem": "20260517_201140",
-  "text": "OVERALL_SCORE: 9/26 passed (34.6%)\nSUMMARY: Across all recorded runs, the system has 17 failures and 0 unclear outcomes. The current cumulative pass rate is 34.6%.\nHITS:\n- Total passed outcomes so far: 9.\n- Stable categories with fewer failures are visible where fail counts remain low outside the top failing categories.\nMISSES:\n- Most repeated failing tests: cap_01 (4), onboard_01 (3), cap_02 (2).\n- Most affected categories: capability (6), onboarding (5), adhoc_call_v1 (1).\nBEHAVIOR_PATTERN:\nRecent failures cluster around repeated scenarios rather than random spread, which suggests a few persistent behavior gaps.\nGAPS:\n- Repeated failure reasons observed:\n- No response was captured in the provided pool for this task. (2)\n- No responses were captured in the response pool for the provided task. (1)\n- No responses were captured in the full response pool for the provided task. (1)\nRECOMMENDATION:\nPrioritize fixes for the top failing tests/categories, then re-run only those categories to validate lift before full-suite regression."
+  "updated_at": "2026-05-17 20:26:36 ET",
+  "source_run_count": 9,
+  "latest_stem": "20260517_202636",
+  "text": "OVERALL_SCORE: 8/9 passed (88.9%)\nSUMMARY: Across all recorded runs, the system has 1 failures and 0 unclear outcomes. The current cumulative pass rate is 88.9%.\nHITS:\n- Total passed outcomes so far: 8.\n- Stable categories with fewer failures are visible where fail counts remain low outside the top failing categories.\nMISSES:\n- Most repeated failing tests: onboard_01 (1).\n- Most affected categories: onboarding (1).\nBEHAVIOR_PATTERN:\nRecent failures cluster around repeated scenarios rather than random spread, which suggests a few persistent behavior gaps.\nGAPS:\n- Repeated failure reasons observed:\n- No responses were captured in the response pool for the provided task. (1)\nRECOMMENDATION:\nPrioritize fixes for the top failing tests/categories, then re-run only those categories to validate lift before full-suite regression."
 }
