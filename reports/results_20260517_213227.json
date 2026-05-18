@@ -1,0 +1,35 @@
+[
+  {
+    "id": "3pc_01",
+    "name": "Number in message \u2192 call placed",
+    "category": "3p_calls_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history",
+      "Call nearest chinese restaurant and book a table for 2 for 6PM"
+    ],
+    "responses": [
+      "\u2713 Chat history and planning canvas cleared.",
+      "Searching for the best local Chinese cuisine and preparing to coordinate with you.",
+      "Top-Rated Chinese Dining in Pittsburgh",
+      "TOP PICK\n\u2022 Nan Xiang Soup Dumplings \u2022 4.8 Rating\nSidney St \u00b7 1,234 reviews \u00b7 Dine-in & Takeout\nWith over 1,200 reviews and a 4.8 rating, it offers the most reliable, crowd-pleasing quality.\nLink: https://do.asmiai.com/qx3zA",
+      "Looks like we got cut off mid-hello. Should I try calling back later, or would you prefer I just send you a list of those Pittsburgh dim sum spots to review?",
+      "ALSO AVAILABLE",
+      "\u2022 HK Dim Sum (4.8)\nCentre Ave \u00b7 4.8 rating \u00b7 348 reviews\nLink: https://do.asmiai.com/6SGAx",
+      "\u2022 Everyday Noodles (4.6)\nForbes Ave \u00b7 4.6 rating \u00b7 Known for hand-pulled noodles\nLink: https://do.asmiai.com/d59cM",
+      "Does Nan Xiang sound like the right choice for our reservation?",
+      "I've queued up a call to your number (+14125922094) so we can run through those top-rated spots\u2014HK Dim Sum, Nan Xiang, and Pepper Space\u2014and get your reservation locked in."
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi successfully researched local Chinese restaurants and proactively initiated a call to the user to finalize the booking without asking the user to provide a phone number.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 10/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-18T01:31:15.561585+00:00",
+    "finished_at": "2026-05-18T01:32:15.962839+00:00",
+    "matched_responses": "\"Searching for the best local Chinese cuisine and preparing to coordinate with you.\", \"Does Nan Xiang sound like the right choice for our reservation?\", \"I've queued up a call to your number (+14125922094) so we can run through those top-rated spots\u2014HK Dim Sum, Nan Xiang, and Pepper Space\u2014and get your reservation locked in.\""
+  }
+]
