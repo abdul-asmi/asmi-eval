@@ -67,7 +67,7 @@ TEST_CASES = [
         'name': 'Simple task → immediate call → say yes',
         'category': 'adhoc call',
         'type': 'sequence',
-        'pass_criteria': 'Asmi asks for a call',
+        'pass_criteria': 'Only pass if Asmi asks for a call',
         'messages': ['cmd_reset_history', 'Need to plan a birthday party', 'Sure'],
         'id': 'adh_01',
     },
