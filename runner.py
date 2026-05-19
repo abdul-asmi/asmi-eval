@@ -52,6 +52,33 @@ def _split_lines(val) -> list[str]:
         return [line.strip() for part in s.split("|") for line in part.splitlines() if line.strip()]
     return [str(val).strip()] if str(val).strip() else []
 
+def _messages_to_send(tc: dict) -> list[str]:
+    """
+    Best-effort reconstruction of the exact user messages a test will send.
+    Used for runner-side setup decisions (e.g., avoid duplicate cmd_onboard).
+    """
+    tc = tc or {}
+    t = str(tc.get("type") or "").strip()
+
+    if t == "single":
+        return _split_lines(tc.get("start_message") or tc.get("message"))
+    if t in {"burst", "sequence"}:
+        return _split_lines(tc.get("messages"))
+    if t == "burst_with_setup":
+        setup = _split_lines(tc.get("setup_message"))
+        msgs = _split_lines(tc.get("messages"))
+        return setup + msgs
+    if t == "dedup":
+        msg1 = _split_lines(tc.get("message"))
+        msg2 = _split_lines(tc.get("dedup_message") or tc.get("message"))
+        return msg1 + msg2
+    if t == "interactive":
+        start = _split_lines(tc.get("start_message") or tc.get("message"))
+        followups = _split_lines(tc.get("followups") or tc.get("messages") or tc.get("replies"))
+        return start + followups
+
+    return _split_lines(tc.get("start_message") or tc.get("message") or tc.get("messages"))
+
 def _group_raw_responses_by_turn(sent_turns: list[dict], raw_msgs: list[dict]) -> list[dict]:
     """
     Assign each raw assistant message to the most recent user turn whose
@@ -118,7 +145,9 @@ def collect(tc: dict) -> dict:
     }
 
     if test_type == "single":
-        msg = tc["message"]
+        msg = (tc.get("start_message") or tc.get("message") or "").strip()
+        if not msg:
+            raise KeyError(f"Test {test_id} (type=single) missing message/start_message")
         expected = int(tc.get("expected_responses") or 1)
         wait = tc.get("wait", RESPONSE_TIMEOUT)
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
@@ -548,10 +577,16 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
 
         # Before the first onboarding test in a full run, reset Asmi to fresh state
         if running_all and cat == "onboarding" and last_category != "onboarding":
-            print(f"\n  ━━━ Sending cmd_onboard to reset Asmi state ━━━")
-            send_imessage(CMD_ONBOARD)
-            print(f"  Waiting 15s for Asmi to reset…")
-            time.sleep(15)
+            # Avoid double-sending cmd_onboard if the first onboarding test
+            # already starts with it.
+            first_msg = (_messages_to_send(tc)[:1] or [""])[0]
+            if first_msg == CMD_ONBOARD:
+                print(f"\n  ━━━ Skipping extra cmd_onboard (test already starts with it) ━━━")
+            else:
+                print(f"\n  ━━━ Sending cmd_onboard to reset Asmi state ━━━")
+                send_imessage(CMD_ONBOARD)
+                print(f"  Waiting 15s for Asmi to reset…")
+                time.sleep(15)
 
         # Print a separator when switching categories
         if cat != last_category:

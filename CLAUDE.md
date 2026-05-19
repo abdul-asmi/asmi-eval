@@ -17,6 +17,9 @@ pip install google-generativeai
 ## Running tests
 
 ```bash
+# Get latest changes first
+git pull
+
 # List all tests
 python run_eval.py --list
 
@@ -33,6 +36,10 @@ python run_eval.py --id sticky_03
 # Open the generated HTML report
 open report_YYYYMMDD_HHMM.html
 ```
+
+## Shipping to Railway
+
+Railway deploys from GitHub. Before starting work, `git pull`. After changes, `git push` so Railway can deploy the latest commit.
 
 ## Re-judging existing results (no iMessages sent)
 
