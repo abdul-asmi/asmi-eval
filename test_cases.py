@@ -218,5 +218,6 @@ Now give me a PDF of everything we've worked on with their status."],
         'precondition': 'Fresh account',
         'manual_check': 'Check if you got a call',
         'id': 'onb_01',
+        'note': 'Check if you got a call.',
     },
 ]
