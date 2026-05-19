@@ -1,0 +1,30 @@
+[
+  {
+    "id": "adh_01",
+    "name": "Simple task \u2192 immediate call",
+    "category": "adhoc_call_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history",
+      "Need to plan a birthday party"
+    ],
+    "responses": [
+      "\u2713 Chat history and planning canvas cleared.",
+      "A PM planning a party? I can already see the spreadsheet and the Gantt charts.",
+      "Let\u2019s do it. I'll call for 2 mins to get the vibe and take things off your plate. Free?",
+      "Aure? Typo or the coolest party theme I haven't heard of?",
+      "Regardless, let\u2019s jump on a quick 2 min call now to get this moving. You free?"
+    ],
+    "verdict": "PASS",
+    "reason": "Asmi acknowledged the task, adopted a helpful persona, and proposed a clear next step by offering to jump on a call to plan the party.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 5/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-19T02:07:36.336481+00:00",
+    "finished_at": "2026-05-19T02:09:36.895228+00:00",
+    "matched_responses": "\"Let\u2019s do it. I'll call for 2 mins to get the vibe and take things off your plate. Free?\" and \"Regardless, let\u2019s jump on a quick 2 min call now to get this moving. You free?\""
+  }
+]
