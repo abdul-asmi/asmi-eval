@@ -1,0 +1,35 @@
+[
+  {
+    "id": "pdf_01",
+    "name": "PDF from chat history",
+    "category": "pdf_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history",
+      "Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please."
+    ],
+    "responses": [
+      "\u2713 Chat history and planning canvas cleared.",
+      "Big trip. I can definitely hunt down those flights and the perfect gym-equipped hotel for you.",
+      "But I'll be honest\u2014I'm a lot faster at handling the heavy lifting over a quick chat.",
+      "Glad we\u2019re on the same page, Abdul.",
+      "\u2705 Everything has been reset!\nCleared: onboarding status, integrations, chat history, planning canvas, checklist, first call flag, and language preferences.\nPre-onboarding skipped; chat is unlocked. You can start fresh whenever you're ready.",
+      "Being a PM, I'm sure your backlog is already deep enough without travel planning.",
+      "\u2705 Everything has been reset!\nCleared: onboarding status, integrations, chat history, planning canvas, checklist, first call flag, and language preferences.\nPre-onboarding skipped; chat is unlocked. You can start fresh whenever you're ready.",
+      "\u2705 Everything has been reset!\nCleared: onboarding status, integrations, chat history, planning canvas, checklist, first call flag, and language preferences.\nPre-onboarding skipped; chat is unlocked. You can start fresh whenever you're ready.",
+      "\u2713 Chat history and planning canvas cleared.",
+      "Not sure I caught that."
+    ],
+    "verdict": "FAIL",
+    "reason": "While Asmi acknowledged the request, it failed to provide any actual research, options, or next steps to progress the travel planning as requested.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 10/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-19T02:10:03.442377+00:00",
+    "finished_at": "2026-05-19T02:11:42.937258+00:00",
+    "matched_responses": "\"Big trip. I can definitely hunt down those flights and the perfect gym-equipped hotel for you.\""
+  }
+]
