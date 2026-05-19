@@ -2263,9 +2263,14 @@ async function _triggerRun(payload) {
 	      toast(data.error || 'Run request failed');
 	      return;
 	    }
-	    toast(`Queued ${label} on ${targetName}…`);
+	    if (data.mac_online === false) {
+	      toast('Queued, but Mac daemon looks offline — start `python daemon.py` on your Mac and keep it running.');
+	      _openOutput('Queued, waiting for Mac daemon…');
+	    } else {
+	      toast(`Queued ${label} on ${targetName}…`);
+	    }
 	    showRunQueuePanel();
-	    _openOutput(`Queued ${label} on ${targetName}…`);
+	    if (data.mac_online !== false) _openOutput(`Queued ${label} on ${targetName}…`);
 	    renderRunQueuePanel({status:'running', queue:data.queue || []});
 	  } catch(e) {
 	    toast('Failed to queue run: ' + e.message);
