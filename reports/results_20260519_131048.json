@@ -1,0 +1,24 @@
+[
+  {
+    "id": "onboard_01",
+    "name": "First message gets exactly one response",
+    "category": "onboarding",
+    "type": "single",
+    "tasks_sent": [
+      "Hi, what can you do?"
+    ],
+    "responses": [
+      "I'm Asmi. Think of me as your personal scout and fixer.",
+      "I can make calls for you, book things, handle research, and keep your life from feeling like a giant to-do list.",
+      "Anything specific on your mind right now?"
+    ],
+    "verdict": "FAIL",
+    "reason": "Asmi sent three separate messages instead of one, violating the constraint to provide exactly one response.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-19T16:21:58.716064+00:00",
+    "finished_at": "2026-05-19T16:23:26.058887+00:00",
+    "matched_responses": "\"I'm Asmi. Think of me as your personal scout and fixer. I can make calls for you, book things, handle research, and keep your life from feeling like a giant to-do list. Anything specific on your mind right now?\""
+  }
+]
