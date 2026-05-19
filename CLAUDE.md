@@ -49,6 +49,14 @@ The web UI only queues a run; execution happens on the Mac runner that polls the
 - The server returns a `mac_online` flag when queueing; if it’s `false`, the UI will warn that it’s waiting for the runner heartbeat.
 - A fresh run result only appears after the runner posts back to `/api/output` with `status=done` and `results`.
 
+## Daemon restart (nohup)
+
+When asked for the “daemon restart” command, use:
+
+```bash
+cd ~/Desktop/asmi-eval && pkill -f daemon.py; nohup python daemon.py > daemon.log 2>&1 &
+```
+
 ## Re-judging existing results (no iMessages sent)
 
 ```bash
