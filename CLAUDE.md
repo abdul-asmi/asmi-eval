@@ -41,6 +41,14 @@ open report_YYYYMMDD_HHMM.html
 
 Railway deploys from GitHub. Before starting work, `git pull`. After changes, `git push` so Railway can deploy the latest commit.
 
+## Troubleshooting: run shows old report / doesn’t run
+
+The web UI only queues a run; execution happens on the Mac runner that polls the UI.
+
+- If you click **Run this test** and the inline card shows an older result, check the **Run Monitor**: if the item stays **Queued**, the runner hasn’t claimed the job yet.
+- The server returns a `mac_online` flag when queueing; if it’s `false`, the UI will warn that it’s waiting for the runner heartbeat.
+- A fresh run result only appears after the runner posts back to `/api/output` with `status=done` and `results`.
+
 ## Re-judging existing results (no iMessages sent)
 
 ```bash
