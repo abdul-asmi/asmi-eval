@@ -1,0 +1,23 @@
+[
+  {
+    "id": "preonb_01",
+    "name": "Pre-onboarding: Ask for first call, user says YES",
+    "category": "onboarding",
+    "type": "sequence",
+    "tasks_sent": [
+      "Hi, I want help with my tasks",
+      "Yes, I would love a first call"
+    ],
+    "responses": [],
+    "verdict": "FAIL",
+    "reason": "Only got 0/3 responses \u2014 3 dropped or timed out.",
+    "count_verdict": {
+      "verdict": "FAIL",
+      "reason": "Only got 0/3 responses \u2014 3 dropped or timed out."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-19T21:44:57.157593+00:00",
+    "finished_at": "2026-05-19T21:45:08.390797+00:00"
+  }
+]
