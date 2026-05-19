@@ -1,0 +1,20 @@
+[
+  {
+    "id": "onboard_01",
+    "name": "First message gets exactly one response",
+    "category": "onboarding",
+    "type": "single",
+    "tasks_sent": [
+      "Hi, what can you do?"
+    ],
+    "responses": [],
+    "verdict": "FAIL",
+    "reason": "No responses were captured in the response pool for this task.",
+    "count_verdict": null,
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-19T21:56:27.497594+00:00",
+    "finished_at": "2026-05-19T21:56:39.620248+00:00",
+    "matched_responses": "none found"
+  }
+]
