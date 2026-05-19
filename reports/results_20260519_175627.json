@@ -1,0 +1,27 @@
+[
+  {
+    "id": "pdf_01",
+    "name": "PDF from chat history",
+    "category": "pdf_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history",
+      "Can you help me book a flight to Honalulu from Hyderabad departing June 1st to June 10th. Stopovers are okay, budget is $50000. This is round-trip. Economy. No other constraints. I also want to book hotels during the same time. 3+ star rating with a gym. Up to $300/night. No other constraints. Let's do this entirely via chat. No call please."
+    ],
+    "responses": [
+      "\u2713 Chat history and planning canvas cleared.",
+      "Searching for your Honolulu trip details now."
+    ],
+    "verdict": "PASS",
+    "reason": "The AI acknowledged the complex travel request and initiated the search process as requested.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 2/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-19T21:47:41.089288+00:00",
+    "finished_at": "2026-05-19T21:49:17.575789+00:00",
+    "matched_responses": "Searching for your Honolulu trip details now."
+  }
+]
