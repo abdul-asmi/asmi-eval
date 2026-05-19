@@ -208,4 +208,15 @@ Also add oat milk and greek yogurt to my grocery list.
 Now give me a PDF of everything we've worked on with their status."],
         'id': 'pdf_04',
     },
+    {
+        'name': 'Onboarding completes correctly end-to-end',
+        'category': 'onboarding',
+        'type': 'sequence',
+        'pass_criteria': 'Asmi asks my name, what I do for work, and for an onboarding call, which needs legal consent.',
+        'messages': ['cmd_onboard', 'Hi', 'My name is Gaffoor', 'I work as a barber', 'Sure', 'Sure', 'I live in Pittsburgh, PA', 'Bye'],
+        'wait': 60,
+        'precondition': 'Fresh account',
+        'manual_check': 'Check if you got a call',
+        'id': 'onb_01',
+    },
 ]
