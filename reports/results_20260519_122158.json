@@ -1,0 +1,28 @@
+[
+  {
+    "id": "3pc_01",
+    "name": "Number in message \u2192 call placed",
+    "category": "3p_calls_v1",
+    "type": "sequence",
+    "tasks_sent": [
+      "cmd_reset_history",
+      "Call nearest chinese restaurant and book a table for 2 for 6PM"
+    ],
+    "responses": [
+      "\u2713 Chat history and planning canvas cleared.",
+      "I'm on it.",
+      "Just need to know where you are so I can find the best spot nearby."
+    ],
+    "verdict": "FAIL",
+    "reason": "Asmi failed to search for the restaurant or confirm it found a number, instead immediately asking the user for their location.",
+    "count_verdict": {
+      "verdict": "PASS",
+      "reason": "Got 3/2 responses."
+    },
+    "manual_check": null,
+    "note": null,
+    "started_at": "2026-05-19T04:00:16.698679+00:00",
+    "finished_at": "2026-05-19T04:01:59.300388+00:00",
+    "matched_responses": "\"I'm on it.\", \"Just need to know where you are so I can find the best spot nearby.\""
+  }
+]
