@@ -1,18 +1,11 @@
-# ─── Test Runner ──────────────────────────────────────────────────────────────
-# Phase 1: send all iMessages and collect responses (no Gemini calls)
-# Phase 2: batch judge all results at the end (4s delay between calls)
-#           — respects Gemini free tier ~15 RPM
-
 import time
 from datetime import datetime, timezone
 import os
 import json
 
-from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER
+from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY
 from imessage import send_imessage, wait_for_responses
 from judge import judge_with_context, judge_response_count
-
-JUDGE_DELAY = 4  # seconds between Gemini calls (free tier safe)
 
 
 def _stop_requested() -> bool:

@@ -36,6 +36,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+
 import google.genai as genai
 from report import generate as generate_report
 from test_case_store import _extract_test_cases
@@ -77,7 +79,6 @@ _run_queue       = []     # ordered list of {id, name, category, status}
 _skip_requested  = set()  # test IDs to skip before they start
 
 USE_SUPABASE = bool((SUPABASE_URL or "").strip())
-SINGLE_USER_OWNER_ID = os.environ.get("ASMI_OWNER_USER_ID", "").strip()
 
 PORT      = int(os.environ.get("PORT", 8765))
 DAEMON_TOKEN = os.environ.get("DAEMON_TOKEN", "").strip()
@@ -231,143 +232,18 @@ def load_test_cases_supabase(token: str) -> list[dict]:
     return out
 
 
-
-
-def _row_to_test_case(row: dict) -> dict:
-    definition = row.get("definition") if isinstance(row, dict) else None
-    tc = dict(definition) if isinstance(definition, dict) else {}
-    tc["id"] = row.get("external_id") or tc.get("id")
-    for k in ("category", "name", "type"):
-        if row.get(k) is not None:
-            tc[k] = row.get(k)
-    if row.get("enabled") is not None:
-        tc["enabled"] = bool(row.get("enabled"))
-    return tc
-
-
-def _rows_to_test_cases(rows: list[dict]) -> list[dict]:
-    return [_row_to_test_case(r) for r in (rows or []) if isinstance(r, dict)]
-
-
-def _single_user_owner_id(preferred: str = "") -> str:
-    preferred = (preferred or SINGLE_USER_OWNER_ID or "").strip()
-    if preferred:
-        return preferred
-    status, rows = sb_service_get(
-        "/rest/v1/test_cases",
-        params={"select": "owner_user_id", "order": "updated_at.desc", "limit": 1},
-    )
-    if status < 300 and isinstance(rows, list) and rows and rows[0].get("owner_user_id"):
-        return str(rows[0]["owner_user_id"])
-    status, rows = sb_service_get(
-        "/rest/v1/relay_devices",
-        params={"select": "owner_user_id", "order": "last_seen_at.desc", "limit": 1},
-    )
-    if status < 300 and isinstance(rows, list) and rows and rows[0].get("owner_user_id"):
-        return str(rows[0]["owner_user_id"])
-    raise SupabaseError("No single-user owner found. Set ASMI_OWNER_USER_ID in Render.")
-
-
-def load_test_cases_supabase_service(owner_user_id: str = "") -> list[dict]:
-    owner_user_id = _single_user_owner_id(owner_user_id)
-    status, rows = sb_service_get(
-        "/rest/v1/test_cases",
-        params={
-            "select": "external_id,definition,enabled,category,name,type,updated_at",
-            "owner_user_id": f"eq.{owner_user_id}",
-            "order": "external_id.asc",
-        },
-    )
-    if status >= 300:
-        raise SupabaseError(f"Failed to load service test cases: {rows}")
-    return _rows_to_test_cases(rows if isinstance(rows, list) else [])
-
-
-def _test_case_upsert_payload(user_id: str, cases: list[dict]) -> list[dict]:
-    payload = []
-    for tc in cases or []:
-        if not isinstance(tc, dict):
-            continue
-        external_id = str(tc.get("id") or "").strip()
-        if not external_id:
-            continue
-        payload.append({
-            "owner_user_id": user_id,
-            "external_id": external_id,
-            "category": tc.get("category"),
-            "name": tc.get("name"),
-            "type": tc.get("type"),
-            "enabled": bool(tc.get("enabled", True)),
-            "definition": tc,
-        })
-    return payload
-
-
-def save_test_cases_supabase_service(user_id: str, cases: list[dict]) -> None:
-    user_id = _single_user_owner_id(user_id)
-    payload = _test_case_upsert_payload(user_id, cases)
-    if not payload:
-        return
-    status, rows = sb_service_post_ex(
-        "/rest/v1/test_cases",
-        params={"on_conflict": "owner_user_id,external_id"},
-        json_body=payload,
-        headers={"Prefer": "resolution=merge-duplicates,return=representation"},
-    )
-    if status >= 300:
-        raise SupabaseError(f"Failed to save service test cases: {rows}")
-    version_rows = []
-    patch_rows = []
-    for row in rows or []:
-        tc_id = row.get("id")
-        definition = row.get("definition") or {}
-        current_version = int(row.get("latest_version") or 0)
-        new_version = max(1, current_version + 1)
-        if not tc_id:
-            continue
-        version_rows.append({
-            "test_case_id": tc_id,
-            "version": new_version,
-            "definition": definition,
-            "editor_user_id": user_id,
-            "change_note": "Saved via UI single-user mode",
-        })
-        patch_rows.append({"id": tc_id, "latest_version": new_version})
-    if version_rows:
-        status, data = sb_service_post_ex(
-            "/rest/v1/test_case_versions",
-            params={"on_conflict": "test_case_id,version"},
-            json_body=version_rows,
-            headers={"Prefer": "resolution=merge-duplicates,return=minimal"},
-        )
-        if status >= 300:
-            raise SupabaseError(f"Failed to write service test case versions: {data}")
-    for pr in patch_rows:
-        sb_service_patch(
-            "/rest/v1/test_cases",
-            params={"id": f"eq.{pr['id']}"},
-            json_body={"latest_version": pr["latest_version"]},
-        )
-
-
-def load_or_seed_test_cases_supabase_any(token: str | None = None, user_id: str = "") -> list[dict]:
-    if token:
-        cases = load_test_cases_supabase(token)
-        if cases:
-            return cases
-    try:
-        owner_id = _single_user_owner_id()
-    except SupabaseError:
-        owner_id = _single_user_owner_id(user_id)
-    cases = load_test_cases_supabase_service(owner_id)
+def load_or_seed_test_cases_supabase(token: str, user_id: str) -> list[dict]:
+    """
+    Load the current user's Supabase test cases.
+    If this is a fresh account with no rows yet, seed it from local defaults.
+    """
+    cases = load_test_cases_supabase(token)
     if cases:
         return cases
+
     defaults = load_test_cases()
     if defaults:
-        if token:
-            save_test_cases_supabase(token, owner_id, defaults)
-        else:
-            save_test_cases_supabase_service(owner_id, defaults)
+        save_test_cases_supabase(token, user_id, defaults)
     return defaults
 
 
@@ -1672,7 +1548,6 @@ if (!SB_URL || !SB_KEY || !window.supabase) {
 const sb = (SB_URL && SB_KEY && window.supabase)
   ? window.supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:true, autoRefreshToken:true}})
   : null;
-const AUTH_REQUIRED = false;
 
 let _accessToken = '';
 let _userId = '';
@@ -1732,8 +1607,9 @@ async function _loadSession() {
 async function _ensureSignedIn() {
   const session = await _loadSession();
   const overlay = document.getElementById('authOverlay');
-  if (overlay) overlay.style.display = (session || !AUTH_REQUIRED) ? 'none' : 'flex';
-  return !!session || !AUTH_REQUIRED;
+  if (session && overlay) overlay.style.display = 'none';
+  if (!session && overlay) overlay.style.display = 'flex';
+  return !!session;
 }
 
 async function _initAuthUI() {
@@ -3948,26 +3824,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def _require_user(self) -> tuple[str, str]:
         token = bearer_from_request_headers(self.headers)
-        if token:
-            try:
-                claims = verify_supabase_jwt(token)
-                user_id = str(claims.get("sub") or "").strip()
-                if user_id:
-                    return token, user_id
-            except Exception:
-                # Temporary single-user mode: ignore stale/missing browser auth and
-                # fall through to the service-role owner used by the hosted UI.
-                pass
-        if USE_SUPABASE:
-            service_token = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-            if service_token:
-                return service_token, _single_user_owner_id()
-        raise SupabaseError("Missing Authorization Bearer token")
-
-    def _optional_user(self) -> tuple[str | None, str]:
-        # Temporary single-user mode: test cases and run queue use the server-side
-        # service role owner instead of depending on browser auth/RLS.
-        return None, _single_user_owner_id()
+        if not token:
+            raise SupabaseError("Missing Authorization Bearer token")
+        claims = verify_supabase_jwt(token)
+        user_id = str(claims.get("sub") or "").strip()
+        if not user_id:
+            raise SupabaseError("Missing user id in token")
+        return token, user_id
 
     def _require_daemon(self) -> str:
         if DAEMON_TOKEN:
@@ -3975,8 +3838,6 @@ class Handler(BaseHTTPRequestHandler):
             if not got or got != DAEMON_TOKEN:
                 raise SupabaseError("Invalid daemon token")
         owner = (self.headers.get("X-Owner-User-Id") or "").strip()
-        if not owner and USE_SUPABASE:
-            owner = _single_user_owner_id()
         if not owner:
             raise SupabaseError("Missing X-Owner-User-Id")
         # Best-effort: persist a heartbeat so UI can detect online state across restarts.
@@ -4005,8 +3866,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/tests":
                 try:
                     if USE_SUPABASE:
-                        token, uid = self._optional_user()
-                        cases = load_or_seed_test_cases_supabase_any(token, uid)
+                        token, uid = self._require_user()
+                        cases = load_or_seed_test_cases_supabase(token, uid)
                     else:
                         cases = load_test_cases()
                     self._json(cases)
@@ -4020,8 +3881,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._csv(content, filename="test_cases_template_full.csv")
             elif path == "/api/tests/export.csv":
                 if USE_SUPABASE:
-                    token, uid = self._optional_user()
-                    cases = load_or_seed_test_cases_supabase_any(token, uid)
+                    token, uid = self._require_user()
+                    cases = load_or_seed_test_cases_supabase(token, uid)
                 else:
                     cases = load_test_cases()
                 content = _tests_to_csv_bytes(cases)
@@ -4439,13 +4300,10 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 cases = json.loads(body)
                 if USE_SUPABASE:
-                    token, uid = self._optional_user()
+                    token, uid = self._require_user()
                     if not isinstance(cases, list):
                         raise ValueError("Expected a JSON array of test cases")
-                    if token:
-                        save_test_cases_supabase(token, uid, cases)
-                    else:
-                        save_test_cases_supabase_service(uid, cases)
+                    save_test_cases_supabase(token, uid, cases)
                 else:
                     save_test_cases(cases)
                 self._json({"ok": True})
@@ -4462,8 +4320,8 @@ class Handler(BaseHTTPRequestHandler):
                     mode = "upsert"
                 incoming, warnings = _import_tests_from_csv(csv_text)
                 if USE_SUPABASE:
-                    token, uid = self._optional_user()
-                    existing = load_or_seed_test_cases_supabase_any(token, uid)
+                    token, uid = self._require_user()
+                    existing = load_test_cases_supabase(token)
                 else:
                     existing = load_test_cases()
                 existing_by_id = {t.get("id"): t for t in existing if t.get("id")}
@@ -4522,10 +4380,7 @@ class Handler(BaseHTTPRequestHandler):
                         by_id[tc["id"]] = tc
                     merged = list(by_id.values())
                 if USE_SUPABASE:
-                    if token:
-                        save_test_cases_supabase(token, uid, merged)
-                    else:
-                        save_test_cases_supabase_service(uid, merged)
+                    save_test_cases_supabase(token, uid, merged)
                 else:
                     save_test_cases(merged)
                 self._json({
@@ -4576,7 +4431,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 test_cases_snapshot = []
             if USE_SUPABASE:
-                token, uid = self._optional_user()
+                token, uid = self._require_user()
                 # Determine if the Mac daemon is online using persisted heartbeat.
                 mac_online = False
                 try:
@@ -4608,11 +4463,9 @@ class Handler(BaseHTTPRequestHandler):
                     "ids": ids,
                     "interactive_auto_continue": bool(data.get("interactive_auto_continue", True)),
                 }
-                post_run = sb_user_post_ex if token else sb_service_post_ex
-                post_kwargs = {"token": token} if token else {}
-                status, inserted = post_run(
+                status, inserted = sb_user_post_ex(
                     "/rest/v1/runs",
-                    **post_kwargs,
+                    token=token,
                     json_body=[{
                         "owner_user_id": uid,
                         "status": "queued",

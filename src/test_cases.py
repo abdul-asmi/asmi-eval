@@ -1,20 +1,4 @@
-# ─── Asmi Regression Test Cases ──────────────────────────────────────────────
-# Covers v0.10.37.2 changelog:
-#   sticky_message | call_dedup | call_summary | language_pref
-#   location_memory | onboarding | capability | threep_nudge
-
 TEST_CASES = [
-    {
-        'id': 'onboard_01v1',
-        'name': 'Onboarding completes correctly end-to-end',
-        'category': 'onboarding',
-        'type': 'sequence',
-        'messages': ['cmd_onboard', 'Hi', 'My name is Gaffoor', 'I work as a barber', 'Sure', 'Sure', 'I live in Pittsburgh, PA', 'Bye'],
-        'pass_criteria': 'Asmi asks my name, what I do for work, and for an onboarding call, which needs legal consent.',
-        'wait': 60,
-        'precondition': 'Fresh account',
-        'sequence_delay': 8,
-    },
     {
         'id': 'preonb_01v1',
         'name': 'Pre-onboarding: Ask for first call, user says YES',

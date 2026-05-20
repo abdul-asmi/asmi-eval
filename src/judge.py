@@ -28,37 +28,6 @@ Known control commands (examples):
 - cmd_el_voice_call: configure ElevenLabs call voice style from a description
 """
 
-# ── Standard judge (direct responses) ─────────────────────────────────────────
-
-_PROMPT = """
-{system}
-
-IMPORTANT: Tasks starting with `cmd_` are control commands (setup/reset) and should not be judged as the user request unless pass_criteria says so.
-
-══ TEST ══════════════════════════════
-Name: {test_name}
-Category: {category}
-
-Task(s) sent to Asmi:
-{tasks}
-
-Asmi's response(s):
-{responses}
-
-Pass criteria:
-{pass_criteria}
-══════════════════════════════════════
-
-Does Asmi's response meet the pass criteria above?
-
-Reply in EXACTLY this format:
-VERDICT: PASS
-REASON: One sentence.
-
-or VERDICT: FAIL / VERDICT: UNCLEAR with REASON.
-"""
-
-# ── Context-aware judge (searches full response pool) ─────────────────────────
 
 _PROMPT_WITH_CONTEXT = """
 {system}
@@ -102,23 +71,6 @@ REASON: One sentence.
 
 (Replace PASS with FAIL or UNCLEAR as appropriate)
 """
-
-
-def judge(test_name, category, tasks, responses, pass_criteria):
-    """Standard judge — evaluates the directly captured responses."""
-    if not responses or all(r is None for r in responses):
-        return {"verdict": "FAIL", "reason": "No responses received from Asmi."}
-
-    valid  = [r for r in responses if r]
-    prompt = _PROMPT.format(
-        system        = SYSTEM_CONTEXT,
-        test_name     = test_name,
-        category      = category,
-        tasks         = _format_tasks(tasks),
-        responses     = "\n".join(f"  {i+1}. {r}" for i, r in enumerate(valid)),
-        pass_criteria = pass_criteria,
-    )
-    return _call_gemini(prompt)
 
 
 def judge_with_context(test_name, category, tasks, captured, all_responses, pass_criteria):

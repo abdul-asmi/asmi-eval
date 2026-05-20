@@ -12,6 +12,7 @@ POLL_INTERVAL      = 3     # seconds between chat.db polls
 BURST_SEND_DELAY   = 1.0   # seconds between rapid-fire sends (default)
 SEQUENCE_DELAY     = 12.0  # seconds between sequential task sends
 SILENCE_AFTER      = 30.0  # seconds of silence after last response before stopping capture
+JUDGE_DELAY        = 4     # seconds between Gemini judge calls (free tier ~15 RPM)
 
 import os
 CHAT_DB = os.path.expanduser("~/Library/Messages/chat.db")
@@ -21,7 +22,7 @@ CHAT_DB = os.path.expanduser("~/Library/Messages/chat.db")
 COMMAND_HANDLE  = "+14125922094"   # your Apple ID — send commands here, replies come back here
 COMMAND_PREFIX  = "!"                            # commands must start with this (e.g. !run all)
 DAEMON_POLL     = 5                              # seconds between inbox checks
-EVAL_DIR        = os.path.dirname(os.path.abspath(__file__))  # auto-detects eval folder
+EVAL_DIR        = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # project root (one up from src/)
 REPORTS_DIR     = os.path.join(EVAL_DIR, "reports")           # all results_*.json and report_*.html go here
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
@@ -29,7 +30,7 @@ os.makedirs(REPORTS_DIR, exist_ok=True)
 # Remote UI sync target (Render recommended). Backwards compatible with RAILWAY_URL.
 # Set REMOTE_UI_URL="" (and/or RAILWAY_URL="") to disable remote sync.
 REMOTE_UI_URL = os.environ.get("REMOTE_UI_URL", "").strip()
-RAILWAY_URL = (REMOTE_UI_URL or os.environ.get("RAILWAY_URL", "https://asmi-eval.onrender.com")).strip()
+RAILWAY_URL = (REMOTE_UI_URL or os.environ.get("RAILWAY_URL", "https://web-production-a1a67.up.railway.app")).strip()
 LOCAL_UI_URL = os.environ.get("LOCAL_UI_URL", "http://127.0.0.1:8765")
 
 # Shared secret for daemon → remote UI API calls. Configure the same value on the server as DAEMON_TOKEN.

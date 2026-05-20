@@ -5,35 +5,34 @@
 import glob
 import json
 import os
+import re as _re
 import subprocess
 import sys
 
 import google.genai as genai
 from config import GEMINI_API_KEY, GEMINI_MODEL, EVAL_DIR, REPORTS_DIR
+from test_case_store import load_test_cases as _load_test_cases
 
 _client = genai.Client(api_key=GEMINI_API_KEY)
 
-CATEGORIES = [
-    "sticky_message", "call_dedup", "call_summary", "language_pref",
-    "location_memory", "onboarding", "capability", "threep_nudge",
-    "interactive",
-]
+
+def _get_categories() -> set[str]:
+    """Derive the current category set directly from loaded test cases."""
+    try:
+        return {t.get("category") for t in _load_test_cases() if t.get("category")}
+    except Exception:
+        return set()
 
 HELP_TEXT = """
 *Asmi Eval Commands*
 
-!run all              → run full 28-test suite
+!run all              → run full test suite
 !run [category]       → run one category
 !run [test_id]        → run one specific test
-!rejudge              → re-judge latest results (no new messages)
 !status               → summary of last run
 !list                 → list all test IDs
 !add test [describe]  → add a new test case with Gemini
 !menu                 → show this message
-
-Categories:
-  sticky_message · call_dedup · call_summary · language_pref
-  location_memory · onboarding · capability · threep_nudge · interactive
 
 Examples:
   !run call_dedup
@@ -59,9 +58,6 @@ def handle(text: str) -> str:
     if lower in ["list", "tests", "list tests"]:
         return _list_tests()
 
-    if lower.startswith("rejudge"):
-        return _rejudge()
-
     if lower.startswith("run ") or lower == "run" or lower == "run all":
         arg = lower.replace("run", "").strip()
         return _run(arg)
@@ -80,14 +76,14 @@ def _run(arg: str) -> str:
     """Run eval tests. arg can be empty (all), a category, or a test ID."""
     arg = arg.strip()
 
+    categories = _get_categories()
     if not arg or arg == "all":
         cmd = [sys.executable, "run_eval.py"]
-        label = "full suite (28 tests)"
-    elif arg in CATEGORIES:
+        label = "full suite"
+    elif arg in categories:
         cmd = [sys.executable, "run_eval.py", "--category", arg]
         label = f"category: {arg}"
     else:
-        # assume it's a test ID
         cmd = [sys.executable, "run_eval.py", "--id", arg]
         label = f"test: {arg}"
 
@@ -99,9 +95,6 @@ def _run(arg: str) -> str:
         )
         output = result.stdout + result.stderr
 
-        # Parse the exact results file path from run_eval.py's output and
-        # write it to a pointer file so daemon.py reads the right file
-        import re as _re
         m = _re.search(r'Raw results:\s*(\S+results_\S+\.json)', output)
         if m:
             results_path = m.group(1)  # already absolute path from run_eval.py
@@ -124,34 +117,6 @@ def _run(arg: str) -> str:
         return f"⚠ Run timed out after 10 minutes — {label}"
     except Exception as e:
         return f"❌ Run failed: {e}"
-
-
-def _rejudge() -> str:
-    """Re-run Gemini judge on the latest results file."""
-    results_files = sorted(
-        glob.glob(os.path.join(REPORTS_DIR, "results_[0-9]*.json")),
-        key=os.path.getmtime, reverse=True
-    )
-    if not results_files:
-        return "No results file found. Run tests first with !run all"
-
-    latest = results_files[0]  # full path
-    try:
-        result = subprocess.run(
-            [sys.executable, "rejudge.py", latest],
-            capture_output=True, text=True,
-            cwd=EVAL_DIR, timeout=300
-        )
-        output  = result.stdout + result.stderr
-        summary = _extract_summary(output)
-        report  = _latest_report(prefix="report_rejudged")
-        return (
-            f"Rejudge complete — {os.path.basename(latest)}\n"
-            f"{summary}\n"
-            f"Report: {report or 'check reports folder'}"
-        )
-    except Exception as e:
-        return f"Rejudge failed: {e}"
 
 
 def _status() -> str:
@@ -194,7 +159,7 @@ def _status() -> str:
 def _list_tests() -> str:
     """List all test IDs and names."""
     try:
-        sys.path.insert(0, EVAL_DIR)
+        sys.path.insert(0, os.path.join(EVAL_DIR, "src"))
         from test_cases import TEST_CASES
         lines = [f"📋 {len(TEST_CASES)} tests:\n"]
         current_cat = None
@@ -248,7 +213,7 @@ No explanation, no markdown fences — just the dict.
         tc = ast.literal_eval(generated)
 
         # Append to test_cases.py
-        test_cases_path = os.path.join(EVAL_DIR, "test_cases.py")
+        test_cases_path = os.path.join(EVAL_DIR, "src", "test_cases.py")
         with open(test_cases_path) as f:
             content = f.read()
 

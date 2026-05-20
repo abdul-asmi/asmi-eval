@@ -15,20 +15,21 @@
 import glob
 import json
 import os
+import re as _re_mod
 import sqlite3
 import ssl
+import subprocess
 import sys
-import time
 import tempfile
-import urllib.request
+import threading
+import time
 import urllib.error
+import urllib.request
 from datetime import datetime, timezone, timedelta
 
 _SSL_CTX = ssl.create_default_context()
-_SSL_CTX.check_hostname = False
-_SSL_CTX.verify_mode = ssl.CERT_NONE
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from config import (
     CHAT_DB, COMMAND_HANDLE, COMMAND_PREFIX,
@@ -36,20 +37,13 @@ from config import (
     RAILWAY_URL, LOCAL_UI_URL, DAEMON_TOKEN, DAEMON_OWNER_USER_ID,
 )
 from commands import handle
-from imessage import send_imessage
+from imessage import send_imessage, _mac_ts
+from test_case_store import load_test_cases as _load_test_cases
 
 ASMI_TARGET_HANDLES = {
     "dev": "+14082307921",
     "prod": "+14082303488",
 }
-
-_MAC_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
-
-
-def _mac_ts(dt: datetime) -> int:
-    dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
-    return int((dt - _MAC_EPOCH).total_seconds() * 1_000_000_000)
-
 
 def _get_new_commands(since_ns: int) -> list[dict]:
     """
@@ -87,8 +81,6 @@ def _get_new_commands(since_ns: int) -> list[dict]:
 
 def _get_new_commands_safe(since_ns: int, timeout_s: float = 1.0) -> list[dict]:
     """Best-effort inbox poll that cannot stall the daemon loop."""
-    import threading
-
     result = {"rows": []}
     done = threading.Event()
 
@@ -171,11 +163,8 @@ def _ack_run_to_server(run: dict):
             pass
 
 
-# Track progress state across calls
 _progress_state = {"current_test": None, "current_category": None, "completed": 0, "total": 0}
 _current_run_id: str | None = None
-
-from test_case_store import load_test_cases as _load_test_cases
 
 # test_id → category map (refreshed before each run)
 _TC_MAP = {}
@@ -187,8 +176,6 @@ def _refresh_tc_map():
         _TC_MAP = {t.get("id"): t.get("category") for t in _load_test_cases() if t.get("id")}
     except Exception:
         _TC_MAP = {}
-
-import re as _re_mod
 
 
 def _parse_progress_line(line: str, total: int):
@@ -250,10 +237,6 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
     Run an eval command via subprocess, polling for a stop signal every 5s.
     Kills the process and returns a ⏹ message if stop is requested.
     """
-    import subprocess, sys, re as _re, threading
-    from config import EVAL_DIR, REPORTS_DIR
-    from commands import CATEGORIES
-
     env = os.environ.copy()
     if extra_env:
         env.update({k: str(v) for k, v in extra_env.items() if v is not None})

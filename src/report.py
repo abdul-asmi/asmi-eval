@@ -9,15 +9,18 @@ _VERDICT_COLOR = {"PASS": "#22c55e", "FAIL": "#ef4444", "UNCLEAR": "#f59e0b"}
 _VERDICT_BG    = {"PASS": "#f0fdf4", "FAIL": "#fef2f2", "UNCLEAR": "#fffbeb"}
 
 CATEGORIES = {
+    "onboarding":      "Onboarding",
+    "capability":      "Capability",
     "sticky_message":  "Sticky Message",
     "call_dedup":      "Call Deduping",
     "call_summary":    "Post-Call Summary",
-    "language_pref":   "Language Preference",
-    "location_memory": "Location Memory",
-    "onboarding":      "Onboarding Reactions",
-    "capability":      "Capability Prompts",
     "threep_nudge":    "3P Call Nudge",
+    "location_memory": "Location Memory",
+    "language_pref":   "Language Preference",
     "interactive":     "Interactive Conversations",
+    "adhoc call":      "Ad-Hoc Call",
+    "3P Calls":        "3P Calls",
+    "PDF":             "PDF Generation",
 }
 
 

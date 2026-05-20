@@ -88,22 +88,35 @@ pkill -f daemon.py   # to stop
 
 ## Architecture
 
-For the fuller run lifecycle, UI state rules, server restart notes, and current context, read `SYSTEM_ARCHITECTURE.md` first. For a plain-English product map, read `PRODUCT_MANAGER_ARCHITECTURE.md`.
+For the fuller run lifecycle, UI state rules, server restart notes, and current context, read `docs/SYSTEM_ARCHITECTURE.md` first. For a plain-English product map, read `docs/PRODUCT_MANAGER_ARCHITECTURE.md`.
 
 ```
-run_eval.py     CLI entry point — parses args, calls runner, saves JSON + HTML
-runner.py       Orchestrates test types (single/burst/sequence/dedup), calls imessage + judge
-imessage.py     Sends via AppleScript, reads responses from chat.db — do not edit
-judge.py        Gemini judge — judge() for standard, judge_with_context() for rejudge
-report.py       Generates HTML report from results list — do not edit
-config.py       Asmi's number, Gemini key, timeouts, daemon config
-test_cases.py   ALL test definitions — the primary file to edit
-daemon.py       iMessage command listener — runs eval operations triggered from your phone
-commands.py     Command handler functions called by daemon.py
-rejudge.py      Re-scores existing results JSON without sending new iMessages
+Entry points (root):
+  run_eval.py     CLI — parses args, calls runner, saves JSON + HTML
+  daemon.py       iMessage command listener — runs eval ops from your phone
+  ui.py           Web UI server (hosted on Render)
+  rejudge.py      Re-scores existing results JSON without sending iMessages
+  watch_ui.py     Auto-restarts ui.py on file changes (local dev)
+
+Library modules (src/):
+  config.py         Asmi's number, Gemini key, timeouts, daemon config
+  runner.py         Orchestrates test types (single/burst/sequence/dedup)
+  imessage.py       Sends via AppleScript, reads chat.db — do not edit
+  judge.py          Gemini judge — judge() / judge_with_context()
+  report.py         Generates HTML report — do not edit
+  commands.py       Command handlers called by daemon.py
+  test_cases.py     ALL test definitions — primary file to edit
+  test_case_store.py  Loads test cases (local file or Supabase)
+  supabase_helpers.py Supabase auth + storage helpers
+
+Other:
+  docs/           Reference docs and setup guide
+  scripts/        Shell scripts for daemon/UI restart and LaunchAgent setup
+  reports/        All results_*.json and report_*.html output files
+  supabase/       DB schema
 ```
 
-**The only two files edited regularly:** `test_cases.py` and `EVAL_GUIDE.md`.
+**The only two files edited regularly:** `src/test_cases.py` and `docs/EVAL_GUIDE.md`.
 
 ## Test types
 

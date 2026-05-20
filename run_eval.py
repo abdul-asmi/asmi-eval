@@ -27,6 +27,8 @@ import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+
 from test_case_store import load_test_cases
 from runner import run_all
 from report import generate
@@ -90,8 +92,6 @@ def main():
                 print(f"     [{r['id']}] {r['name']}")
                 print(f"       → {r['reason']}")
 
-    # ── save JSON results ──────────────────────────────────────────────────────
-    import sys as _sys
     _reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
     os.makedirs(_reports_dir, exist_ok=True)
 
