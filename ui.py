@@ -26,6 +26,7 @@ import os
 import re
 import io
 import subprocess
+import sys
 import time
 from collections import Counter
 from datetime import datetime
@@ -79,6 +80,7 @@ _run_queue       = []     # ordered list of {id, name, category, status}
 _skip_requested  = set()  # test IDs to skip before they start
 
 USE_SUPABASE = bool((SUPABASE_URL or "").strip())
+SINGLE_USER_OWNER_ID = os.environ.get("ASMI_OWNER_USER_ID", "").strip()
 
 PORT      = int(os.environ.get("PORT", 8765))
 DAEMON_TOKEN = os.environ.get("DAEMON_TOKEN", "").strip()
@@ -88,7 +90,7 @@ GH_REPO   = os.environ.get("GITHUB_REPO", "")
 GH_FILE   = os.environ.get("GITHUB_FILE_PATH", "test_cases.py")
 
 # Fallback: read/write local file if GitHub not configured (local dev)
-LOCAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_cases.py")
+LOCAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "test_cases.py")
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
 OVERALL_ANALYSIS_FILE = os.path.join(REPORTS_DIR, "overall_analysis.json")
 USE_GITHUB = bool(LEGACY_GITHUB_ENABLE and GH_TOKEN and GH_REPO)
@@ -202,6 +204,33 @@ def save_test_cases(cases: list):
             f.write(src)
 
 
+def _test_case_sort_key(tc: dict) -> tuple[int, str]:
+    try:
+        order = int(tc.get("_ui_order"))
+    except Exception:
+        order = 1_000_000
+    return order, str(tc.get("id") or "")
+
+
+def _single_user_owner_id(preferred: str = "") -> str:
+    preferred = (preferred or SINGLE_USER_OWNER_ID or "").strip()
+    if preferred:
+        return preferred
+    status, rows = sb_service_get(
+        "/rest/v1/test_cases",
+        params={"select": "owner_user_id", "order": "updated_at.desc", "limit": 1},
+    )
+    if status < 300 and isinstance(rows, list) and rows and rows[0].get("owner_user_id"):
+        return str(rows[0]["owner_user_id"])
+    status, rows = sb_service_get(
+        "/rest/v1/relay_devices",
+        params={"select": "owner_user_id", "order": "last_seen_at.desc", "limit": 1},
+    )
+    if status < 300 and isinstance(rows, list) and rows and rows[0].get("owner_user_id"):
+        return str(rows[0]["owner_user_id"])
+    raise SupabaseError("No single-user owner found. Set ASMI_OWNER_USER_ID in Render.")
+
+
 def load_test_cases_supabase(token: str) -> list[dict]:
     """
     Load current user's test cases from Supabase Postgres.
@@ -229,7 +258,7 @@ def load_test_cases_supabase(token: str) -> list[dict]:
         if r.get("enabled") is not None:
             tc["enabled"] = bool(r.get("enabled"))
         out.append(tc)
-    return out
+    return sorted(out, key=_test_case_sort_key)
 
 
 def load_or_seed_test_cases_supabase(token: str, user_id: str) -> list[dict]:
@@ -255,12 +284,14 @@ def save_test_cases_supabase(token: str, user_id: str, cases: list[dict]) -> Non
       - It does not attempt to diff fields; it records a new version every time.
     """
     payload = []
-    for tc in cases or []:
+    for idx, tc in enumerate(cases or []):
         if not isinstance(tc, dict):
             continue
         external_id = str(tc.get("id") or "").strip()
         if not external_id:
             continue
+        definition = dict(tc)
+        definition["_ui_order"] = idx
         payload.append({
             "owner_user_id": user_id,
             "external_id": external_id,
@@ -268,7 +299,7 @@ def save_test_cases_supabase(token: str, user_id: str, cases: list[dict]) -> Non
             "name": tc.get("name"),
             "type": tc.get("type"),
             "enabled": bool(tc.get("enabled", True)),
-            "definition": tc,
+            "definition": definition,
         })
 
     if not payload:
@@ -998,6 +1029,21 @@ HTML = """<!DOCTYPE html>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
        background: #eef2f7; color: #1e293b; }
+body.theme-dark { background:#0f172a; color:#e2e8f0; }
+body.theme-dark header, body.theme-dark .toolbar { background:#18122b; border-color:#4c1d95; color:#f8fafc; }
+body.theme-dark main, body.theme-dark #historySection, body.theme-dark #responsesSection, body.theme-dark #analysisSection { color:#e2e8f0; }
+body.theme-dark .test-table, body.theme-dark .new-form, body.theme-dark #historyList { background:#111827 !important; box-shadow:0 1px 8px rgba(0,0,0,.35); }
+body.theme-dark .test-table th, body.theme-dark .cat-row td, body.theme-dark .rt-card-hdr { background:#1f2937 !important; border-color:#334155 !important; }
+body.theme-dark .test-table td, body.theme-dark .rt-section, body.theme-dark .rt-card, body.theme-dark .inline-result, body.theme-dark .rt-turn { border-color:#334155 !important; }
+body.theme-dark .test-row:hover td, body.theme-dark .test-row.editing > td, body.theme-dark .edit-row > td { background:#172033 !important; }
+body.theme-dark .btn-outline, body.theme-dark .tab-btn, body.theme-dark input, body.theme-dark textarea, body.theme-dark select { background:#111827 !important; color:#e2e8f0 !important; border-color:#475569 !important; }
+body.theme-dark input::placeholder { color:#94a3b8 !important; }
+body.theme-dark label, body.theme-dark .msg-cell, body.theme-dark .rt-msg, body.theme-dark .rt-judge { color:#cbd5e1 !important; }
+body.theme-dark .rt-msg, body.theme-dark #resultsTable { background:#111827 !important; border-color:#334155 !important; }
+body.theme-dark .id-cell, body.theme-dark .rt-tid, body.theme-dark .rt-slabel, body.theme-dark .rt-dur { color:#94a3b8 !important; }
+body.theme-dark .tab-menu span, body.theme-dark .toolbar span { color:#e2e8f0 !important; }
+body.theme-dark #historyList th, body.theme-dark #historyList td { color:#cbd5e1 !important; border-color:#334155 !important; }
+body.theme-dark #historyList tr { border-color:#334155 !important; }
 header { background: #ede9fe;
          color: #0f172a; padding: 12px 24px;
          display: flex; align-items: center; justify-content: center; gap: 12px;
@@ -1234,6 +1280,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="tab-btn tab-reports" id="tabHistory" onclick="showTab('history')">Reports</button>
     <button class="tab-btn tab-responses" id="tabResponses" onclick="showTab('responses')">Responses</button>
     <button class="tab-btn tab-analysis" id="tabAnalysis" onclick="showTab('analysis')">Analysis</button>
+    <button class="tab-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle light/dark mode">🌙 Dark</button>
   </div>
 
   <div class="tab-menu" id="menuMain" style="display:flex;">
@@ -1548,6 +1595,23 @@ if (!SB_URL || !SB_KEY || !window.supabase) {
 const sb = (SB_URL && SB_KEY && window.supabase)
   ? window.supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:true, autoRefreshToken:true}})
   : null;
+const AUTH_REQUIRED = false;
+const THEME_KEY = 'asmiTheme';
+
+function applyTheme(theme) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  document.body.classList.toggle('theme-dark', next === 'dark');
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = next === 'dark' ? '☀️ Light' : '🌙 Dark';
+}
+
+function toggleTheme() {
+  const next = document.body.classList.contains('theme-dark') ? 'light' : 'dark';
+  try { localStorage.setItem(THEME_KEY, next); } catch(e) {}
+  applyTheme(next);
+}
+
+try { applyTheme(localStorage.getItem(THEME_KEY) || 'light'); } catch(e) { applyTheme('light'); }
 
 let _accessToken = '';
 let _userId = '';
@@ -1574,7 +1638,7 @@ function _applySession(session) {
   _accessToken = session && session.access_token ? session.access_token : '';
   _userId = session && session.user ? (session.user.id || '') : '';
   const overlay = document.getElementById('authOverlay');
-  if (overlay) overlay.style.display = _accessToken ? 'none' : 'flex';
+  if (overlay) overlay.style.display = (_accessToken || !AUTH_REQUIRED) ? 'none' : 'flex';
 }
 
 async function _withTimeout(promise, ms, message) {
@@ -1607,9 +1671,8 @@ async function _loadSession() {
 async function _ensureSignedIn() {
   const session = await _loadSession();
   const overlay = document.getElementById('authOverlay');
-  if (session && overlay) overlay.style.display = 'none';
-  if (!session && overlay) overlay.style.display = 'flex';
-  return !!session;
+  if (overlay) overlay.style.display = (session || !AUTH_REQUIRED) ? 'none' : 'flex';
+  return !!session || !AUTH_REQUIRED;
 }
 
 async function _initAuthUI() {
@@ -3398,6 +3461,7 @@ async function loadHistory(silent = false) {
     let html = '<table style="width:100%;border-collapse:collapse;">';
     html += '<thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">';
     html += '<th style="padding:12px;text-align:left;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Timestamp (ET)</th>';
+    html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Target</th>';
     html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Total</th>';
     html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Passed</th>';
     html += '<th style="padding:12px;text-align:center;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;">Failed</th>';
@@ -3412,8 +3476,10 @@ async function loadHistory(silent = false) {
       const passPct = run.total > 0 ? Math.round((run.passed / run.total) * 100) : 0;
       const passColor = passPct === 100 ? '#16a34a' : passPct >= 80 ? '#f59e0b' : '#dc2626';
       const runKey = run.run_id || run.stem;
+      const target = _targetBadge(run);
       html += `<tr style="border-bottom:1px solid #f1f5f9;">
         <td style="padding:12px;font-size:0.88rem;color:#1e293b;">${formatted}</td>
+        <td style="padding:12px;text-align:center;font-size:0.88rem;">${target}</td>
         <td style="padding:12px;text-align:center;font-size:0.88rem;color:#475569;">${run.total}</td>
         <td style="padding:12px;text-align:center;font-size:0.88rem;color:#16a34a;font-weight:600;">${run.passed}</td>
         <td style="padding:12px;text-align:center;font-size:0.88rem;color:#dc2626;font-weight:600;">${run.failed}</td>
@@ -3431,6 +3497,16 @@ async function loadHistory(silent = false) {
   } catch(e) {
     historyList.innerHTML = '<p style="color:#dc2626;padding:20px;text-align:center;">Failed to load reports: ' + e.message + '</p>';
   }
+}
+
+function _targetBadge(run) {
+  const key = String(run.asmi_target || '').toLowerCase();
+  const handle = run.asmi_handle || '';
+  const label = key === 'prod' ? 'Prod' : key === 'dev' ? 'Dev' : (handle ? 'Custom' : '—');
+  const bg = key === 'prod' ? '#fee2e2' : key === 'dev' ? '#dbeafe' : '#f1f5f9';
+  const color = key === 'prod' ? '#991b1b' : key === 'dev' ? '#1d4ed8' : '#475569';
+  const title = handle ? ` title="${esc(handle)}"` : '';
+  return `<span${title} style="display:inline-block;background:${bg};color:${color};padding:3px 9px;border-radius:999px;font-size:0.75rem;font-weight:800;">${esc(label)}</span>`;
 }
 
 async function downloadReport(key, isRunId=false) {
@@ -3466,7 +3542,7 @@ async function deleteRun(key, isRunId=false) {
       toast(data.error || 'Delete failed');
       return;
     }
-    toast(`Deleted run ${formatTimestamp(stem)}`);
+    toast(`Deleted run ${formatTimestamp(key)}`);
     await loadHistory(true);
     await loadResponses(true);
     await loadAnalysis(true);
@@ -3824,13 +3900,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def _require_user(self) -> tuple[str, str]:
         token = bearer_from_request_headers(self.headers)
-        if not token:
-            raise SupabaseError("Missing Authorization Bearer token")
-        claims = verify_supabase_jwt(token)
-        user_id = str(claims.get("sub") or "").strip()
-        if not user_id:
-            raise SupabaseError("Missing user id in token")
-        return token, user_id
+        if token:
+            try:
+                claims = verify_supabase_jwt(token)
+                user_id = str(claims.get("sub") or "").strip()
+                if user_id:
+                    return token, user_id
+            except Exception:
+                pass
+        if USE_SUPABASE and os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip():
+            return os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip(), _single_user_owner_id()
+        raise SupabaseError("Missing Authorization Bearer token")
 
     def _require_daemon(self) -> str:
         if DAEMON_TOKEN:
@@ -3838,6 +3918,8 @@ class Handler(BaseHTTPRequestHandler):
             if not got or got != DAEMON_TOKEN:
                 raise SupabaseError("Invalid daemon token")
         owner = (self.headers.get("X-Owner-User-Id") or "").strip()
+        if not owner and USE_SUPABASE:
+            owner = _single_user_owner_id()
         if not owner:
             raise SupabaseError("Missing X-Owner-User-Id")
         # Best-effort: persist a heartbeat so UI can detect online state across restarts.
@@ -3949,6 +4031,7 @@ class Handler(BaseHTTPRequestHandler):
                         params={
                             "select": "id,status,output,results,progress,started_at,updated_at,asmi_target,asmi_handle",
                             "owner_user_id": f"eq.{uid}",
+                            "status": "neq.canceled",
                             "order": "created_at.desc",
                             "limit": 1,
                         },
@@ -4030,8 +4113,9 @@ class Handler(BaseHTTPRequestHandler):
                         "/rest/v1/runs",
                         token=token,
                         params={
-                            "select": "id,created_at,status,results,report_html",
+                            "select": "id,created_at,status,results,report_html,asmi_target,asmi_handle",
                             "owner_user_id": f"eq.{uid}",
+                            "status": "neq.canceled",
                             "order": "created_at.desc",
                             "limit": 200,
                         },
@@ -4049,6 +4133,8 @@ class Handler(BaseHTTPRequestHandler):
                             "stem": (r.get("id") or "")[:8],
                             "ts": r.get("created_at"),
                             "run_id": r.get("id"),
+                            "asmi_target": r.get("asmi_target"),
+                            "asmi_handle": r.get("asmi_handle"),
                             **summary,
                             "has_report": bool((r.get("report_html") or "").strip()),
                             "status": r.get("status"),
@@ -4103,6 +4189,7 @@ class Handler(BaseHTTPRequestHandler):
                         params={
                             "select": "id,created_at,results",
                             "owner_user_id": f"eq.{uid}",
+                            "status": "neq.canceled",
                             "order": "created_at.desc",
                             "limit": 50,
                         },
@@ -4207,6 +4294,7 @@ class Handler(BaseHTTPRequestHandler):
                         params={
                             "select": "id,created_at,results",
                             "owner_user_id": f"eq.{uid}",
+                            "status": "neq.canceled",
                             "order": "created_at.desc",
                             "limit": 200,
                         },
