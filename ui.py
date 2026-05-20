@@ -3967,6 +3967,8 @@ class Handler(BaseHTTPRequestHandler):
             if not got or got != DAEMON_TOKEN:
                 raise SupabaseError("Invalid daemon token")
         owner = (self.headers.get("X-Owner-User-Id") or "").strip()
+        if not owner and USE_SUPABASE:
+            owner = _single_user_owner_id()
         if not owner:
             raise SupabaseError("Missing X-Owner-User-Id")
         # Best-effort: persist a heartbeat so UI can detect online state across restarts.

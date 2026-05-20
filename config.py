@@ -29,7 +29,7 @@ os.makedirs(REPORTS_DIR, exist_ok=True)
 # Remote UI sync target (Render recommended). Backwards compatible with RAILWAY_URL.
 # Set REMOTE_UI_URL="" (and/or RAILWAY_URL="") to disable remote sync.
 REMOTE_UI_URL = os.environ.get("REMOTE_UI_URL", "").strip()
-RAILWAY_URL = (REMOTE_UI_URL or os.environ.get("RAILWAY_URL", "https://web-production-a1a67.up.railway.app")).strip()
+RAILWAY_URL = (REMOTE_UI_URL or os.environ.get("RAILWAY_URL", "https://asmi-eval.onrender.com")).strip()
 LOCAL_UI_URL = os.environ.get("LOCAL_UI_URL", "http://127.0.0.1:8765")
 
 # Shared secret for daemon → remote UI API calls. Configure the same value on the server as DAEMON_TOKEN.
