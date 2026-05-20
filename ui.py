@@ -1534,12 +1534,42 @@ const sb = (SB_URL && SB_KEY && window.supabase)
 
 let _accessToken = '';
 let _userId = '';
+let _authBusy = false;
 
 function _setAuthMsg(msg, isOk=false) {
   const el = document.getElementById('authMsg');
   if (!el) return;
   el.style.color = isOk ? '#86efac' : '#fca5a5';
   el.textContent = msg || '';
+}
+
+function _setAuthBusy(busy) {
+  _authBusy = !!busy;
+  const signInBtn = document.getElementById('authSignInBtn');
+  const signUpBtn = document.getElementById('authSignUpBtn');
+  if (signInBtn) signInBtn.disabled = _authBusy;
+  if (signUpBtn) signUpBtn.disabled = _authBusy;
+  if (signInBtn) signInBtn.style.opacity = _authBusy ? '0.75' : '1';
+  if (signUpBtn) signUpBtn.style.opacity = _authBusy ? '0.75' : '1';
+}
+
+function _applySession(session) {
+  _accessToken = session && session.access_token ? session.access_token : '';
+  _userId = session && session.user ? (session.user.id || '') : '';
+  const overlay = document.getElementById('authOverlay');
+  if (overlay) overlay.style.display = _accessToken ? 'none' : 'flex';
+}
+
+async function _withTimeout(promise, ms, message) {
+  let timeoutId = null;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 async function apiFetch(url, options={}) {
@@ -1553,8 +1583,7 @@ async function _loadSession() {
   if (!sb) return null;
   const { data } = await sb.auth.getSession();
   const session = data ? data.session : null;
-  _accessToken = session && session.access_token ? session.access_token : '';
-  _userId = session && session.user ? (session.user.id || '') : '';
+  _applySession(session);
   return session;
 }
 
@@ -1569,24 +1598,57 @@ async function _ensureSignedIn() {
 async function _initAuthUI() {
   if (!sb) return;
   document.getElementById('authSignInBtn').onclick = async () => {
+    if (_authBusy) return;
+    _setAuthBusy(true);
     _setAuthMsg('Signing in…', true);
     const email = (document.getElementById('authEmail').value || '').trim();
     const pass  = (document.getElementById('authPass').value || '').trim();
-    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
-    if (error) _setAuthMsg(error.message || 'Sign in failed');
-    else { _setAuthMsg('', true); await _ensureSignedIn(); load(); }
+    try {
+      const { data, error } = await _withTimeout(
+        sb.auth.signInWithPassword({ email, password: pass }),
+        15000,
+        'Sign in timed out. Check your Supabase Auth settings and network.'
+      );
+      if (error) {
+        _setAuthMsg(error.message || 'Sign in failed');
+        return;
+      }
+      const session = data && data.session ? data.session : await _loadSession();
+      if (!session) {
+        _setAuthMsg('Sign in succeeded, but no session was returned. Confirm email is enabled and refresh once.');
+        return;
+      }
+      _applySession(session);
+      _setAuthMsg('', true);
+      load();
+    } catch (e) {
+      _setAuthMsg((e && e.message) ? e.message : 'Sign in failed');
+    } finally {
+      _setAuthBusy(false);
+    }
   };
   document.getElementById('authSignUpBtn').onclick = async () => {
+    if (_authBusy) return;
+    _setAuthBusy(true);
     _setAuthMsg('Creating account… (check email to confirm)', true);
     const email = (document.getElementById('authEmail').value || '').trim();
     const pass  = (document.getElementById('authPass').value || '').trim();
-    const { error } = await sb.auth.signUp({ email, password: pass });
-    if (error) _setAuthMsg(error.message || 'Sign up failed');
-    else _setAuthMsg('Account created. Please confirm your email, then sign in.', true);
+    try {
+      const { error } = await _withTimeout(
+        sb.auth.signUp({ email, password: pass }),
+        15000,
+        'Account creation timed out. Check your Supabase Auth settings and network.'
+      );
+      if (error) _setAuthMsg(error.message || 'Sign up failed');
+      else _setAuthMsg('Account created. Please confirm your email, then sign in.', true);
+    } catch (e) {
+      _setAuthMsg((e && e.message) ? e.message : 'Sign up failed');
+    } finally {
+      _setAuthBusy(false);
+    }
   };
   sb.auth.onAuthStateChange(async (_event, session) => {
-    _accessToken = session && session.access_token ? session.access_token : '';
-    _userId = session && session.user ? (session.user.id || '') : '';
+    _applySession(session);
     await _ensureSignedIn();
   });
   await _ensureSignedIn();
