@@ -3948,13 +3948,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def _require_user(self) -> tuple[str, str]:
         token = bearer_from_request_headers(self.headers)
-        if not token:
-            raise SupabaseError("Missing Authorization Bearer token")
-        claims = verify_supabase_jwt(token)
-        user_id = str(claims.get("sub") or "").strip()
-        if not user_id:
-            raise SupabaseError("Missing user id in token")
-        return token, user_id
+        if token:
+            try:
+                claims = verify_supabase_jwt(token)
+                user_id = str(claims.get("sub") or "").strip()
+                if user_id:
+                    return token, user_id
+            except Exception:
+                # Temporary single-user mode: ignore stale/missing browser auth and
+                # fall through to the service-role owner used by the hosted UI.
+                pass
+        if USE_SUPABASE:
+            service_token = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+            if service_token:
+                return service_token, _single_user_owner_id()
+        raise SupabaseError("Missing Authorization Bearer token")
 
     def _optional_user(self) -> tuple[str | None, str]:
         # Temporary single-user mode: test cases and run queue use the server-side
