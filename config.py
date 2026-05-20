@@ -26,11 +26,18 @@ REPORTS_DIR     = os.path.join(EVAL_DIR, "reports")           # all results_*.js
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
 
-# Set RAILWAY_URL to empty string to disable remote sync.
-# Defaulting to the deployed Railway app keeps run results flowing back there
-# after each completed run, so the hosted UI stays current.
-RAILWAY_URL = os.environ.get("RAILWAY_URL", "https://web-production-a1a67.up.railway.app")
+# Remote UI sync target (Render recommended). Backwards compatible with RAILWAY_URL.
+# Set REMOTE_UI_URL="" (and/or RAILWAY_URL="") to disable remote sync.
+REMOTE_UI_URL = os.environ.get("REMOTE_UI_URL", "").strip()
+RAILWAY_URL = (REMOTE_UI_URL or os.environ.get("RAILWAY_URL", "https://web-production-a1a67.up.railway.app")).strip()
 LOCAL_UI_URL = os.environ.get("LOCAL_UI_URL", "http://127.0.0.1:8765")
+
+# Shared secret for daemon → remote UI API calls. Configure the same value on the server as DAEMON_TOKEN.
+DAEMON_TOKEN = os.environ.get("DAEMON_TOKEN", "").strip()
+
+# Supabase owner user id (auth.users.id) for associating runs in the hosted UI.
+# Required when using Supabase-backed hosting (Render).
+DAEMON_OWNER_USER_ID = os.environ.get("DAEMON_OWNER_USER_ID", "").strip()
 
 # ─── Run-All Priority Order ────────────────────────────────────────────────────
 # Categories are run in this order when no --category / --id filter is given.

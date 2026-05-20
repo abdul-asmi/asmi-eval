@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: asmi-eval-ui
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python ui.py
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DAEMON_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: models/gemini-3.1-flash-lite-preview

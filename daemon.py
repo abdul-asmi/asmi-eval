@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (
     CHAT_DB, COMMAND_HANDLE, COMMAND_PREFIX,
     DAEMON_POLL, ASMI_HANDLE, EVAL_DIR, REPORTS_DIR,
-    RAILWAY_URL, LOCAL_UI_URL,
+    RAILWAY_URL, LOCAL_UI_URL, DAEMON_TOKEN, DAEMON_OWNER_USER_ID,
 )
 from commands import handle
 from imessage import send_imessage
@@ -129,6 +129,10 @@ def _poll_railway_full() -> dict:
     if RAILWAY_URL:
         try:
             req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
+            if DAEMON_TOKEN:
+                req.add_header("X-Daemon-Token", DAEMON_TOKEN)
+            if DAEMON_OWNER_USER_ID:
+                req.add_header("X-Owner-User-Id", DAEMON_OWNER_USER_ID)
             with urllib.request.urlopen(req, timeout=5, context=_SSL_CTX) as resp:
                 return json.loads(resp.read())
         except Exception as e:
@@ -156,6 +160,11 @@ def _ack_run_to_server(run: dict):
         try:
             req = urllib.request.Request(f"{url}/api/ack-run", data=payload, method="POST")
             req.add_header("Content-Type", "application/json")
+            if url == RAILWAY_URL:
+                if DAEMON_TOKEN:
+                    req.add_header("X-Daemon-Token", DAEMON_TOKEN)
+                if DAEMON_OWNER_USER_ID:
+                    req.add_header("X-Owner-User-Id", DAEMON_OWNER_USER_ID)
             ctx = _SSL_CTX if url.startswith("https") else None
             urllib.request.urlopen(req, timeout=4, context=ctx)
         except Exception:
@@ -164,6 +173,7 @@ def _ack_run_to_server(run: dict):
 
 # Track progress state across calls
 _progress_state = {"current_test": None, "current_category": None, "completed": 0, "total": 0}
+_current_run_id: str | None = None
 
 from test_case_store import load_test_cases as _load_test_cases
 
@@ -211,6 +221,7 @@ def _mark_test_done(line: str):
 def _post_progress():
     """Post current progress dict to Railway and local UI."""
     payload = json.dumps({
+        "run_id":          _current_run_id,
         "current_test":     _progress_state.get("current_test"),
         "current_category": _progress_state.get("current_category"),
         "completed":        _progress_state.get("completed", 0),
@@ -223,6 +234,11 @@ def _post_progress():
                 f"{url}/api/progress", data=payload, method="POST",
             )
             req.add_header("Content-Type", "application/json")
+            if url == RAILWAY_URL:
+                if DAEMON_TOKEN:
+                    req.add_header("X-Daemon-Token", DAEMON_TOKEN)
+                if DAEMON_OWNER_USER_ID:
+                    req.add_header("X-Owner-User-Id", DAEMON_OWNER_USER_ID)
             ctx = _SSL_CTX if url.startswith("https") else None
             urllib.request.urlopen(req, timeout=4, context=ctx)
         except Exception:
@@ -439,16 +455,32 @@ def _post_output_to_railway(output: str, status: str = "done"):
         return
     try:
         results = _latest_results_json() if status == "done" else []
+        report_html = ""
+        if status == "done":
+            try:
+                report_files = glob.glob(os.path.join(REPORTS_DIR, "report_*.html"))
+                if report_files:
+                    report_files.sort(key=os.path.getmtime, reverse=True)
+                    with open(report_files[0], "r", encoding="utf-8") as f:
+                        report_html = f.read()
+            except Exception:
+                report_html = ""
         body = json.dumps({
+            "run_id": _current_run_id,
             "output":  output,
             "status":  status,
             "results": results,
+            "report_html": report_html,
         }).encode()
         req = urllib.request.Request(
             f"{RAILWAY_URL}/api/output",
             data=body, method="POST",
         )
         req.add_header("Content-Type", "application/json")
+        if DAEMON_TOKEN:
+            req.add_header("X-Daemon-Token", DAEMON_TOKEN)
+        if DAEMON_OWNER_USER_ID:
+            req.add_header("X-Owner-User-Id", DAEMON_OWNER_USER_ID)
         urllib.request.urlopen(req, timeout=15, context=_SSL_CTX)
         print(f"  [railway] posted output + {len(results)} results")
     except Exception as e:
@@ -461,10 +493,21 @@ def _post_output_to_local_ui(output: str, status: str = "done"):
         return
     try:
         results = _latest_results_json() if status == "done" else []
+        report_html = ""
+        if status == "done":
+            try:
+                report_files = glob.glob(os.path.join(REPORTS_DIR, "report_*.html"))
+                if report_files:
+                    report_files.sort(key=os.path.getmtime, reverse=True)
+                    with open(report_files[0], "r", encoding="utf-8") as f:
+                        report_html = f.read()
+            except Exception:
+                report_html = ""
         body = json.dumps({
             "output":  output,
             "status":  status,
             "results": results,
+            "report_html": report_html,
         }).encode()
         req = urllib.request.Request(
             f"{LOCAL_UI_URL}/api/output",
@@ -510,6 +553,8 @@ def run():
                 pass  # already cleared by server; nothing running here
             pending = poll_data.get("run")
             if pending:
+                global _current_run_id
+                _current_run_id = (pending.get("run_id") or pending.get("id")) if isinstance(pending, dict) else None
                 ids = pending.get("ids")
                 cats = pending.get("categories")
                 cat = pending.get("category")
@@ -544,6 +589,7 @@ def run():
                 _post_output_to_railway(response, status=final_status)
                 # Also post results back to the local UI server so inline cards can render.
                 _post_output_to_local_ui(response, status=final_status)
+                _current_run_id = None
 
             messages = _get_new_commands_safe(since_ns)
 
