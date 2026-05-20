@@ -230,6 +230,21 @@ def load_test_cases_supabase(token: str) -> list[dict]:
     return out
 
 
+def load_or_seed_test_cases_supabase(token: str, user_id: str) -> list[dict]:
+    """
+    Load the current user's Supabase test cases.
+    If this is a fresh account with no rows yet, seed it from local defaults.
+    """
+    cases = load_test_cases_supabase(token)
+    if cases:
+        return cases
+
+    defaults = load_test_cases()
+    if defaults:
+        save_test_cases_supabase(token, user_id, defaults)
+    return defaults
+
+
 def save_test_cases_supabase(token: str, user_id: str, cases: list[dict]) -> None:
     """
     Upsert cases into `test_cases` and append a new `test_case_versions` row per item.
@@ -3849,8 +3864,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/tests":
                 try:
                     if USE_SUPABASE:
-                        token, _uid = self._require_user()
-                        cases = load_test_cases_supabase(token)
+                        token, uid = self._require_user()
+                        cases = load_or_seed_test_cases_supabase(token, uid)
                     else:
                         cases = load_test_cases()
                     self._json(cases)
@@ -3864,8 +3879,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._csv(content, filename="test_cases_template_full.csv")
             elif path == "/api/tests/export.csv":
                 if USE_SUPABASE:
-                    token, _uid = self._require_user()
-                    cases = load_test_cases_supabase(token)
+                    token, uid = self._require_user()
+                    cases = load_or_seed_test_cases_supabase(token, uid)
                 else:
                     cases = load_test_cases()
                 content = _tests_to_csv_bytes(cases)

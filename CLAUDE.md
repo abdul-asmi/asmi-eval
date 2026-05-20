@@ -41,6 +41,8 @@ open report_YYYYMMDD_HHMM.html
 
 Railway deploys from GitHub. Before starting work, `git pull`. After changes, `git push` so Railway can deploy the latest commit.
 
+Important: local edits are not live until they are committed and pushed to `main`. When a user expects a fix to be live, do not stop after local file changes; either push the change or explicitly say it has not been pushed/deployed yet.
+
 ## Troubleshooting: run shows old report / doesn’t run
 
 The web UI only queues a run; execution happens on the Mac runner that polls the UI.
