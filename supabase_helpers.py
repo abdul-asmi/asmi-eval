@@ -62,23 +62,39 @@ def verify_supabase_jwt(token: str) -> dict:
     """
     if not token:
         raise SupabaseError("Missing token")
-    jwks = _get_jwks()
-    unverified = jwt.get_unverified_header(token)
-    kid = unverified.get("kid")
-    keys = (jwks or {}).get("keys") or []
-    key = next((k for k in keys if k.get("kid") == kid), None)
-    if not key:
-        raise SupabaseError("Unknown signing key")
-    public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(key))
     try:
-        claims = jwt.decode(
-            token,
-            public_key,
-            algorithms=[unverified.get("alg", "RS256")],
-            options={"verify_aud": False},
+        jwks = _get_jwks()
+        unverified = jwt.get_unverified_header(token)
+        algorithm = unverified.get("alg", "RS256")
+        kid = unverified.get("kid")
+        keys = (jwks or {}).get("keys") or []
+        key = next((k for k in keys if k.get("kid") == kid), None)
+        if key:
+            public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(key))
+            claims = jwt.decode(
+                token,
+                public_key,
+                algorithms=[algorithm],
+                options={"verify_aud": False},
+            )
+        else:
+            raise SupabaseError("Unknown signing key")
+    except Exception:
+        # Fallback for projects that still issue non-RSA access tokens.
+        status, user = _sb_request(
+            "GET",
+            "/auth/v1/user",
+            bearer=token,
+            apikey=SUPABASE_ANON_KEY,
         )
-    except Exception as e:
-        raise SupabaseError(f"Invalid token: {e}") from e
+        if status >= 300 or not isinstance(user, dict):
+            raise SupabaseError("Invalid token")
+        claims = {
+            "sub": user.get("id"),
+            "email": user.get("email"),
+            "role": user.get("role"),
+            "user_metadata": user.get("user_metadata") or {},
+        }
     sub = claims.get("sub")
     if not sub:
         raise SupabaseError("Token missing sub")
