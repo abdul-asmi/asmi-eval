@@ -164,6 +164,18 @@ def sb_service_post(path: str, *, json_body=None, params: dict | None = None):
     )
 
 
+def sb_service_post_ex(path: str, *, json_body=None, params: dict | None = None, headers: dict | None = None):
+    return _sb_request(
+        "POST",
+        path,
+        params=params,
+        json_body=json_body,
+        bearer=SUPABASE_SERVICE_ROLE_KEY,
+        apikey=SUPABASE_SERVICE_ROLE_KEY,
+        extra_headers=headers,
+    )
+
+
 def sb_service_patch(path: str, *, json_body=None, params: dict | None = None):
     return _sb_request(
         "PATCH", path, params=params, json_body=json_body, bearer=SUPABASE_SERVICE_ROLE_KEY, apikey=SUPABASE_SERVICE_ROLE_KEY

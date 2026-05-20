@@ -47,6 +47,7 @@ from supabase_helpers import (
     sb_service_get,
     sb_service_patch,
     sb_service_post,
+    sb_service_post_ex,
     sb_user_get,
     sb_user_post_ex,
     sb_user_patch_ex,
@@ -3760,6 +3761,23 @@ class Handler(BaseHTTPRequestHandler):
         owner = (self.headers.get("X-Owner-User-Id") or "").strip()
         if not owner:
             raise SupabaseError("Missing X-Owner-User-Id")
+        # Best-effort: persist a heartbeat so UI can detect online state across restarts.
+        if USE_SUPABASE:
+            try:
+                device_name = (self.headers.get("X-Device-Name") or "mac").strip() or "mac"
+                sb_service_post_ex(
+                    "/rest/v1/relay_devices",
+                    params={"on_conflict": "owner_user_id,device_name"},
+                    json_body=[{
+                        "owner_user_id": owner,
+                        "device_name": device_name,
+                        "token_sha256": "daemon",  # not used; placeholder for schema requirement
+                        "last_seen_at": iso_utc_now(),
+                    }],
+                    headers={"Prefer": "resolution=merge-duplicates,return=minimal"},
+                )
+            except Exception:
+                pass
         return owner
 
     def do_GET(self):
@@ -4335,6 +4353,30 @@ class Handler(BaseHTTPRequestHandler):
                 test_cases_snapshot = []
             if USE_SUPABASE:
                 token, uid = self._require_user()
+                # Determine if the Mac daemon is online using persisted heartbeat.
+                mac_online = False
+                try:
+                    status_hb, hb = sb_service_get(
+                        "/rest/v1/relay_devices",
+                        params={
+                            "select": "last_seen_at",
+                            "owner_user_id": f"eq.{uid}",
+                            "device_name": "eq.mac",
+                            "order": "last_seen_at.desc",
+                            "limit": 1,
+                        },
+                    )
+                    if status_hb < 300 and isinstance(hb, list) and hb and hb[0].get("last_seen_at"):
+                        # last_seen_at is ISO; compare in seconds by letting JS/UI also show queue regardless.
+                        from datetime import datetime, timezone
+                        ts = hb[0]["last_seen_at"]
+                        try:
+                            dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+                            mac_online = (datetime.now(timezone.utc) - dt).total_seconds() < 90
+                        except Exception:
+                            mac_online = True
+                except Exception:
+                    mac_online = False
                 selection = {
                     "category": cat,
                     "categories": cats,
@@ -4363,7 +4405,6 @@ class Handler(BaseHTTPRequestHandler):
                 if status >= 300 or not isinstance(inserted, list) or not inserted:
                     raise SupabaseError(f"Failed to enqueue run: {inserted}")
                 run_id = inserted[0].get("id")
-                mac_online = (time.time() - _last_heartbeat) < 90
                 self._json({"ok": True, "run_id": run_id, "mac_online": mac_online, "asmi_target": asmi_target, "asmi_handle": asmi_handle, "queue": []})
             else:
                 _run_queue = _build_run_queue(data)
