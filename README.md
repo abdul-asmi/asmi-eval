@@ -157,6 +157,33 @@ python ui.py
 
 Then open: **http://localhost:8765**
 
+### Hosted (Render + Supabase)
+
+This UI can be hosted on Render and use Supabase as the source of truth for:
+- Auth (email/password)
+- Test cases (Postgres)
+- Runs + artifacts (Postgres + Storage)
+
+**Supabase setup**
+1) Create a Supabase project
+2) Create a Storage bucket named `artifacts`
+3) Run the SQL in `supabase/schema.sql` in the Supabase SQL editor
+4) In Supabase Auth settings, enable email/password and (recommended) email confirmation
+
+**Render setup**
+- Deploy using `render.yaml` (or create a Web Service manually)
+- Set env vars:
+  - `SUPABASE_URL`
+  - `SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY` (server-only; do not expose to browsers)
+  - `DAEMON_TOKEN` (shared secret; same value must be set on the Mac daemon)
+
+**Mac daemon → hosted UI**
+- Set these env vars on the Mac before running `python daemon.py`:
+  - `REMOTE_UI_URL` (your Render URL, e.g. `https://your-service.onrender.com`)
+  - `DAEMON_TOKEN` (must match Render)
+  - `DAEMON_OWNER_USER_ID` (your Supabase `auth.users.id` so runs are attributed to your account)
+
 If you want the UI server to restart automatically when `ui.py` changes, run:
 
 ```bash

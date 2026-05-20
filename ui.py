@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """
 Asmi Eval — Test Case Editor UI
-Reads/writes test_cases.py via GitHub API so it works hosted on Railway.
+Hosted UI for editing test cases, kicking off runs, and viewing reports.
+Primary storage is Supabase (Auth + Postgres + Storage). GitHub/local-file
+storage can be enabled only for legacy/local development.
 
 Env vars required:
-  GITHUB_TOKEN      — personal access token (repo scope)
-  GITHUB_REPO       — e.g. "abdul-asmi/asmi-eval"
-  GITHUB_FILE_PATH  — e.g. "test_cases.py"
+  SUPABASE_URL              — https://<project-ref>.supabase.co
+  SUPABASE_ANON_KEY         — public anon key (browser + server)
+  SUPABASE_SERVICE_ROLE_KEY — server-only service role key
+  DAEMON_TOKEN              — shared secret for daemon → server POSTs (recommended)
+
+Optional:
+  LEGACY_GITHUB_ENABLE — set to "1" to enable GitHub write-back for local dev
+  GITHUB_TOKEN / GITHUB_REPO / GITHUB_FILE_PATH — legacy GitHub storage settings
   PORT              — optional, defaults to 8765
 """
 
@@ -24,6 +31,7 @@ from collections import Counter
 from datetime import datetime
 import urllib.request
 import urllib.error
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -31,6 +39,23 @@ from zoneinfo import ZoneInfo
 import google.genai as genai
 from report import generate as generate_report
 from test_case_store import _extract_test_cases
+from supabase_helpers import (
+    SupabaseError,
+    SUPABASE_ANON_KEY,
+    SUPABASE_URL,
+    bearer_from_request_headers,
+    sb_service_get,
+    sb_service_patch,
+    sb_service_post,
+    sb_user_get,
+    sb_user_post_ex,
+    sb_user_patch_ex,
+    storage_create_signed_url,
+    storage_upload_bytes,
+    sha256_hex,
+    iso_utc_now,
+    verify_supabase_jwt,
+)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-preview")
 
@@ -50,7 +75,11 @@ _run_progress    = {}     # dict {current_test, current_category, completed, tot
 _run_queue       = []     # ordered list of {id, name, category, status}
 _skip_requested  = set()  # test IDs to skip before they start
 
+USE_SUPABASE = bool((SUPABASE_URL or "").strip())
+
 PORT      = int(os.environ.get("PORT", 8765))
+DAEMON_TOKEN = os.environ.get("DAEMON_TOKEN", "").strip()
+LEGACY_GITHUB_ENABLE = os.environ.get("LEGACY_GITHUB_ENABLE", "").strip() == "1"
 GH_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
 GH_REPO   = os.environ.get("GITHUB_REPO", "")
 GH_FILE   = os.environ.get("GITHUB_FILE_PATH", "test_cases.py")
@@ -59,7 +88,7 @@ GH_FILE   = os.environ.get("GITHUB_FILE_PATH", "test_cases.py")
 LOCAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_cases.py")
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
 OVERALL_ANALYSIS_FILE = os.path.join(REPORTS_DIR, "overall_analysis.json")
-USE_GITHUB = bool(GH_TOKEN and GH_REPO)
+USE_GITHUB = bool(LEGACY_GITHUB_ENABLE and GH_TOKEN and GH_REPO)
 
 ASMI_TARGET_HANDLES = {
     "dev": "+14082307921",
@@ -168,6 +197,133 @@ def save_test_cases(cases: list):
         src = re.sub(r'TEST_CASES\s*=\s*\[.*\]', new_list, src, flags=re.DOTALL)
         with open(LOCAL_FILE, "w") as f:
             f.write(src)
+
+
+def load_test_cases_supabase(token: str) -> list[dict]:
+    """
+    Load current user's test cases from Supabase Postgres.
+    Returns a list of test case dicts matching the UI shape (with `id` set).
+    """
+    status, rows = sb_user_get(
+        "/rest/v1/test_cases",
+        token=token,
+        params={
+            "select": "external_id,definition,enabled,category,name,type,updated_at",
+            "order": "external_id.asc",
+        },
+    )
+    if status >= 300:
+        raise SupabaseError(f"Failed to load test cases: {rows}")
+    out: list[dict] = []
+    for r in (rows or []):
+        definition = r.get("definition") if isinstance(r, dict) else None
+        tc = dict(definition) if isinstance(definition, dict) else {}
+        tc["id"] = r.get("external_id") or tc.get("id")
+        # Prefer top-level columns if present
+        for k in ("category", "name", "type"):
+            if r.get(k) is not None:
+                tc[k] = r.get(k)
+        if r.get("enabled") is not None:
+            tc["enabled"] = bool(r.get("enabled"))
+        out.append(tc)
+    return out
+
+
+def save_test_cases_supabase(token: str, user_id: str, cases: list[dict]) -> None:
+    """
+    Upsert cases into `test_cases` and append a new `test_case_versions` row per item.
+    Notes:
+      - This is designed for "Save all" UI behavior.
+      - It does not attempt to diff fields; it records a new version every time.
+    """
+    payload = []
+    for tc in cases or []:
+        if not isinstance(tc, dict):
+            continue
+        external_id = str(tc.get("id") or "").strip()
+        if not external_id:
+            continue
+        payload.append({
+            "owner_user_id": user_id,
+            "external_id": external_id,
+            "category": tc.get("category"),
+            "name": tc.get("name"),
+            "type": tc.get("type"),
+            "enabled": bool(tc.get("enabled", True)),
+            "definition": tc,
+        })
+
+    if not payload:
+        return
+
+    # Upsert main rows
+    status, data = sb_user_post_ex(
+        "/rest/v1/test_cases",
+        token=token,
+        params={"on_conflict": "owner_user_id,external_id"},
+        json_body=payload,
+        headers={"Prefer": "resolution=merge-duplicates"},
+    )
+    if status >= 300:
+        raise SupabaseError(f"Failed to save test cases: {data}")
+
+    # Read back ids + latest_version so we can append version rows.
+    # (We do this in one round trip by selecting matching external_id set.)
+    external_ids = [row["external_id"] for row in payload]
+    status, rows = sb_user_get(
+        "/rest/v1/test_cases",
+        token=token,
+        params={
+            "select": "id,external_id,latest_version",
+            "external_id": f"in.({','.join(external_ids)})",
+        },
+    )
+    if status >= 300:
+        raise SupabaseError(f"Failed to read back test cases: {rows}")
+
+    id_by_external = {r.get("external_id"): r for r in (rows or []) if isinstance(r, dict)}
+    version_rows = []
+    patch_rows = []
+    for row in payload:
+        ext = row["external_id"]
+        rec = id_by_external.get(ext) or {}
+        tc_id = rec.get("id")
+        latest_version = int(rec.get("latest_version") or 1)
+        new_version = latest_version + 1
+        if not tc_id:
+            continue
+        version_rows.append({
+            "test_case_id": tc_id,
+            "version": new_version,
+            "definition": row["definition"],
+            "editor_user_id": user_id,
+            "change_note": "Saved via UI",
+        })
+        patch_rows.append({"id": tc_id, "latest_version": new_version})
+
+    if version_rows:
+        status, data = sb_user_post_ex(
+            "/rest/v1/test_case_versions",
+            token=token,
+            json_body=version_rows,
+            headers={"Prefer": "resolution=merge-duplicates"},
+        )
+        if status >= 300:
+            raise SupabaseError(f"Failed to write test case versions: {data}")
+
+    if patch_rows:
+        # Patch latest_version for each record. PostgREST doesn't support bulk PATCH without filters,
+        # so we do a best-effort per-row patch.
+        for pr in patch_rows:
+            tid = pr["id"]
+            status, data = sb_user_patch_ex(
+                "/rest/v1/test_cases",
+                token=token,
+                params={"id": f"eq.{tid}"},
+                json_body={"latest_version": pr["latest_version"]},
+                headers={"Prefer": "return=minimal"},
+            )
+            # If this fails, ignore; version rows still exist.
 
 
 def _build_run_queue(data: dict) -> list[dict]:
@@ -999,6 +1155,26 @@ textarea { resize: vertical; min-height: 70px; }
 </head>
 <body>
 
+<div id="authOverlay" style="position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:9999;">
+  <div style="width:min(420px,92vw);background:#0b1220;border:1px solid #1e293b;border-radius:14px;padding:18px 18px 14px;color:#e2e8f0;box-shadow:0 10px 30px rgba(0,0,0,.35);">
+    <div style="font-weight:900;font-size:1.05rem;margin-bottom:6px;">Sign in</div>
+    <div style="color:#94a3b8;font-size:0.86rem;line-height:1.4;margin-bottom:14px;">Use your email/password (Supabase Auth).</div>
+    <div style="display:grid;gap:10px;">
+      <input id="authEmail" type="text" placeholder="Email" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid #1e293b;background:#0f172a;color:#e2e8f0;">
+      <input id="authPass" type="password" placeholder="Password" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid #1e293b;background:#0f172a;color:#e2e8f0;">
+      <button id="authSignInBtn" style="width:100%;padding:10px 12px;border-radius:10px;border:none;background:#3b82f6;color:white;font-weight:800;cursor:pointer;">Sign in</button>
+      <button id="authSignUpBtn" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid #334155;background:transparent;color:#e2e8f0;font-weight:800;cursor:pointer;">Create account</button>
+      <div id="authMsg" style="min-height:18px;color:#fca5a5;font-size:0.82rem;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.__SUPABASE_URL = "__SUPABASE_URL__";
+  window.__SUPABASE_ANON_KEY = "__SUPABASE_ANON_KEY__";
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <header>
   <img class="brand-logo" src="data:image/jpeg;base64,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" alt="Asmi logo">
   <div class="header-text">
@@ -1345,6 +1521,78 @@ textarea { resize: vertical; min-height: 70px; }
   </div>
 </div>
 <script>
+const SB_URL = (window.__SUPABASE_URL || '').trim();
+const SB_KEY = (window.__SUPABASE_ANON_KEY || '').trim();
+if (!SB_URL || !SB_KEY || !window.supabase) {
+  const el = document.getElementById('authMsg');
+  if (el) el.textContent = 'Missing Supabase config (SUPABASE_URL / SUPABASE_ANON_KEY).';
+}
+const sb = (SB_URL && SB_KEY && window.supabase)
+  ? window.supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:true, autoRefreshToken:true}})
+  : null;
+
+let _accessToken = '';
+let _userId = '';
+
+function _setAuthMsg(msg, isOk=false) {
+  const el = document.getElementById('authMsg');
+  if (!el) return;
+  el.style.color = isOk ? '#86efac' : '#fca5a5';
+  el.textContent = msg || '';
+}
+
+async function apiFetch(url, options={}) {
+  const opts = Object.assign({}, options || {});
+  opts.headers = Object.assign({}, (options && options.headers) ? options.headers : {});
+  if (_accessToken) opts.headers['Authorization'] = 'Bearer ' + _accessToken;
+  return fetch(url, opts);
+}
+
+async function _loadSession() {
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  const session = data ? data.session : null;
+  _accessToken = session && session.access_token ? session.access_token : '';
+  _userId = session && session.user ? (session.user.id || '') : '';
+  return session;
+}
+
+async function _ensureSignedIn() {
+  const session = await _loadSession();
+  const overlay = document.getElementById('authOverlay');
+  if (session && overlay) overlay.style.display = 'none';
+  if (!session && overlay) overlay.style.display = 'flex';
+  return !!session;
+}
+
+async function _initAuthUI() {
+  if (!sb) return;
+  document.getElementById('authSignInBtn').onclick = async () => {
+    _setAuthMsg('Signing in…', true);
+    const email = (document.getElementById('authEmail').value || '').trim();
+    const pass  = (document.getElementById('authPass').value || '').trim();
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) _setAuthMsg(error.message || 'Sign in failed');
+    else { _setAuthMsg('', true); await _ensureSignedIn(); load(); }
+  };
+  document.getElementById('authSignUpBtn').onclick = async () => {
+    _setAuthMsg('Creating account… (check email to confirm)', true);
+    const email = (document.getElementById('authEmail').value || '').trim();
+    const pass  = (document.getElementById('authPass').value || '').trim();
+    const { error } = await sb.auth.signUp({ email, password: pass });
+    if (error) _setAuthMsg(error.message || 'Sign up failed');
+    else _setAuthMsg('Account created. Please confirm your email, then sign in.', true);
+  };
+  sb.auth.onAuthStateChange(async (_event, session) => {
+    _accessToken = session && session.access_token ? session.access_token : '';
+    _userId = session && session.user ? (session.user.id || '') : '';
+    await _ensureSignedIn();
+  });
+  await _ensureSignedIn();
+}
+
+_initAuthUI();
+
 let tests = [];
 let _editingId = null;
 let collapsedCats = new Set();
@@ -1601,7 +1849,7 @@ function autoGenerateId() {
 	  renderRunQueuePanel({status:'idle', queue:[]});
 	  document.getElementById('testList').innerHTML = '<p style="color:#94a3b8;padding:20px">Loading test cases…</p>';
 	  try {
-	    const res = await fetch('/api/tests');
+	    const res = await apiFetch('/api/tests');
 	    tests = await res.json();
     if (tests.error) throw new Error(tests.error);
     collapsedCats = new Set(_allCategories());
@@ -1614,7 +1862,7 @@ function autoGenerateId() {
          <div style="color:#ef4444;font-weight:800;margin-bottom:6px;">Failed to load test cases</div>
          <div style="color:#ef4444;font-family:monospace;font-size:0.85rem;white-space:pre-wrap;">${msg}</div>
          <div style="margin-top:10px;color:#64748b;font-size:0.86rem;line-height:1.5;">
-           If running on Railway with GitHub storage enabled, set <code>GITHUB_TOKEN</code>, <code>GITHUB_REPO</code>, and optional <code>GITHUB_FILE_PATH</code>.
+           Legacy mode only: if you enable GitHub storage (<code>LEGACY_GITHUB_ENABLE=1</code>), set <code>GITHUB_TOKEN</code>, <code>GITHUB_REPO</code>, and optional <code>GITHUB_FILE_PATH</code>.
            Otherwise unset them to use the repo’s local <code>test_cases.py</code>.
          </div>
        </div>`;
@@ -2021,7 +2269,7 @@ async function saveAll() {
     btn.classList.add('saving');
   }
   try {
-    const res = await fetch('/api/tests', {
+    const res = await apiFetch('/api/tests', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(tests),
@@ -2253,7 +2501,7 @@ async function _triggerRun(payload) {
                 payload.category ? `category: ${payload.category}` :
                 payload.categories ? `categories: ${payload.categories.join(',')}` : 'all tests';
   try {
-    const res = await fetch('/api/run', {
+    const res = await apiFetch('/api/run', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload),
@@ -2303,7 +2551,7 @@ function _openOutput(label) {
 async function stopRun() {
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('outputStatus').textContent = 'Stopping…';
-  try { await fetch('/api/stop', {method:'POST'}); } catch(e) {}
+  try { await apiFetch('/api/stop', {method:'POST'}); } catch(e) {}
   toast('Stop signal sent — judging captured results so far');
 }
 
@@ -2313,7 +2561,7 @@ async function stopRun() {
 
 async function skipQueuedTest(id) {
   try {
-    const res = await fetch('/api/skip-test', {
+    const res = await apiFetch('/api/skip-test', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({id}),
@@ -2398,7 +2646,7 @@ function _cleanOutput(text) {
 
 async function _pollOutput() {
   try {
-    const res  = await fetch('/api/output');
+    const res  = await apiFetch('/api/output');
     const data = await res.json();
     renderRunQueuePanel(data);
     const secs = Math.round((Date.now() - _runStart) / 1000);
@@ -2586,7 +2834,7 @@ async function _runBehaviorAnalysis(results) {
   panel.style.display = 'block';
   box.textContent = 'Analyzing all responses together…';
   try {
-    const res  = await fetch('/api/analyze', {
+    const res  = await apiFetch('/api/analyze', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({results}),
     });
@@ -2595,7 +2843,7 @@ async function _runBehaviorAnalysis(results) {
       _lastRunAnalysis = data.analysis;
       box.textContent  = data.analysis;
       // Auto-save to ASMI_BEHAVIOR_ANALYSIS.md
-      await fetch('/api/save-behavior', {
+      await apiFetch('/api/save-behavior', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({content: data.analysis}),
       });
@@ -2611,7 +2859,7 @@ async function _runBehaviorAnalysis(results) {
 async function saveBehaviorFromRun() {
   if (!_lastRunAnalysis) { alert('No analysis yet'); return; }
   try {
-    const res  = await fetch('/api/save-behavior', {
+    const res  = await apiFetch('/api/save-behavior', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({content: _lastRunAnalysis}),
     });
@@ -2699,7 +2947,7 @@ async function importTestsCSV(ev) {
   if (!file) return;
   try {
     const text = await file.text();
-    const res = await fetch('/api/tests/import', {
+    const res = await apiFetch('/api/tests/import', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({csv: text, mode: 'upsert'}),
@@ -2728,7 +2976,7 @@ async function renameCategory(cat) {
   if (name === cat) return;
   tests.forEach(t => { if (t.category === cat) t.category = name; });
   try {
-    const res = await fetch('/api/tests', {
+    const res = await apiFetch('/api/tests', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(tests),
@@ -2748,7 +2996,7 @@ async function deleteCategory(cat) {
   if (!confirm(`Delete category "${cat}" and ALL ${items.length} test(s) in it? This cannot be undone.`)) return;
   tests = tests.filter(t => t.category !== cat);
   try {
-    const res = await fetch('/api/tests', {
+    const res = await apiFetch('/api/tests', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(tests),
@@ -2785,7 +3033,7 @@ async function generateTests() {
   btn.disabled = true;
 
   try {
-    const res  = await fetch('/api/generate', {
+    const res  = await apiFetch('/api/generate', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({prompt, count, category: cat}),
     });
@@ -2842,7 +3090,7 @@ async function saveAndRunGenerated() {
   // Merge generated tests into main test list and save
   const merged = tests.filter(t => t.category !== 'generated').concat(generatedTests);
   try {
-    await fetch('/api/tests', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(merged)});
+    await apiFetch('/api/tests', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(merged)});
   } catch(e) { alert('Save failed: ' + e.message); btn.disabled = false; return; }
   tests = merged;
   render();
@@ -2850,7 +3098,7 @@ async function saveAndRunGenerated() {
   // Trigger run for category "generated"
   document.getElementById('genRunStatus').textContent = 'Queued for daemon…';
   const target = getAsmiTarget();
-  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({category:'generated', asmi_target:target.key, asmi_handle:target.handle})});
+  const res  = await apiFetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({category:'generated', asmi_target:target.key, asmi_handle:target.handle})});
   const data = await res.json();
   if (!data.ok) { alert('Run failed'); btn.disabled = false; return; }
   document.getElementById('genRunStatus').textContent = 'Queued for daemon…';
@@ -2869,7 +3117,7 @@ async function runSingleGenerated(idx) {
   const without = tests.filter(t => t.id !== test.id);
   const merged  = without.concat([test]);
   try {
-    await fetch('/api/tests', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(merged)});
+    await apiFetch('/api/tests', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(merged)});
     tests = merged;
   } catch(e) { alert('Save failed'); if (btn) btn.disabled = false; return; }
 
@@ -2878,7 +3126,7 @@ async function runSingleGenerated(idx) {
   resultEl.innerHTML = '<span style="color:#7c3aed;font-size:0.82rem;">Sending to daemon…</span>';
 
   const target = getAsmiTarget();
-  const res  = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: test.id, asmi_target:target.key, asmi_handle:target.handle})});
+  const res  = await apiFetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: test.id, asmi_target:target.key, asmi_handle:target.handle})});
   const data = await res.json();
   if (!data.ok) { resultEl.innerHTML = '<span style="color:red">Run failed</span>'; if (btn) btn.disabled = false; return; }
 
@@ -2889,7 +3137,7 @@ async function runSingleGenerated(idx) {
 
 async function _pollGeneratedRun() {
   try {
-    const res  = await fetch('/api/output');
+    const res  = await apiFetch('/api/output');
     const data = await res.json();
     const secs = Math.round((Date.now() - _genRunStart) / 1000);
     if (data.status === 'running') {
@@ -2910,7 +3158,7 @@ async function _pollGeneratedRun() {
 
 async function _pollSingleGenRun(idx) {
   try {
-    const res  = await fetch('/api/output');
+    const res  = await apiFetch('/api/output');
     const data = await res.json();
     const secs = Math.round((Date.now() - _genRunStart) / 1000);
     const resultEl = document.getElementById('gen_result_' + idx);
@@ -2951,7 +3199,7 @@ async function _fetchGenAnalysis(results) {
   document.getElementById('genAnalysisSection').style.display = 'block';
   document.getElementById('genAnalysisBox').textContent = 'Analyzing all results together…';
   try {
-    const res  = await fetch('/api/analyze', {
+    const res  = await apiFetch('/api/analyze', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({results}),
     });
@@ -2970,7 +3218,7 @@ async function _fetchGenAnalysis(results) {
 async function saveBehaviorAnalysis() {
   if (!_lastAnalysis) { alert('No analysis to save'); return; }
   try {
-    const res  = await fetch('/api/save-behavior', {
+    const res  = await apiFetch('/api/save-behavior', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({content: _lastAnalysis}),
     });
@@ -3061,7 +3309,7 @@ async function loadHistory(silent = false) {
   const historyList = document.getElementById('historyList');
   if (!silent) historyList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Loading…</p>';
   try {
-    const res = await fetch('/api/history');
+    const res = await apiFetch('/api/history');
     const data = await res.json();
     if (data.length === 0) {
       historyList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">No reports yet.</p>';
@@ -3083,6 +3331,7 @@ async function loadHistory(silent = false) {
       const formatted = formatTimestamp(ts);
       const passPct = run.total > 0 ? Math.round((run.passed / run.total) * 100) : 0;
       const passColor = passPct === 100 ? '#16a34a' : passPct >= 80 ? '#f59e0b' : '#dc2626';
+      const runKey = run.run_id || run.stem;
       html += `<tr style="border-bottom:1px solid #f1f5f9;">
         <td style="padding:12px;font-size:0.88rem;color:#1e293b;">${formatted}</td>
         <td style="padding:12px;text-align:center;font-size:0.88rem;color:#475569;">${run.total}</td>
@@ -3091,9 +3340,9 @@ async function loadHistory(silent = false) {
         <td style="padding:12px;text-align:center;font-size:0.88rem;color:#b45309;font-weight:600;">${run.unclear}</td>
         <td style="padding:12px;text-align:center;font-size:0.88rem;font-weight:700;color:${passColor};">${passPct}%</td>
         <td style="padding:12px;text-align:center;font-size:0.85rem;">
-          ${run.has_report ? `<button class="btn btn-primary" style="padding:4px 10px;font-size:0.75rem;margin-right:4px;" onclick="location.href='/api/report/${run.stem}'">View</button>` : ''}
-          ${run.has_report ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:0.75rem;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;margin-right:4px;" onclick="location.href='/api/report/${run.stem}?dl=1'">Download</button>` : '<span style="color:#94a3b8;margin-right:8px">No report</span>'}
-          <button class="btn btn-danger" style="padding:4px 10px;font-size:0.75rem;" onclick="deleteRun('${run.stem}')">Delete</button>
+          ${run.has_report ? `<button class="btn btn-primary" style="padding:4px 10px;font-size:0.75rem;margin-right:4px;" onclick="location.href='/api/report/${runKey}'">View</button>` : ''}
+          ${run.has_report ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:0.75rem;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;margin-right:4px;" onclick="downloadReport('${runKey}', ${run.run_id ? 'true' : 'false'})">Download</button>` : '<span style="color:#94a3b8;margin-right:8px">No report</span>'}
+          <button class="btn btn-danger" style="padding:4px 10px;font-size:0.75rem;" onclick="deleteRun('${runKey}', ${run.run_id ? 'true' : 'false'})">Delete</button>
         </td>
       </tr>`;
     });
@@ -3104,14 +3353,33 @@ async function loadHistory(silent = false) {
   }
 }
 
-async function deleteRun(stem) {
-  if (!stem) return;
-  if (!confirm(`Delete run ${formatTimestamp(stem)}?\n\nThis removes its saved results + report and it will no longer affect Analysis.`)) return;
+async function downloadReport(key, isRunId=false) {
+  if (!key) return;
+  if (!isRunId) {
+    location.href = `/api/report/${key}?dl=1`;
+    return;
+  }
   try {
-    const res = await fetch('/api/delete-run', {
+    const res = await apiFetch(`/api/artifact-signed?run_id=${encodeURIComponent(key)}&kind=report_html`);
+    const data = await res.json();
+    if (data && data.url) {
+      location.href = data.url;
+    } else {
+      location.href = `/api/report/${key}?dl=1`;
+    }
+  } catch(e) {
+    location.href = `/api/report/${key}?dl=1`;
+  }
+}
+
+async function deleteRun(key, isRunId=false) {
+  if (!key) return;
+  if (!confirm(`Delete run ${formatTimestamp(key)}?\n\nThis removes its saved results + report and it will no longer affect Analysis.`)) return;
+  try {
+    const res = await apiFetch('/api/delete-run', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({stem}),
+      body: JSON.stringify(isRunId ? {run_id: key} : {stem: key}),
     });
     const data = await res.json();
     if (!data.ok) {
@@ -3128,16 +3396,21 @@ async function deleteRun(stem) {
 }
 
 function formatTimestamp(stem) {
-  const match = String(stem).match(/(\\d{4})(\\d{2})(\\d{2})_?(\\d{2})(\\d{2})(\\d{2})?/);
-  if (!match) return stem || '';
-  const year = parseInt(match[1], 10);
-  const month = parseInt(match[2], 10);
-  const day = parseInt(match[3], 10);
-  const hour = parseInt(match[4], 10);
-  const min = parseInt(match[5], 10);
-  const sec = parseInt(match[6] || '0', 10);
-  const pad = n => String(n).padStart(2, '0');
-  return `${pad(month)}/${pad(day)}/${year} ${pad(hour)}:${pad(min)}:${pad(sec)} ET`;
+  const raw = String(stem || '').trim();
+  const match = raw.match(/(\\d{4})(\\d{2})(\\d{2})_?(\\d{2})(\\d{2})(\\d{2})?/);
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    const hour = parseInt(match[4], 10);
+    const min = parseInt(match[5], 10);
+    const sec = parseInt(match[6] || '0', 10);
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(month)}/${pad(day)}/${year} ${pad(hour)}:${pad(min)}:${pad(sec)} ET`;
+  }
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) return formatDisplayTimestamp(raw);
+  return raw;
 }
 
 function formatDisplayTimestamp(value) {
@@ -3340,7 +3613,7 @@ async function loadResponses(silent = false) {
     historyBtn.style.color = _responsesViewMode === 'history' ? '#3730a3' : '#0f172a';
   }
   try {
-    const res = await fetch('/api/responses');
+    const res = await apiFetch('/api/responses');
     const data = await res.json();
     if (!data || !data.length) {
       responsesList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">No responses yet.</p>';
@@ -3399,7 +3672,7 @@ async function loadAnalysis(silent = false) {
     listEl.innerHTML = '';
   }
   try {
-    const res = await fetch('/api/analysis');
+    const res = await apiFetch('/api/analysis');
     const data = await res.json();
     const s = data.summary || {total:0, passed:0, failed:0, unclear:0, pass_rate:0};
     summaryEl.innerHTML = `
@@ -3440,8 +3713,12 @@ async function loadAnalysis(silent = false) {
   }
 }
 
-load();
-_startHistoryAutoRefresh();
+(async () => {
+  const ok = await _ensureSignedIn();
+  if (!ok) return;
+  load();
+  _startHistoryAutoRefresh();
+})();
 </script>
 </body>
 </html>
@@ -3454,13 +3731,48 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def _unauthorized(self, msg: str = "unauthorized", code: int = 401):
+        body = json.dumps({"ok": False, "error": msg}).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
+
+    def _require_user(self) -> tuple[str, str]:
+        token = bearer_from_request_headers(self.headers)
+        if not token:
+            raise SupabaseError("Missing Authorization Bearer token")
+        claims = verify_supabase_jwt(token)
+        user_id = str(claims.get("sub") or "").strip()
+        if not user_id:
+            raise SupabaseError("Missing user id in token")
+        return token, user_id
+
+    def _require_daemon(self) -> str:
+        if DAEMON_TOKEN:
+            got = (self.headers.get("X-Daemon-Token") or "").strip()
+            if not got or got != DAEMON_TOKEN:
+                raise SupabaseError("Invalid daemon token")
+        owner = (self.headers.get("X-Owner-User-Id") or "").strip()
+        if not owner:
+            raise SupabaseError("Missing X-Owner-User-Id")
+        return owner
+
     def do_GET(self):
         global _pending_run, _last_heartbeat, _stop_requested
         path = urlparse(self.path).path
         try:
             if path == "/api/tests":
                 try:
-                    cases = load_test_cases()
+                    if USE_SUPABASE:
+                        token, _uid = self._require_user()
+                        cases = load_test_cases_supabase(token)
+                    else:
+                        cases = load_test_cases()
                     self._json(cases)
                 except Exception as e:
                     self._json({"error": str(e)})
@@ -3471,83 +3783,305 @@ class Handler(BaseHTTPRequestHandler):
                 content = _csv_full_template_bytes()
                 self._csv(content, filename="test_cases_template_full.csv")
             elif path == "/api/tests/export.csv":
-                cases = load_test_cases()
+                if USE_SUPABASE:
+                    token, _uid = self._require_user()
+                    cases = load_test_cases_supabase(token)
+                else:
+                    cases = load_test_cases()
                 content = _tests_to_csv_bytes(cases)
                 self._csv(content, filename="test_cases_export.csv")
             elif path == "/api/poll":
                 _last_heartbeat = time.time()
-                run = _pending_run
-                stop = _stop_requested
-                _stop_requested = False
-                self._json({"run": run, "stop": stop, "skip_ids": sorted(_skip_requested)})
+                if USE_SUPABASE:
+                    owner_user_id = self._require_daemon()
+                    # Fetch oldest queued run for this owner
+                    status, rows = sb_service_get(
+                        "/rest/v1/runs",
+                        params={
+                            "select": "id,selection,test_cases_snapshot,asmi_target,asmi_handle,progress",
+                            "owner_user_id": f"eq.{owner_user_id}",
+                            "status": "eq.queued",
+                            "order": "created_at.asc",
+                            "limit": 1,
+                        },
+                    )
+                    if status >= 300:
+                        self._json({"run": None, "stop": False, "skip_ids": []})
+                        return
+                    run_row = (rows or [None])[0] if isinstance(rows, list) else None
+                    if not run_row:
+                        self._json({"run": None, "stop": False, "skip_ids": []})
+                        return
+                    run_id = run_row.get("id")
+                    selection = run_row.get("selection") if isinstance(run_row.get("selection"), dict) else {}
+                    payload = {
+                        "run_id": run_id,
+                        "category": selection.get("category"),
+                        "categories": selection.get("categories"),
+                        "id": selection.get("id"),
+                        "ids": selection.get("ids"),
+                        "interactive_auto_continue": bool(selection.get("interactive_auto_continue", True)),
+                        "asmi_target": run_row.get("asmi_target"),
+                        "asmi_handle": run_row.get("asmi_handle"),
+                        "test_cases": run_row.get("test_cases_snapshot") or [],
+                        "ts": time.time(),
+                    }
+                    progress = run_row.get("progress") if isinstance(run_row.get("progress"), dict) else {}
+                    # Mark as running (best-effort)
+                    sb_service_patch(
+                        "/rest/v1/runs",
+                        params={"id": f"eq.{run_id}"},
+                        json_body={"status": "running", "started_at": iso_utc_now(), "trigger": "daemon"},
+                    )
+                    self._json({
+                        "run": payload,
+                        "stop": bool(progress.get("stop")),
+                        "skip_ids": progress.get("skip_ids") or [],
+                    })
+                else:
+                    run = _pending_run
+                    stop = _stop_requested
+                    _stop_requested = False
+                    self._json({"run": run, "stop": stop, "skip_ids": sorted(_skip_requested)})
             elif path == "/api/output":
-                self._json({
-                    "status":   _run_status,
-                    "output":   _run_output,
-                    "results":  _run_results,
-                    "elapsed":  int(time.time() - _run_started) if _run_started else 0,
-                    "progress": _run_progress,
-                    "queue":    _queue_with_status(),
-                })
+                if USE_SUPABASE:
+                    token, uid = self._require_user()
+                    status, rows = sb_user_get(
+                        "/rest/v1/runs",
+                        token=token,
+                        params={
+                            "select": "id,status,output,results,progress,started_at,updated_at,asmi_target,asmi_handle",
+                            "owner_user_id": f"eq.{uid}",
+                            "order": "created_at.desc",
+                            "limit": 1,
+                        },
+                    )
+                    if status >= 300:
+                        self._json({"status": "idle", "output": "", "results": [], "elapsed": 0, "progress": {}, "queue": []})
+                        return
+                    r = (rows or [None])[0] if isinstance(rows, list) else None
+                    if not r:
+                        self._json({"status": "idle", "output": "", "results": [], "elapsed": 0, "progress": {}, "queue": []})
+                        return
+                    self._json({
+                        "status": r.get("status") or "idle",
+                        "output": r.get("output") or "",
+                        "results": r.get("results") or [],
+                        "report_html": r.get("report_html") or "",
+                        "elapsed": 0,
+                        "progress": r.get("progress") or {},
+                        "queue": [],
+                        "run_id": r.get("id"),
+                        "asmi_target": r.get("asmi_target"),
+                        "asmi_handle": r.get("asmi_handle"),
+                    })
+                else:
+                    self._json({
+                        "status":   _run_status,
+                        "output":   _run_output,
+                        "results":  _run_results,
+                        "elapsed":  int(time.time() - _run_started) if _run_started else 0,
+                        "progress": _run_progress,
+                        "queue":    _queue_with_status(),
+                    })
             elif path == "/api/progress":
                 self._json(_run_progress)
-            elif path == "/health":
-                self._json({"ok": True, "github": USE_GITHUB, "repo": GH_REPO})
+            elif path == "/api/artifact-signed":
+                if not USE_SUPABASE:
+                    self._json({"ok": False, "error": "Not available in legacy mode"})
+                    return
+                token, uid = self._require_user()
+                qs = urllib.parse.parse_qs(urlparse(self.path).query)
+                run_id = (qs.get("run_id", [""])[0] or "").strip()
+                kind = (qs.get("kind", [""])[0] or "").strip()
+                if not run_id or not kind:
+                    self._json({"ok": False, "error": "Missing run_id/kind"})
+                    return
+                # Verify ownership of run_id
+                status, rows = sb_user_get(
+                    "/rest/v1/runs",
+                    token=token,
+                    params={"select": "id", "id": f"eq.{run_id}", "owner_user_id": f"eq.{uid}", "limit": 1},
+                )
+                if status >= 300 or not isinstance(rows, list) or not rows:
+                    self._json({"ok": False, "error": "Not found"})
+                    return
+                # Prefer artifacts table
+                status, artifacts = sb_service_get(
+                    "/rest/v1/artifacts",
+                    params={
+                        "select": "bucket,path",
+                        "run_id": f"eq.{run_id}",
+                        "owner_user_id": f"eq.{uid}",
+                        "kind": f"eq.{kind}",
+                        "limit": 1,
+                    },
+                )
+                if status >= 300 or not isinstance(artifacts, list) or not artifacts:
+                    self._json({"ok": False, "error": "Artifact not found"})
+                    return
+                bucket = artifacts[0].get("bucket") or "artifacts"
+                apath = artifacts[0].get("path") or ""
+                url = storage_create_signed_url(bucket=bucket, path=apath, expires_in=600)
+                self._json({"ok": True, "url": url})
+            elif path in {"/health", "/healthz"}:
+                self._json({"ok": True, "supabase": USE_SUPABASE, "github_legacy": USE_GITHUB, "repo": GH_REPO})
             elif path == "/api/history":
-                files = sorted(
-                    glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
-                    key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
-                    reverse=True,
-                )
-                history = []
-                for f in files:
-                    stem = os.path.basename(f).replace("results_", "").replace(".json", "")
-                    try:
-                        with open(f) as fp:
-                            data = json.load(fp)
-                        passed  = sum(1 for r in data if r.get("verdict") == "PASS")
-                        failed  = sum(1 for r in data if r.get("verdict") == "FAIL")
-                        unclear = sum(1 for r in data if r.get("verdict") == "UNCLEAR")
+                if USE_SUPABASE:
+                    token, uid = self._require_user()
+                    status, rows = sb_user_get(
+                        "/rest/v1/runs",
+                        token=token,
+                        params={
+                            "select": "id,created_at,status,results,report_html",
+                            "owner_user_id": f"eq.{uid}",
+                            "order": "created_at.desc",
+                            "limit": 200,
+                        },
+                    )
+                    if status >= 300:
+                        self._json([])
+                        return
+                    history = []
+                    for r in (rows or []):
+                        results = r.get("results") if isinstance(r, dict) else []
+                        if not isinstance(results, list):
+                            results = []
+                        summary = _result_summary(results)
                         history.append({
-                            "stem":    stem,
-                            "ts":      stem,
-                            "total":   len(data),
-                            "passed":  passed,
-                            "failed":  failed,
-                            "unclear": unclear,
-                            "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{stem}.html")),
+                            "stem": (r.get("id") or "")[:8],
+                            "ts": r.get("created_at"),
+                            "run_id": r.get("id"),
+                            **summary,
+                            "has_report": bool((r.get("report_html") or "").strip()),
+                            "status": r.get("status"),
                         })
-                    except Exception:
-                        pass
-                if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in history):
-                    passed  = sum(1 for r in _run_results if r.get("verdict") == "PASS")
-                    failed  = sum(1 for r in _run_results if r.get("verdict") == "FAIL")
-                    unclear = sum(1 for r in _run_results if r.get("verdict") == "UNCLEAR")
-                    history.insert(0, {
-                        "stem": _run_result_stem,
-                        "ts": _run_result_stem,
-                        "total": len(_run_results),
-                        "passed": passed,
-                        "failed": failed,
-                        "unclear": unclear,
-                        "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{_run_result_stem}.html")),
-                    })
-                self._json(history)
+                    self._json(history)
+                else:
+                    files = sorted(
+                        glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+                        key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
+                        reverse=True,
+                    )
+                    history = []
+                    for f in files:
+                        stem = os.path.basename(f).replace("results_", "").replace(".json", "")
+                        try:
+                            with open(f) as fp:
+                                data = json.load(fp)
+                            passed  = sum(1 for r in data if r.get("verdict") == "PASS")
+                            failed  = sum(1 for r in data if r.get("verdict") == "FAIL")
+                            unclear = sum(1 for r in data if r.get("verdict") == "UNCLEAR")
+                            history.append({
+                                "stem":    stem,
+                                "ts":      stem,
+                                "total":   len(data),
+                                "passed":  passed,
+                                "failed":  failed,
+                                "unclear": unclear,
+                                "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{stem}.html")),
+                            })
+                        except Exception:
+                            pass
+                    if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in history):
+                        passed  = sum(1 for r in _run_results if r.get("verdict") == "PASS")
+                        failed  = sum(1 for r in _run_results if r.get("verdict") == "FAIL")
+                        unclear = sum(1 for r in _run_results if r.get("verdict") == "UNCLEAR")
+                        history.insert(0, {
+                            "stem": _run_result_stem,
+                            "ts": _run_result_stem,
+                            "total": len(_run_results),
+                            "passed": passed,
+                            "failed": failed,
+                            "unclear": unclear,
+                            "has_report": os.path.exists(os.path.join(REPORTS_DIR, f"report_{_run_result_stem}.html")),
+                        })
+                    self._json(history)
             elif path == "/api/responses":
-                files = sorted(
-                    glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
-                    key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
-                    reverse=True,
-                )
-                responses = []
-                for f in files:
-                    stem = os.path.basename(f).replace("results_", "").replace(".json", "")
-                    try:
-                        with open(f) as fp:
-                            data = json.load(fp)
+                if USE_SUPABASE:
+                    token, uid = self._require_user()
+                    status, rows = sb_user_get(
+                        "/rest/v1/runs",
+                        token=token,
+                        params={
+                            "select": "id,created_at,results",
+                            "owner_user_id": f"eq.{uid}",
+                            "order": "created_at.desc",
+                            "limit": 50,
+                        },
+                    )
+                    if status >= 300:
+                        self._json([])
+                        return
+                    responses = []
+                    for r in (rows or []):
+                        results = r.get("results") if isinstance(r, dict) else []
+                        if not isinstance(results, list):
+                            results = []
+                        total_responses = 0
+                        tests = []
+                        for rr in results:
+                            if not isinstance(rr, dict):
+                                continue
+                            tests.append({
+                                "id": rr.get("id"),
+                                "name": rr.get("name"),
+                                "category": rr.get("category"),
+                                "verdict": rr.get("verdict"),
+                                "reason": rr.get("reason"),
+                                "started_at": rr.get("started_at"),
+                                "finished_at": rr.get("finished_at"),
+                                "tasks_sent": rr.get("tasks_sent", []),
+                                "responses": rr.get("responses", []),
+                                "transcript": rr.get("transcript", []),
+                            })
+                            total_responses += len(rr.get("responses", []) or [])
+                        responses.append({
+                            "stem": (r.get("id") or "")[:8],
+                            "run_id": r.get("id"),
+                            "tests": tests,
+                            "totalResponses": total_responses,
+                        })
+                    self._json(responses)
+                else:
+                    files = sorted(
+                        glob.glob(os.path.join(REPORTS_DIR, "results_*.json")),
+                        key=lambda p: _stem_sort_value(os.path.basename(p).replace("results_", "").replace(".json", "")),
+                        reverse=True,
+                    )
+                    responses = []
+                    for f in files:
+                        stem = os.path.basename(f).replace("results_", "").replace(".json", "")
+                        try:
+                            with open(f) as fp:
+                                data = json.load(fp)
+                            tests = []
+                            total_responses = 0
+                            for r in data:
+                                tests.append({
+                                    "id": r.get("id"),
+                                    "name": r.get("name"),
+                                    "category": r.get("category"),
+                                    "verdict": r.get("verdict"),
+                                    "reason": r.get("reason"),
+                                    "started_at": r.get("started_at"),
+                                    "finished_at": r.get("finished_at"),
+                                    "tasks_sent": r.get("tasks_sent", []),
+                                    "responses": r.get("responses", []),
+                                    "transcript": r.get("transcript", []),
+                                })
+                                total_responses += len(r.get("responses", []))
+                            responses.append({
+                                "stem": stem,
+                                "tests": tests,
+                                "totalResponses": total_responses,
+                            })
+                        except Exception:
+                            pass
+                    if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in responses):
                         tests = []
                         total_responses = 0
-                        for r in data:
+                        for r in _run_results:
                             tests.append({
                                 "id": r.get("id"),
                                 "name": r.get("name"),
@@ -3561,59 +4095,104 @@ class Handler(BaseHTTPRequestHandler):
                                 "transcript": r.get("transcript", []),
                             })
                             total_responses += len(r.get("responses", []))
-                        responses.append({
-                            "stem": stem,
+                        responses.insert(0, {
+                            "stem": _run_result_stem,
                             "tests": tests,
                             "totalResponses": total_responses,
                         })
-                    except Exception:
-                        pass
-                if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in responses):
-                    tests = []
-                    total_responses = 0
-                    for r in _run_results:
-                        tests.append({
-                            "id": r.get("id"),
-                            "name": r.get("name"),
-                            "category": r.get("category"),
-                            "verdict": r.get("verdict"),
-                            "reason": r.get("reason"),
-                            "started_at": r.get("started_at"),
-                            "finished_at": r.get("finished_at"),
-                            "tasks_sent": r.get("tasks_sent", []),
-                            "responses": r.get("responses", []),
-                            "transcript": r.get("transcript", []),
-                        })
-                        total_responses += len(r.get("responses", []))
-                    responses.insert(0, {
-                        "stem": _run_result_stem,
-                        "tests": tests,
-                        "totalResponses": total_responses,
-                    })
-                self._json(responses)
+                    self._json(responses)
             elif path == "/api/analysis":
-                self._json(_build_analysis_payload())
+                if USE_SUPABASE:
+                    token, uid = self._require_user()
+                    status, rows = sb_user_get(
+                        "/rest/v1/runs",
+                        token=token,
+                        params={
+                            "select": "id,created_at,results",
+                            "owner_user_id": f"eq.{uid}",
+                            "order": "created_at.desc",
+                            "limit": 200,
+                        },
+                    )
+                    if status >= 300:
+                        self._json({"summary": {"total": 0, "passed": 0, "failed": 0, "unclear": 0, "pass_rate": 0.0}, "overall_analysis": "", "tests": [], "runs": []})
+                        return
+                    # Build analysis from aggregated results
+                    runs = []
+                    tests = []
+                    for r in (rows or []):
+                        stem = (r.get("id") or "")[:8]
+                        data = r.get("results") if isinstance(r, dict) else []
+                        if not isinstance(data, list):
+                            data = []
+                        summary = _result_summary(data)
+                        runs.append({"stem": stem, "ts": r.get("created_at"), **summary, "run_id": r.get("id")})
+                        for rr in data:
+                            if not isinstance(rr, dict):
+                                continue
+                            tests.append({
+                                "stem": stem,
+                                "ts": r.get("created_at"),
+                                "id": rr.get("id"),
+                                "name": rr.get("name"),
+                                "category": rr.get("category"),
+                                "verdict": (rr.get("verdict") or "UNCLEAR").upper(),
+                                "reason": rr.get("reason", ""),
+                                "tasks_sent_count": len(rr.get("tasks_sent", []) or []),
+                                "responses_count": len(rr.get("responses", []) or []),
+                            })
+                    summary = _result_summary(tests)
+                    overall_text = _build_overall_analysis_text(tests, summary)
+                    self._json({"summary": summary, "overall_analysis": overall_text, "tests": tests, "runs": runs})
+                else:
+                    self._json(_build_analysis_payload())
             elif path.startswith("/api/report/"):
-                stem     = path.removeprefix("/api/report/")
-                filepath = os.path.join(REPORTS_DIR, f"report_{stem}.html")
-                qs       = urlparse(self.path).query
-                download = "dl=1" in qs
-                if not os.path.exists(filepath):
-                    self.send_response(404)
+                key = path.removeprefix("/api/report/").strip()
+                if USE_SUPABASE:
+                    token, uid = self._require_user()
+                    run_id = key
+                    status, rows = sb_user_get(
+                        "/rest/v1/runs",
+                        token=token,
+                        params={"select": "id,report_html", "id": f"eq.{run_id}", "owner_user_id": f"eq.{uid}", "limit": 1},
+                    )
+                    if status >= 300 or not rows:
+                        self.send_response(404)
+                        self.end_headers()
+                        return
+                    report_html = (rows[0] or {}).get("report_html") or ""
+                    qs = urlparse(self.path).query
+                    download = "dl=1" in qs
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    if download:
+                        self.send_header("Content-Disposition", f'attachment; filename=\"report_{run_id}.html\"')
                     self.end_headers()
-                    return
-                with open(filepath, "rb") as fp:
-                    content = fp.read()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                if download:
-                    self.send_header("Content-Disposition", f'attachment; filename="report_{stem}.html"')
-                self.end_headers()
-                self.wfile.write(content)
+                    self.wfile.write(report_html.encode("utf-8"))
+                else:
+                    stem     = key
+                    filepath = os.path.join(REPORTS_DIR, f"report_{stem}.html")
+                    qs       = urlparse(self.path).query
+                    download = "dl=1" in qs
+                    if not os.path.exists(filepath):
+                        self.send_response(404)
+                        self.end_headers()
+                        return
+                    with open(filepath, "rb") as fp:
+                        content = fp.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    if download:
+                        self.send_header("Content-Disposition", f'attachment; filename="report_{stem}.html"')
+                    self.end_headers()
+                    self.wfile.write(content)
             else:
-                self._html(HTML)
+                body = HTML.replace("__SUPABASE_URL__", SUPABASE_URL or "").replace("__SUPABASE_ANON_KEY__", SUPABASE_ANON_KEY or "")
+                self._html(body)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
+        except SupabaseError as e:
+            self._unauthorized(str(e))
 
     def do_POST(self):
         global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _run_result_stem, _stop_requested, _run_progress, _run_queue, _skip_requested
@@ -3623,7 +4202,13 @@ class Handler(BaseHTTPRequestHandler):
             body   = self.rfile.read(length)
             try:
                 cases = json.loads(body)
-                save_test_cases(cases)
+                if USE_SUPABASE:
+                    token, uid = self._require_user()
+                    if not isinstance(cases, list):
+                        raise ValueError("Expected a JSON array of test cases")
+                    save_test_cases_supabase(token, uid, cases)
+                else:
+                    save_test_cases(cases)
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
@@ -3637,7 +4222,11 @@ class Handler(BaseHTTPRequestHandler):
                 if mode not in {"upsert", "replace"}:
                     mode = "upsert"
                 incoming, warnings = _import_tests_from_csv(csv_text)
-                existing = load_test_cases()
+                if USE_SUPABASE:
+                    token, uid = self._require_user()
+                    existing = load_test_cases_supabase(token)
+                else:
+                    existing = load_test_cases()
                 existing_by_id = {t.get("id"): t for t in existing if t.get("id")}
 
                 def _cat_prefix(cat: str) -> str:
@@ -3693,7 +4282,10 @@ class Handler(BaseHTTPRequestHandler):
                     for tc in normalized_incoming:
                         by_id[tc["id"]] = tc
                     merged = list(by_id.values())
-                save_test_cases(merged)
+                if USE_SUPABASE:
+                    save_test_cases_supabase(token, uid, merged)
+                else:
+                    save_test_cases(merged)
                 self._json({
                     "ok": True,
                     "count": len(normalized_incoming),
@@ -3741,40 +4333,134 @@ class Handler(BaseHTTPRequestHandler):
                     test_cases_snapshot = load_test_cases()
             except Exception:
                 test_cases_snapshot = []
-            _run_queue = _build_run_queue(data)
-            _skip_requested = set()
-            _pending_run = {
-                "category": cat,
-                "categories": cats,
-                "id":       rid,
-                "ids":      ids,
-                "interactive_auto_continue": bool(data.get("interactive_auto_continue", True)),
-                "asmi_target": asmi_target,
-                "asmi_handle": asmi_handle,
-                "test_cases": test_cases_snapshot,
-                "ts":       time.time(),
-            }
-            _run_output  = ""
-            _run_status  = "running"
-            _run_started = time.time()
-            _run_results = []
-            _run_result_stem = ""
-            mac_online = (time.time() - _last_heartbeat) < 90
-            self._json({"ok": True, "mac_online": mac_online, "asmi_target": asmi_target, "asmi_handle": asmi_handle, "queue": _queue_with_status()})
+            if USE_SUPABASE:
+                token, uid = self._require_user()
+                selection = {
+                    "category": cat,
+                    "categories": cats,
+                    "id": rid,
+                    "ids": ids,
+                    "interactive_auto_continue": bool(data.get("interactive_auto_continue", True)),
+                }
+                status, inserted = sb_user_post_ex(
+                    "/rest/v1/runs",
+                    token=token,
+                    json_body=[{
+                        "owner_user_id": uid,
+                        "status": "queued",
+                        "trigger": "manual",
+                        "asmi_target": asmi_target,
+                        "asmi_handle": asmi_handle,
+                        "selection": selection,
+                        "test_cases_snapshot": test_cases_snapshot,
+                        "progress": {},
+                        "results": [],
+                        "output": "",
+                        "report_html": "",
+                    }],
+                    headers={"Prefer": "return=representation"},
+                )
+                if status >= 300 or not isinstance(inserted, list) or not inserted:
+                    raise SupabaseError(f"Failed to enqueue run: {inserted}")
+                run_id = inserted[0].get("id")
+                mac_online = (time.time() - _last_heartbeat) < 90
+                self._json({"ok": True, "run_id": run_id, "mac_online": mac_online, "asmi_target": asmi_target, "asmi_handle": asmi_handle, "queue": []})
+            else:
+                _run_queue = _build_run_queue(data)
+                _skip_requested = set()
+                _pending_run = {
+                    "category": cat,
+                    "categories": cats,
+                    "id":       rid,
+                    "ids":      ids,
+                    "interactive_auto_continue": bool(data.get("interactive_auto_continue", True)),
+                    "asmi_target": asmi_target,
+                    "asmi_handle": asmi_handle,
+                    "test_cases": test_cases_snapshot,
+                    "ts":       time.time(),
+                }
+                _run_output  = ""
+                _run_status  = "running"
+                _run_started = time.time()
+                _run_results = []
+                _run_result_stem = ""
+                mac_online = (time.time() - _last_heartbeat) < 90
+                self._json({"ok": True, "mac_online": mac_online, "asmi_target": asmi_target, "asmi_handle": asmi_handle, "queue": _queue_with_status()})
         elif path == "/api/output":
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
             try:
                 data = json.loads(body)
-                _run_output      = data.get("output", "")
-                _run_status      = data.get("status", "done")
-                _run_report_html = data.get("report_html", "")
-                _run_results     = data.get("results", [])
-                m = re.search(r"Raw results:\s*\S*results_(\d{8}_?\d{4,6})\.json", _run_output)
-                _run_result_stem = m.group(1) if m else _et_now_str("%Y%m%d_%H%M%S")
-                if _run_status == "done" and _run_results:
-                    _persist_run_artifacts(_run_result_stem, _run_results, _run_report_html)
-                self._json({"ok": True})
+                if USE_SUPABASE:
+                    owner_user_id = self._require_daemon()
+                    run_id = str(data.get("run_id") or "").strip()
+                    if not run_id:
+                        raise SupabaseError("Missing run_id")
+                    output = data.get("output", "") or ""
+                    status_str = data.get("status", "done") or "done"
+                    report_html = data.get("report_html", "") or ""
+                    results = data.get("results", []) or []
+                    if not isinstance(results, list):
+                        results = []
+                    progress = data.get("progress") or {}
+                    # Persist to runs table
+                    sb_service_patch(
+                        "/rest/v1/runs",
+                        params={"id": f"eq.{run_id}", "owner_user_id": f"eq.{owner_user_id}"},
+                        json_body={
+                            "status": status_str,
+                            "output": output,
+                            "report_html": report_html,
+                            "results": results,
+                            "progress": progress if isinstance(progress, dict) else {},
+                            "ended_at": iso_utc_now() if status_str in {"done", "failed", "stopped", "canceled"} else None,
+                        },
+                    )
+                    # Upload artifacts to Storage when done
+                    if status_str == "done" and results:
+                        base = f"{owner_user_id}/{run_id}"
+                        results_bytes = json.dumps(results, indent=2, default=str).encode("utf-8")
+                        storage_upload_bytes(bucket="artifacts", path=f"{base}/results.json", content=results_bytes, content_type="application/json")
+                        sb_service_post(
+                            "/rest/v1/artifacts",
+                            json_body=[{
+                                "run_id": run_id,
+                                "owner_user_id": owner_user_id,
+                                "kind": "results_json",
+                                "bucket": "artifacts",
+                                "path": f"{base}/results.json",
+                                "content_type": "application/json",
+                                "bytes": len(results_bytes),
+                                "sha256": sha256_hex(results_bytes),
+                            }],
+                        )
+                        if report_html.strip():
+                            report_bytes = report_html.encode("utf-8")
+                            storage_upload_bytes(bucket="artifacts", path=f"{base}/report.html", content=report_bytes, content_type="text/html")
+                            sb_service_post(
+                                "/rest/v1/artifacts",
+                                json_body=[{
+                                    "run_id": run_id,
+                                    "owner_user_id": owner_user_id,
+                                    "kind": "report_html",
+                                    "bucket": "artifacts",
+                                    "path": f"{base}/report.html",
+                                    "content_type": "text/html",
+                                    "bytes": len(report_bytes),
+                                    "sha256": sha256_hex(report_bytes),
+                                }],
+                            )
+                    self._json({"ok": True})
+                else:
+                    _run_output      = data.get("output", "")
+                    _run_status      = data.get("status", "done")
+                    _run_report_html = data.get("report_html", "")
+                    _run_results     = data.get("results", [])
+                    m = re.search(r"Raw results:\s*\S*results_(\d{8}_?\d{4,6})\.json", _run_output)
+                    _run_result_stem = m.group(1) if m else _et_now_str("%Y%m%d_%H%M%S")
+                    if _run_status == "done" and _run_results:
+                        _persist_run_artifacts(_run_result_stem, _run_results, _run_report_html)
+                    self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
         elif path == "/api/generate":
@@ -3816,18 +4502,63 @@ class Handler(BaseHTTPRequestHandler):
             body   = self.rfile.read(length)
             try:
                 data = json.loads(body)
-                _run_progress = {
-                    "current_test": data.get("current_test"),
-                    "current_category": data.get("current_category"),
-                    "completed": data.get("completed", 0),
-                    "total": data.get("total", 0),
-                }
-                self._json({"ok": True})
+                if USE_SUPABASE:
+                    owner_user_id = self._require_daemon()
+                    run_id = str(data.get("run_id") or "").strip()
+                    prog = {
+                        "current_test": data.get("current_test"),
+                        "current_category": data.get("current_category"),
+                        "completed": data.get("completed", 0),
+                        "total": data.get("total", 0),
+                    }
+                    if run_id:
+                        sb_service_patch(
+                            "/rest/v1/runs",
+                            params={"id": f"eq.{run_id}", "owner_user_id": f"eq.{owner_user_id}"},
+                            json_body={"progress": prog},
+                        )
+                    self._json({"ok": True})
+                else:
+                    _run_progress = {
+                        "current_test": data.get("current_test"),
+                        "current_category": data.get("current_category"),
+                        "completed": data.get("completed", 0),
+                        "total": data.get("total", 0),
+                    }
+                    self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
         elif path == "/api/stop":
-            _stop_requested = True
-            self._json({"ok": True})
+            if USE_SUPABASE:
+                try:
+                    token, uid = self._require_user()
+                    # Mark latest running run as "stop requested" in progress payload.
+                    status, rows = sb_user_get(
+                        "/rest/v1/runs",
+                        token=token,
+                        params={
+                            "select": "id,progress",
+                            "owner_user_id": f"eq.{uid}",
+                            "status": "eq.running",
+                            "order": "created_at.desc",
+                            "limit": 1,
+                        },
+                    )
+                    if isinstance(rows, list) and rows:
+                        run_id = rows[0].get("id")
+                        progress = rows[0].get("progress") if isinstance(rows[0].get("progress"), dict) else {}
+                        progress["stop"] = True
+                        sb_service_patch(
+                            "/rest/v1/runs",
+                            params={"id": f"eq.{run_id}", "owner_user_id": f"eq.{uid}"},
+                            json_body={"progress": progress},
+                        )
+                    self._json({"ok": True})
+                except Exception as e:
+                    self._json({"ok": False, "error": str(e)})
+            else:
+                _stop_requested = True
+                self._json({"ok": True})
         elif path == "/api/delete-run":
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
@@ -3835,8 +4566,27 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.loads(body) if length else {}
             except Exception:
                 data = {}
+            if USE_SUPABASE:
+                try:
+                    token, uid = self._require_user()
+                except Exception as e:
+                    self._json({"ok": False, "error": str(e)})
+                    return
+                run_id = str(data.get("run_id") or "").strip()
+                if not run_id:
+                    self._json({"ok": False, "error": "Missing run_id"})
+                    return
+                # Soft-delete: mark canceled and clear large fields. Storage objects remain for now.
+                sb_service_patch(
+                    "/rest/v1/runs",
+                    params={"id": f"eq.{run_id}", "owner_user_id": f"eq.{uid}"},
+                    json_body={"status": "canceled", "output": "", "results": [], "report_html": ""},
+                )
+                self._json({"ok": True, "removed": [], "removed_remote": []})
+                return
+
             stem = str(data.get("stem") or "").strip()
-            if not re.match(r"^\d{8}_?\d{4,6}$", stem):
+            if not re.match(r"^\\d{8}_?\\d{4,6}$", stem):
                 self._json({"ok": False, "error": "Invalid stem"})
                 return
             removed = []
@@ -3913,12 +4663,61 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 data = {}
             tid = str(data.get("id") or "").strip()
-            if tid:
-                _skip_requested.add(tid)
-            self._json({"ok": True, "skip_ids": sorted(_skip_requested), "queue": _queue_with_status()})
+            if USE_SUPABASE:
+                try:
+                    token, uid = self._require_user()
+                    # Set skip list on latest running run in progress payload.
+                    status, rows = sb_user_get(
+                        "/rest/v1/runs",
+                        token=token,
+                        params={
+                            "select": "id,progress",
+                            "owner_user_id": f"eq.{uid}",
+                            "status": "eq.running",
+                            "order": "created_at.desc",
+                            "limit": 1,
+                        },
+                    )
+                    if isinstance(rows, list) and rows and tid:
+                        run_id = rows[0].get("id")
+                        progress = rows[0].get("progress") if isinstance(rows[0].get("progress"), dict) else {}
+                        skip_ids = set(progress.get("skip_ids") or [])
+                        skip_ids.add(tid)
+                        progress["skip_ids"] = sorted(skip_ids)
+                        sb_service_patch(
+                            "/rest/v1/runs",
+                            params={"id": f"eq.{run_id}", "owner_user_id": f"eq.{uid}"},
+                            json_body={"progress": progress},
+                        )
+                        self._json({"ok": True, "skip_ids": progress["skip_ids"], "queue": []})
+                    else:
+                        self._json({"ok": True, "skip_ids": [], "queue": []})
+                except Exception as e:
+                    self._json({"ok": False, "error": str(e)})
+            else:
+                if tid:
+                    _skip_requested.add(tid)
+                self._json({"ok": True, "skip_ids": sorted(_skip_requested), "queue": _queue_with_status()})
         elif path == "/api/ack-run":
-            _pending_run = None
-            self._json({"ok": True})
+            if USE_SUPABASE:
+                try:
+                    owner_user_id = self._require_daemon()
+                    length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(length)
+                    data = json.loads(body) if length else {}
+                    run_id = str(data.get("run_id") or data.get("id") or "").strip()
+                    if run_id:
+                        sb_service_patch(
+                            "/rest/v1/runs",
+                            params={"id": f"eq.{run_id}", "owner_user_id": f"eq.{owner_user_id}"},
+                            json_body={"status": "running", "started_at": iso_utc_now()},
+                        )
+                    self._json({"ok": True})
+                except Exception as e:
+                    self._json({"ok": False, "error": str(e)})
+            else:
+                _pending_run = None
+                self._json({"ok": True})
 
     def _html(self, body):
         self.send_response(200)
