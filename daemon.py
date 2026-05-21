@@ -343,7 +343,7 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
                             f.write("stop")
                     except Exception:
                         pass
-            time.sleep(5)
+            time.sleep(1)
 
     # Start background thread for stop checking
     stop_thread = threading.Thread(target=check_stop_periodically, daemon=True)
@@ -577,15 +577,18 @@ def run():
                 target_label = f" target={target_key or 'custom'}:{target_handle}" if target_handle else ""
                 print(f"\n  [{ts}] UI run request: {cmd}{target_label}")
                 _ack_run_to_server(pending)
-                try:
-                    response = _run_with_stop(cmd, extra_env={
-                        "ASMI_INTERACTIVE_AUTO_CONTINUE": pending.get("interactive_auto_continue", "1"),
-                        "ASMI_TARGET": target_key,
-                        "ASMI_HANDLE": target_handle,
-                        "ASMI_TEST_CASES_JSON": json.dumps(pending.get("test_cases") or []),
-                    })
-                except Exception as e:
-                    response = f"❌ Error: {e}"
+                if poll_data.get("stop"):
+                    response = "⏹ Stopped before sending any messages."
+                else:
+                    try:
+                        response = _run_with_stop(cmd, extra_env={
+                            "ASMI_INTERACTIVE_AUTO_CONTINUE": pending.get("interactive_auto_continue", "1"),
+                            "ASMI_TARGET": target_key,
+                            "ASMI_HANDLE": target_handle,
+                            "ASMI_TEST_CASES_JSON": json.dumps(pending.get("test_cases") or []),
+                        })
+                    except Exception as e:
+                        response = f"❌ Error: {e}"
                 # Post full output + HTML report to Railway UI for display in browser
                 final_status = "stopped" if response.startswith("⏹") else "done"
                 _post_output_to_railway(response, status=final_status)

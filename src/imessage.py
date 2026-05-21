@@ -37,6 +37,10 @@ def _resolve_handle(handle: str | None) -> str:
 
 def send_imessage(message: str, handle: str | None = None) -> bool:
     """Send an iMessage using AppleScript. Returns True on success."""
+    stop_file = os.environ.get("ASMI_STOP_FILE", "").strip()
+    if stop_file and os.path.exists(stop_file):
+        print("  ⏹ Stop requested — not sending another iMessage")
+        return False
     handle = _resolve_handle(handle)
     safe_msg = message.replace('"', '\\"')
     script = f'''
@@ -157,5 +161,4 @@ def wait_for_responses(
     if return_raw:
         return collected[:max_responses]
     return [m["text"] for m in collected[:max_responses]]
-
 

@@ -4030,6 +4030,30 @@ class Handler(BaseHTTPRequestHandler):
                 _last_heartbeat = time.time()
                 if USE_SUPABASE:
                     owner_user_id = self._require_daemon()
+                    # Surface stop/skip commands for the currently running run.
+                    # The daemon calls this same endpoint while run_eval.py is active,
+                    # so stop state must not depend on there being a queued run.
+                    running_stop = False
+                    running_skip_ids = []
+                    try:
+                        status_running, running_rows = sb_service_get(
+                            "/rest/v1/runs",
+                            params={
+                                "select": "id,progress",
+                                "owner_user_id": f"eq.{owner_user_id}",
+                                "status": "eq.running",
+                                "order": "created_at.desc",
+                                "limit": 1,
+                            },
+                        )
+                        running_row = (running_rows or [None])[0] if status_running < 300 and isinstance(running_rows, list) else None
+                        running_progress = running_row.get("progress") if isinstance(running_row, dict) and isinstance(running_row.get("progress"), dict) else {}
+                        running_stop = bool(running_progress.get("stop"))
+                        running_skip_ids = running_progress.get("skip_ids") or []
+                    except Exception:
+                        running_stop = False
+                        running_skip_ids = []
+
                     # Fetch oldest queued run for this owner
                     status, rows = sb_service_get(
                         "/rest/v1/runs",
@@ -4042,11 +4066,11 @@ class Handler(BaseHTTPRequestHandler):
                         },
                     )
                     if status >= 300:
-                        self._json({"run": None, "stop": False, "skip_ids": []})
+                        self._json({"run": None, "stop": running_stop, "skip_ids": running_skip_ids})
                         return
                     run_row = (rows or [None])[0] if isinstance(rows, list) else None
                     if not run_row:
-                        self._json({"run": None, "stop": False, "skip_ids": []})
+                        self._json({"run": None, "stop": running_stop, "skip_ids": running_skip_ids})
                         return
                     run_id = run_row.get("id")
                     selection = run_row.get("selection") if isinstance(run_row.get("selection"), dict) else {}
@@ -4071,8 +4095,8 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     self._json({
                         "run": payload,
-                        "stop": bool(progress.get("stop")),
-                        "skip_ids": progress.get("skip_ids") or [],
+                        "stop": bool(progress.get("stop")) or running_stop,
+                        "skip_ids": progress.get("skip_ids") or running_skip_ids,
                     })
                 else:
                     run = _pending_run
@@ -4834,14 +4858,14 @@ class Handler(BaseHTTPRequestHandler):
             if USE_SUPABASE:
                 try:
                     token, uid = self._require_user()
-                    # Mark latest running run as "stop requested" in progress payload.
+                    # Mark latest running/queued run as "stop requested" in progress payload.
                     status, rows = sb_user_get(
                         "/rest/v1/runs",
                         token=token,
                         params={
                             "select": "id,progress",
                             "owner_user_id": f"eq.{uid}",
-                            "status": "eq.running",
+                            "status": "in.(running,queued)",
                             "order": "created_at.desc",
                             "limit": 1,
                         },

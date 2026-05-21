@@ -13,6 +13,17 @@ def _stop_requested() -> bool:
     return bool(path and os.path.exists(path))
 
 
+def _sleep_interruptible(seconds: float) -> bool:
+    """Sleep in short chunks. Returns False if a stop was requested."""
+    deadline = time.time() + max(0.0, float(seconds or 0))
+    while time.time() < deadline:
+        if _stop_requested():
+            print("\n  ⏹ Stop requested — not sending more messages")
+            return False
+        time.sleep(min(0.5, deadline - time.time()))
+    return not _stop_requested()
+
+
 def _skip_ids() -> set[str]:
     path = os.environ.get("ASMI_SKIP_FILE", "").strip()
     if not path or not os.path.exists(path):
@@ -136,8 +147,15 @@ def collect(tc: dict) -> dict:
         "note":         tc.get("note"),
         "started_at":   datetime.now(timezone.utc).isoformat(),
     }
+    stopped_early = False
 
     if test_type == "single":
+        if _stop_requested():
+            stopped_early = True
+            result["reason"] = "Stopped before sending this test."
+            result["finished_at"] = datetime.now(timezone.utc).isoformat()
+            print("  ⏹ Stop requested — not sending this test")
+            return result
         msg = (tc.get("start_message") or tc.get("message") or "").strip()
         if not msg:
             raise KeyError(f"Test {test_id} (type=single) missing message/start_message")
@@ -184,6 +202,9 @@ def collect(tc: dict) -> dict:
         session_start = None
         sent_turns = []
         for i, msg in enumerate(msgs):
+            if _stop_requested():
+                stopped_early = True
+                break
             sent_at = datetime.now(timezone.utc)
             if session_start is None:
                 session_start = sent_at
@@ -196,7 +217,9 @@ def collect(tc: dict) -> dict:
                 "finished_at": sent_at.isoformat(),
             })
             if i < len(msgs) - 1:
-                time.sleep(burst_delay)
+                if not _sleep_interruptible(burst_delay):
+                    stopped_early = True
+                    break
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
         raw = wait_for_responses(
             session_start or datetime.now(timezone.utc),
@@ -209,6 +232,7 @@ def collect(tc: dict) -> dict:
         )
         transcript = _group_raw_responses_by_turn(sent_turns, raw)
         result["transcript"] = transcript
+        result["tasks_sent"] = [t["user"] for t in sent_turns]
         result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
         cv = judge_response_count(tc["name"], result["responses"], expected)
         result["count_verdict"] = cv
@@ -218,20 +242,37 @@ def collect(tc: dict) -> dict:
         msgs  = _split_lines(tc["messages"])
         expected = tc.get("expected_responses", len(msgs))
         result["tasks_sent"] = [setup] + msgs
+        sent_turns = []
+        if _stop_requested():
+            stopped_early = True
+            result["tasks_sent"] = []
+            result["reason"] = "Stopped before sending this test."
+            result["finished_at"] = datetime.now(timezone.utc).isoformat()
+            print("  ⏹ Stop requested — not sending this test")
+            return result
         print(f"  → Setup: {setup}")
         setup_sent = datetime.now(timezone.utc)
         send_imessage(setup)
-        time.sleep(tc.get("setup_wait", 20))
-        burst_delay = tc.get("burst_delay", BURST_SEND_DELAY)
-        wait = tc.get("wait", BURST_WAIT)
-        session_start = setup_sent
-        sent_turns = [{
+        sent_turns.append({
             "turn": 1,
             "user": setup,
             "started_at": setup_sent.isoformat(),
             "finished_at": setup_sent.isoformat(),
-        }]
+        })
+        if not _sleep_interruptible(tc.get("setup_wait", 20)):
+            stopped_early = True
+            result["transcript"] = sent_turns
+            result["tasks_sent"] = [t["user"] for t in sent_turns]
+            result["finished_at"] = datetime.now(timezone.utc).isoformat()
+            print("  ⏹ Stop requested — setup sent, not sending burst messages")
+            return result
+        burst_delay = tc.get("burst_delay", BURST_SEND_DELAY)
+        wait = tc.get("wait", BURST_WAIT)
+        session_start = setup_sent
         for i, msg in enumerate(msgs):
+            if _stop_requested():
+                stopped_early = True
+                break
             sent_at = datetime.now(timezone.utc)
             print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
             send_imessage(msg)
@@ -242,7 +283,9 @@ def collect(tc: dict) -> dict:
                 "finished_at": sent_at.isoformat(),
             })
             if i < len(msgs) - 1:
-                time.sleep(burst_delay)
+                if not _sleep_interruptible(burst_delay):
+                    stopped_early = True
+                    break
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
         raw = wait_for_responses(
             session_start,
@@ -255,6 +298,7 @@ def collect(tc: dict) -> dict:
         )
         transcript = _group_raw_responses_by_turn(sent_turns, raw)
         result["transcript"] = transcript
+        result["tasks_sent"] = [t["user"] for t in sent_turns]
         result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
         cv = judge_response_count(tc["name"], result["responses"], expected)
         result["count_verdict"] = cv
@@ -272,6 +316,9 @@ def collect(tc: dict) -> dict:
         seen = set()
         transcript = []
         for i, msg in enumerate(msgs):
+            if _stop_requested():
+                stopped_early = True
+                break
             print(f"\n  → Step [{i+1}/{len(msgs)}]: {msg[:70]}")
             sent_at = datetime.now(timezone.utc)
             if session_start is None:
@@ -313,9 +360,12 @@ def collect(tc: dict) -> dict:
                 })
             if i < len(msgs) - 1:
                 print(f"  (waiting {sequence_delay}s before next message…)")
-                time.sleep(sequence_delay)
+                if not _sleep_interruptible(sequence_delay):
+                    stopped_early = True
+                    break
 
         result["transcript"] = transcript
+        result["tasks_sent"] = [t["user"] for t in transcript]
         cv = judge_response_count(tc["name"], [r for r in result["responses"] if r], expected)
         result["count_verdict"] = cv
 
@@ -330,6 +380,12 @@ def collect(tc: dict) -> dict:
         max_responses = int(tc.get("max_responses") or max(10, expected + 6))
         session_start = datetime.now(timezone.utc)
         transcript_seed = []
+        if _stop_requested():
+            stopped_early = True
+            result["reason"] = "Stopped before sending this test."
+            result["finished_at"] = datetime.now(timezone.utc).isoformat()
+            print("  ⏹ Stop requested — not sending this test")
+            return result
         print(f"  → Sending msg 1: {msg1[:70]}")
         send_imessage(msg1)
         transcript_seed.append({
@@ -338,16 +394,18 @@ def collect(tc: dict) -> dict:
             "started_at": session_start.isoformat(),
             "finished_at": session_start.isoformat(),
         })
-        time.sleep(delay)
-        print(f"  → Sending msg 2: {msg2[:70]}")
-        sent2_at = datetime.now(timezone.utc)
-        send_imessage(msg2)
-        transcript_seed.append({
-            "turn": 2,
-            "user": msg2,
-            "started_at": sent2_at.isoformat(),
-            "finished_at": sent2_at.isoformat(),
-        })
+        if _sleep_interruptible(delay):
+            print(f"  → Sending msg 2: {msg2[:70]}")
+            sent2_at = datetime.now(timezone.utc)
+            send_imessage(msg2)
+            transcript_seed.append({
+                "turn": 2,
+                "user": msg2,
+                "started_at": sent2_at.isoformat(),
+                "finished_at": sent2_at.isoformat(),
+            })
+        else:
+            stopped_early = True
 
         raw = wait_for_responses(
             session_start,
@@ -359,6 +417,7 @@ def collect(tc: dict) -> dict:
             silence_after=silence_after,
         )
         result["transcript"] = _group_raw_responses_by_turn(transcript_seed, raw)
+        result["tasks_sent"] = [t["user"] for t in transcript_seed]
         result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
         # Dedup count check
         actual = len([r for r in result["responses"] if r])
@@ -391,6 +450,9 @@ def collect(tc: dict) -> dict:
         print(f"  → Start: {start_message[:80]}")
         current_user = start_message
         for turn_idx in range(max_turns):
+            if _stop_requested():
+                stopped_early = True
+                break
             if not current_user:
                 break
 
@@ -450,6 +512,8 @@ def collect(tc: dict) -> dict:
         result["max_responses"] = max_responses
 
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
+    if stopped_early:
+        result["reason"] = "Stopped early; judging responses captured so far."
     resp_count = len([r for r in result["responses"] if r])
     print(f"  ✓ Collected {resp_count} response(s)")
     return result
