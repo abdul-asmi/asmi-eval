@@ -21,6 +21,7 @@ import ast
 import base64
 import csv
 import glob
+import hashlib
 import json
 import os
 import re
@@ -82,6 +83,22 @@ def _get_gemini_client():
     if current_key != key:
         _client = genai.Client(api_key=key)
     return _client
+
+
+def _masked_secret(value: str, head: int = 6, tail: int = 4) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if len(raw) <= head + tail:
+        return "*" * len(raw)
+    return f"{raw[:head]}...{raw[-tail:]}"
+
+
+def _secret_fingerprint(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
 
 # ── Run queue (in-memory) ──────────────────────────────────────────────────────
 _pending_run     = None   # dict {category, id} or None
@@ -4199,6 +4216,38 @@ class Handler(BaseHTTPRequestHandler):
                         "progress": _run_progress,
                         "queue":    _queue_with_status(),
                     })
+            elif path == "/api/debug/env":
+                # Auth required: either a signed-in UI user or daemon token.
+                authed = False
+                try:
+                    self._require_user()
+                    authed = True
+                except Exception:
+                    authed = False
+                if not authed:
+                    try:
+                        self._require_daemon()
+                        authed = True
+                    except Exception:
+                        authed = False
+                if not authed:
+                    self._unauthorized()
+                    return
+
+                key = (os.environ.get("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY or "").strip()
+                model = (os.environ.get("GEMINI_MODEL", "").strip() or GEMINI_MODEL or "").strip()
+                self._json({
+                    "ok": True,
+                    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                    "gemini_model": model,
+                    "gemini_api_key": {
+                        "configured": bool(key),
+                        "masked": _masked_secret(key),
+                        "len": len(key) if key else 0,
+                        "sha256_12": _secret_fingerprint(key),
+                    },
+                    "notes": "Masked + fingerprint only; full secret is never returned.",
+                })
             elif path == "/api/progress":
                 self._json(_run_progress)
             elif path == "/api/artifact-signed":
