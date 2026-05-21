@@ -40,7 +40,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 import google.genai as genai
-from report import generate as generate_report
+from report import generate as generate_report, generate_pdf as generate_report_pdf
 from test_case_store import _extract_test_cases
 from supabase_helpers import (
     SupabaseError,
@@ -876,8 +876,10 @@ def _persist_run_artifacts(stem: str, results: list[dict], report_html: str = ""
     os.makedirs(REPORTS_DIR, exist_ok=True)
     results_name = f"results_{stem}.json"
     report_name = f"report_{stem}.html"
+    pdf_name = f"report_{stem}.pdf"
     results_path = os.path.join(REPORTS_DIR, results_name)
     report_path = os.path.join(REPORTS_DIR, report_name)
+    pdf_path = os.path.join(REPORTS_DIR, pdf_name)
     pointer_path = os.path.join(REPORTS_DIR, ".latest_results_path")
 
     _write_json(results_path, results)
@@ -885,6 +887,7 @@ def _persist_run_artifacts(stem: str, results: list[dict], report_html: str = ""
         _write_text(report_path, report_html)
     else:
         generate_report(results, output_path=report_path, asmi_target=asmi_target or "", asmi_handle=asmi_handle or "")
+    generate_report_pdf(results, output_path=pdf_path, asmi_target=asmi_target or "", asmi_handle=asmi_handle or "")
     _write_text(pointer_path, results_name)
 
     analysis = _build_analysis_payload()
@@ -4949,7 +4952,7 @@ class Handler(BaseHTTPRequestHandler):
             removed = []
             removed_remote = []
             # 1) Delete local artifacts
-            for name in (f"results_{stem}.json", f"report_{stem}.html"):
+            for name in (f"results_{stem}.json", f"report_{stem}.html", f"report_{stem}.pdf"):
                 fp = os.path.join(REPORTS_DIR, name)
                 try:
                     if os.path.exists(fp):

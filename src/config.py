@@ -1,10 +1,12 @@
 # ─── Asmi Eval Config ─────────────────────────────────────────────────────────
-# Keep this file private — it contains your API key.
+# Runtime secrets should come from environment variables, not this file.
+
+import os
 
 ASMI_HANDLE = "+14082307921"          # Asmi's iMessage number
 
-GEMINI_API_KEY = "REDACTED_GEMINI_API_KEY"
-GEMINI_MODEL   = "models/gemini-3.1-flash-lite-preview"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-preview").strip()
 
 RESPONSE_TIMEOUT   = 60    # default seconds to wait for a single response
 BURST_WAIT         = 60    # default seconds to wait when expecting multiple responses
@@ -14,7 +16,6 @@ SEQUENCE_DELAY     = 12.0  # seconds between sequential task sends
 SILENCE_AFTER      = 30.0  # seconds of silence after last response before stopping capture
 JUDGE_DELAY        = 4     # seconds between Gemini judge calls (free tier ~15 RPM)
 
-import os
 CHAT_DB = os.path.expanduser("~/Library/Messages/chat.db")
 
 # ─── Command Daemon ────────────────────────────────────────────────────────────

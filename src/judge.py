@@ -4,7 +4,8 @@
 import google.genai as genai
 from config import GEMINI_API_KEY, GEMINI_MODEL
 
-_client = genai.Client(api_key=GEMINI_API_KEY)
+_client = None
+_judge_disabled_reason = ""
 
 SYSTEM_CONTEXT = """
 You are evaluating responses from Asmi, an AI personal assistant accessible via iMessage.
@@ -112,9 +113,42 @@ def judge_with_context(test_name, category, tasks, captured, all_responses, pass
     return result
 
 
+def judge_status() -> dict:
+    return {"available": not bool(_judge_disabled_reason), "reason": _judge_disabled_reason}
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        if not GEMINI_API_KEY:
+            raise RuntimeError("Gemini judge API key is not configured.")
+        _client = genai.Client(api_key=GEMINI_API_KEY)
+    return _client
+
+
+def _normalize_judge_error(exc: Exception) -> tuple[str, bool]:
+    raw = str(exc)
+    lowered = raw.lower()
+
+    if "api key was reported as leaked" in lowered:
+        return "Judge unavailable: Gemini API key is blocked as leaked. Replace GEMINI_API_KEY and rerun judging.", True
+    if "permission_denied" in lowered or "403" in lowered:
+        return "Judge unavailable: Gemini rejected the API key or request permissions. Check GEMINI_API_KEY.", True
+    if "api key" in lowered and ("invalid" in lowered or "expired" in lowered or "revoked" in lowered):
+        return "Judge unavailable: Gemini API key is invalid or no longer active. Update GEMINI_API_KEY.", True
+    if "not configured" in lowered:
+        return raw, True
+    return f"Judge error: {raw}", False
+
+
 def _call_gemini(prompt: str) -> dict:
+    global _judge_disabled_reason
+    if _judge_disabled_reason:
+        return {"verdict": "UNCLEAR", "reason": _judge_disabled_reason, "_raw": "", "judge_unavailable": True}
+
     try:
-        result  = _client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        client = _get_client()
+        result  = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
         text    = result.text.strip()
         verdict = "UNCLEAR"
         reason  = text
@@ -130,7 +164,10 @@ def _call_gemini(prompt: str) -> dict:
         return {"verdict": verdict, "reason": reason, "_raw": text}
 
     except Exception as e:
-        return {"verdict": "UNCLEAR", "reason": f"Judge error: {e}", "_raw": ""}
+        reason, disable_judge = _normalize_judge_error(e)
+        if disable_judge:
+            _judge_disabled_reason = reason
+        return {"verdict": "UNCLEAR", "reason": reason, "_raw": "", "judge_unavailable": disable_judge}
 
 
 def judge_response_count(test_name, responses, expected):

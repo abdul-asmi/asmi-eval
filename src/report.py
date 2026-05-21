@@ -1,8 +1,10 @@
 # ─── HTML Report Generator ────────────────────────────────────────────────────
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from collections import defaultdict
+from datetime import datetime
+import textwrap
+import unicodedata
+from zoneinfo import ZoneInfo
 
 
 _VERDICT_COLOR = {"PASS": "#22c55e", "FAIL": "#ef4444", "UNCLEAR": "#f59e0b"}
@@ -35,6 +37,197 @@ def _target_label(asmi_target: str = "", asmi_handle: str = "") -> str:
     if handle:
         return "Custom"
     return "Unknown"
+
+
+def _pdf_safe_text(value: object) -> str:
+    text = "" if value is None else str(value)
+    text = (
+        text.replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\t", "    ")
+        .replace("•", "-")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace("’", "'")
+        .replace("“", '"')
+        .replace("”", '"')
+        .replace("→", "->")
+        .replace("❌", "FAIL")
+        .replace("✅", "PASS")
+    )
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    return text
+
+
+def _pdf_escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _build_pdf_lines(results: list[dict], asmi_target: str = "", asmi_handle: str = "") -> list[str]:
+    total = len(results)
+    passed = sum(1 for r in results if r["verdict"] == "PASS")
+    failed = sum(1 for r in results if r["verdict"] == "FAIL")
+    other = total - passed - failed
+
+    if not asmi_target and results:
+        asmi_target = str(results[0].get("asmi_target") or "")
+    if not asmi_handle and results:
+        asmi_handle = str(results[0].get("asmi_handle") or "")
+
+    target_label = _target_label(asmi_target, asmi_handle)
+    target_detail = target_label + (f" ({asmi_handle})" if asmi_handle else "")
+    run_time = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M ET")
+
+    by_cat = defaultdict(list)
+    for result in results:
+        by_cat[result["category"]].append(result)
+
+    lines = [
+        "ASMI EVAL REPORT",
+        f"Run at: {run_time}",
+        f"Target: {target_detail}",
+        "",
+        f"Total tests: {total}",
+        f"Passed: {passed}",
+        f"Failed: {failed}",
+        f"Unclear: {other}",
+        f"Pass rate: {int(passed / total * 100) if total else 0}%",
+        "",
+    ]
+
+    for cat_key, cat_results in by_cat.items():
+        cat_label = CATEGORIES.get(cat_key, cat_key)
+        cat_pass = sum(1 for r in cat_results if r["verdict"] == "PASS")
+        lines.extend([
+            f"CATEGORY: {cat_label}",
+            f"Score: {cat_pass}/{len(cat_results)}",
+            "",
+        ])
+
+        for result in cat_results:
+            lines.append(f"[{result.get('verdict', 'UNCLEAR')}] {result.get('id', '')} - {_pdf_safe_text(result.get('name', ''))}")
+            if result.get("precondition"):
+                lines.append(f"Precondition: {_pdf_safe_text(result['precondition'])}")
+            lines.append(f"Judge: {_pdf_safe_text(result.get('reason', ''))}")
+
+            tasks = result.get("tasks_sent", []) or []
+            if tasks:
+                lines.append("Tasks sent:")
+                for task in tasks:
+                    lines.append(f"  - {_pdf_safe_text(task)}")
+
+            responses = result.get("responses", []) or []
+            if responses:
+                lines.append("Responses:")
+                for idx, resp in enumerate(responses, start=1):
+                    lines.append(f"  {idx}. {_pdf_safe_text(resp or 'no response')}")
+
+            transcript = result.get("transcript", []) or []
+            if transcript:
+                lines.append("Transcript:")
+                for turn in transcript:
+                    lines.append(f"  Turn {turn.get('turn', '')}")
+                    lines.append(f"    You: {_pdf_safe_text(turn.get('user', ''))}")
+                    for idx, rsp in enumerate(turn.get("responses", []) or [], start=1):
+                        lines.append(f"    Asmi {idx}: {_pdf_safe_text(rsp or 'no response')}")
+
+            if result.get("manual_check"):
+                lines.append(f"Manual check: {_pdf_safe_text(result['manual_check'])}")
+            if result.get("note"):
+                lines.append(f"Note: {_pdf_safe_text(result['note'])}")
+            count_verdict = result.get("count_verdict") or {}
+            if count_verdict:
+                lines.append(
+                    f"Count verdict: {_pdf_safe_text(count_verdict.get('verdict', ''))} - {_pdf_safe_text(count_verdict.get('reason', ''))}"
+                )
+            lines.append("")
+
+        lines.append("")
+
+    wrapped_lines: list[str] = []
+    for line in lines:
+        safe_line = _pdf_safe_text(line)
+        if not safe_line:
+            wrapped_lines.append("")
+            continue
+        wrapped_lines.extend(textwrap.wrap(safe_line, width=100, subsequent_indent="    ") or [""])
+    return wrapped_lines
+
+
+def generate_pdf(results: list[dict], output_path: str = "report.pdf", asmi_target: str = "", asmi_handle: str = ""):
+    lines = _build_pdf_lines(results, asmi_target=asmi_target, asmi_handle=asmi_handle)
+
+    page_width = 612
+    page_height = 792
+    margin = 48
+    font_size = 10
+    leading = 14
+    max_lines = max(1, int((page_height - (margin * 2)) / leading))
+    pages = [lines[i:i + max_lines] for i in range(0, len(lines), max_lines)] or [[]]
+
+    def _page_stream(page_lines: list[str]) -> bytes:
+        y_start = page_height - margin
+        parts = ["BT", f"/F1 {font_size} Tf", f"{leading} TL", f"1 0 0 1 {margin} {y_start} Tm"]
+        for idx, line in enumerate(page_lines):
+            if idx > 0:
+                parts.append("T*")
+            parts.append(f"({_pdf_escape(line)}) Tj")
+        parts.append("ET")
+        return "\n".join(parts).encode("latin-1", "replace")
+
+    objects: list[bytes] = []
+
+    def _add_object(payload: bytes | str) -> int:
+        raw = payload.encode("latin-1") if isinstance(payload, str) else payload
+        objects.append(raw)
+        return len(objects)
+
+    font_id = _add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    page_ids: list[int] = []
+    content_ids: list[int] = []
+
+    for page_lines in pages:
+        stream = _page_stream(page_lines)
+        content_id = _add_object(
+            b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream"
+        )
+        content_ids.append(content_id)
+        page_id = _add_object(
+            f"<< /Type /Page /Parent 0 0 R /MediaBox [0 0 {page_width} {page_height}] "
+            f"/Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>"
+        )
+        page_ids.append(page_id)
+
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    pages_id = _add_object(f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>")
+    catalog_id = _add_object(f"<< /Type /Catalog /Pages {pages_id} 0 R >>")
+
+    for page_id in page_ids:
+        objects[page_id - 1] = objects[page_id - 1].replace(b"/Parent 0 0 R", f"/Parent {pages_id} 0 R".encode("ascii"))
+
+    pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for idx, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{idx} 0 obj\n".encode("ascii"))
+        pdf.extend(obj)
+        pdf.extend(b"\nendobj\n")
+
+    xref_start = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    pdf.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    pdf.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root {catalog_id} 0 R >>\nstartxref\n{xref_start}\n%%EOF\n".encode("ascii")
+    )
+
+    with open(output_path, "wb") as f:
+        f.write(pdf)
+
+    print(f"  PDF report: {output_path}")
+    return output_path
 
 
 def generate(results: list[dict], output_path: str = "report.html", asmi_target: str = "", asmi_handle: str = ""):

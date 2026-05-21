@@ -5,7 +5,7 @@ import json
 
 from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY
 from imessage import send_imessage, wait_for_responses
-from judge import judge_with_context, judge_response_count
+from judge import judge_status, judge_with_context, judge_response_count
 
 
 def _stop_requested() -> bool:
@@ -567,6 +567,16 @@ def batch_judge(results: list[dict], all_responses: list[str], test_cases: list[
 
         icon = {"PASS": "✅", "FAIL": "❌", "UNCLEAR": "⚠️"}.get(r["verdict"], "?")
         print(f"{icon} {r['verdict']}")
+
+        status = judge_status()
+        if not status["available"]:
+            print(f"  Judge disabled for remaining tests: {status['reason']}")
+            for rest in results[i + 1:]:
+                if rest.get("verdict") in {"PASS", "FAIL"}:
+                    continue
+                rest["verdict"] = "UNCLEAR"
+                rest["reason"] = status["reason"]
+            break
 
         if i < len(results) - 1:
             time.sleep(JUDGE_DELAY)

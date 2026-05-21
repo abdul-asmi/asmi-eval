@@ -1,4 +1,6 @@
 config.py
+.env
+.env.local
 daemon.log
 ui.log
 ui_test.log
@@ -6,6 +8,7 @@ ui_test.log
 reports/.latest_results_path
 reports/overall_analysis.json
 reports/report_*.html
+reports/report_*.pdf
 reports/results_*.json
 __pycache__/
 .DS_Store

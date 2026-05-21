@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src
 
 from test_case_store import load_test_cases
 from runner import run_all
-from report import generate
+from report import generate, generate_pdf
 
 
 def main():
@@ -112,6 +112,7 @@ def main():
     ts          = datetime.now(ZoneInfo("America/New_York")).strftime("%Y%m%d_%H%M%S")
     json_path   = os.path.join(_reports_dir, f"results_{ts}.json")
     report_path = os.path.join(_reports_dir, f"report_{ts}.html")
+    pdf_path    = os.path.join(_reports_dir, f"report_{ts}.pdf")
 
     with open(json_path, "w") as f:
         json.dump(results, f, indent=2, default=str)
@@ -122,7 +123,9 @@ def main():
     # ── HTML report ────────────────────────────────────────────────────────────
     if not args.no_report:
         generate(results, output_path=report_path, asmi_target=asmi_target, asmi_handle=asmi_handle)
+        generate_pdf(results, output_path=pdf_path, asmi_target=asmi_target, asmi_handle=asmi_handle)
         print(f"  Open report: open {report_path}\n")
+        print(f"  Open PDF: open {pdf_path}\n")
 
 
 if __name__ == "__main__":

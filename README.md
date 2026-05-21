@@ -39,16 +39,16 @@ cd /Users/yaybeedee/Desktop/asmi/eval
 pip install google-genai --break-system-packages
 ```
 
-### 3. Verify Config
+### 3. Configure Environment
 
-Open `config.py` and confirm:
+Set your Gemini key as an environment variable before running the tools:
 
-```python
-ASMI_HANDLE    = "+14082307921"               # Asmi's iMessage number
-GEMINI_API_KEY = "AIzaSy..."                  # Your Gemini API key
-GEMINI_MODEL   = "models/gemini-3.1-flash-lite-preview"
-COMMAND_HANDLE = "abdulgaffoor1729@gmail.com" # Your Apple ID (for daemon)
+```bash
+export GEMINI_API_KEY="your-new-gemini-api-key"
+export GEMINI_MODEL="models/gemini-3.1-flash-lite-preview"
 ```
+
+`src/config.py` now reads `GEMINI_API_KEY` from the environment instead of storing it in the repo.
 
 `RAILWAY_URL` is now read from the environment and defaults to the deployed Railway app URL, so completed runs can sync back to the hosted UI automatically. Set `RAILWAY_URL=""` if you want to disable that remote sync for a local-only session.
 
