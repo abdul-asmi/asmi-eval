@@ -61,6 +61,32 @@ cd ~/Desktop/asmi/eval && set -a; source .env.local; set +a; pkill -f daemon.py 
 
 On this Mac, use `python3` for daemon/UI commands; `python` may not exist.
 
+## Gemini key mismatch quick fix (UI vs daemon)
+
+If judge errors say `API key was reported as leaked`, verify both runtimes are using the intended key.
+
+1. UI key fingerprint:
+```bash
+curl -s https://asmi-eval.onrender.com/api/debug/env | python3 -m json.tool
+```
+Copy `gemini_api_key.sha256_12`.
+
+2. Daemon key fingerprint:
+Send `!keystatus` in your daemon command thread and copy `sha256_12`.
+
+3. If fingerprints differ, daemon is on a different key. Update daemon env and restart:
+```bash
+cd ~/Desktop/asmi/eval
+set -a
+source .env.local
+set +a
+pkill -f daemon.py 2>/dev/null || true
+nohup python3 daemon.py > daemon.log 2>&1 &
+tail -n 50 daemon.log
+```
+
+4. Re-send `!keystatus` and confirm fingerprint now matches intended key.
+
 ## Re-judging existing results (no iMessages sent)
 
 ```bash
