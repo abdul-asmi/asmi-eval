@@ -30,7 +30,7 @@ import subprocess
 import sys
 import time
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 import urllib.request
 import urllib.error
 import urllib.parse
