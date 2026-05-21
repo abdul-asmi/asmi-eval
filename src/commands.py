@@ -13,7 +13,12 @@ import google.genai as genai
 from config import GEMINI_API_KEY, GEMINI_MODEL, EVAL_DIR, REPORTS_DIR
 from test_case_store import load_test_cases as _load_test_cases
 
-_client = genai.Client(api_key=GEMINI_API_KEY)
+def _get_client():
+    # Read env at call time so rotated keys are picked up without process restart.
+    key = os.environ.get("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY is not configured.")
+    return genai.Client(api_key=key)
 
 
 def _get_categories() -> set[str]:
@@ -205,7 +210,7 @@ Return ONLY valid Python dict syntax that can be pasted into the TEST_CASES list
 No explanation, no markdown fences — just the dict.
 """
     try:
-        result = _client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        result = _get_client().models.generate_content(model=GEMINI_MODEL, contents=prompt)
         generated = result.text.strip().strip("```python").strip("```").strip()
 
         # Try to parse it
@@ -249,7 +254,7 @@ What did they mean? Reply with ONLY the canonical command to execute (e.g. "run 
 or "unknown" if you can't tell.
 """
     try:
-        result = _client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        result = _get_client().models.generate_content(model=GEMINI_MODEL, contents=prompt)
         parsed = result.text.strip().lower()
         if parsed == "unknown" or len(parsed) > 50:
             return f"❓ Unknown command: '{text}'\nType !help to see all commands."

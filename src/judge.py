@@ -2,6 +2,7 @@
 # Uses google-genai SDK with gemini-3.1-flash-lite-preview
 
 import google.genai as genai
+import os
 from config import GEMINI_API_KEY, GEMINI_MODEL
 
 _client = None
@@ -119,10 +120,19 @@ def judge_status() -> dict:
 
 def _get_client():
     global _client
+    key = os.environ.get("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY
+    if not key:
+        raise RuntimeError("Gemini judge API key is not configured.")
     if _client is None:
-        if not GEMINI_API_KEY:
-            raise RuntimeError("Gemini judge API key is not configured.")
-        _client = genai.Client(api_key=GEMINI_API_KEY)
+        _client = genai.Client(api_key=key)
+        return _client
+    # If key rotated while process is alive, recreate client with latest key.
+    try:
+        current_key = getattr(getattr(_client, "_api_client", None), "api_key", None)
+    except Exception:
+        current_key = None
+    if current_key != key:
+        _client = genai.Client(api_key=key)
     return _client
 
 

@@ -65,6 +65,24 @@ GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-pr
 
 _client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
+
+def _get_gemini_client():
+    """Return a client built from the latest env key (supports key rotation)."""
+    global _client
+    key = os.environ.get("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY
+    if not key:
+        return None
+    if _client is None:
+        _client = genai.Client(api_key=key)
+        return _client
+    try:
+        current_key = getattr(getattr(_client, "_api_client", None), "api_key", None)
+    except Exception:
+        current_key = None
+    if current_key != key:
+        _client = genai.Client(api_key=key)
+    return _client
+
 # ── Run queue (in-memory) ──────────────────────────────────────────────────────
 _pending_run     = None   # dict {category, id} or None
 _last_heartbeat  = 0.0    # epoch time of last daemon poll
@@ -958,11 +976,12 @@ Make test cases realistic and varied. Focus on edge cases and real user scenario
 Return ONLY valid Python list of dicts, no other text.
 """
 
-    if not _client:
+    client = _get_gemini_client()
+    if not client:
         raise RuntimeError("GEMINI_API_KEY not configured")
 
     try:
-        response = _client.models.generate_content(
+        response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=generation_prompt
         )
@@ -1020,7 +1039,8 @@ Return ONLY valid Python list of dicts, no other text.
 
 def analyze_behavior(results: list) -> dict:
     """Call Gemini with all results to produce coherent behavior analysis."""
-    if not _client:
+    client = _get_gemini_client()
+    if not client:
         raise RuntimeError("GEMINI_API_KEY not configured")
 
     lines = []
@@ -1054,7 +1074,7 @@ BEHAVIOR_PATTERN: 1-2 sentences describing Asmi's current consistent behavior pa
 GAPS: Specific capability or behavior gaps observed.
 RECOMMENDATION: What should be added/changed in Asmi's skills or memory to fix the misses.
 """
-    result = _client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+    result = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
     return {"text": result.text.strip()}
 
 
