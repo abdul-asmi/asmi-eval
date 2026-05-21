@@ -1,14 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
-EVAL_DIR="$(cd "$(dirname "$0")" && pwd)"
-PYTHON="/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EVAL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PYTHON="${PYTHON:-/Library/Frameworks/Python.framework/Versions/3.13/bin/python3}"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON="$(command -v python3 || command -v python)"
+fi
 LOG="$EVAL_DIR/daemon.log"
 
 cd "$EVAL_DIR"
 
 echo "Asmi Eval daemon restart"
 echo "Repo: $EVAL_DIR"
+
+if [ -f .env.local ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env.local
+  set +a
+fi
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then

@@ -46,8 +46,16 @@ def main():
 
     test_cases = load_test_cases()
     asmi_handle = os.environ.get("ASMI_HANDLE", "").strip()
+    asmi_target = os.environ.get("ASMI_TARGET", "").strip().lower()
+    if not asmi_target and asmi_handle:
+        if asmi_handle == "+14082307921":
+            asmi_target = "dev"
+        elif asmi_handle == "+14082303488":
+            asmi_target = "prod"
     if asmi_handle:
         print(f"  Target Asmi handle: {asmi_handle}")
+    if asmi_target:
+        print(f"  Target environment: {asmi_target}")
 
     # ── list mode ─────────────────────────────────────────────────────────────
     if args.list:
@@ -73,6 +81,12 @@ def main():
         filter_id=args.id,
         filter_ids=ids,
     )
+    for r in results:
+        if isinstance(r, dict):
+            if asmi_target:
+                r["asmi_target"] = asmi_target
+            if asmi_handle:
+                r["asmi_handle"] = asmi_handle
 
     # ── summary ───────────────────────────────────────────────────────────────
     total  = len(results)
@@ -101,11 +115,13 @@ def main():
 
     with open(json_path, "w") as f:
         json.dump(results, f, indent=2, default=str)
+    with open(os.path.join(_reports_dir, ".latest_results_path"), "w") as f:
+        f.write(json_path)
     print(f"\n  Raw results: {json_path}")
 
     # ── HTML report ────────────────────────────────────────────────────────────
     if not args.no_report:
-        generate(results, output_path=report_path)
+        generate(results, output_path=report_path, asmi_target=asmi_target, asmi_handle=asmi_handle)
         print(f"  Open report: open {report_path}\n")
 
 

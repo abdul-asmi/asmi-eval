@@ -46,6 +46,7 @@ DAEMON_OWNER_USER_ID = os.environ.get("DAEMON_OWNER_USER_ID", "").strip()
 CMD_ONBOARD = "cmd_onboard"   # iMessage that resets Asmi to fresh pre-onboarding state
 
 CATEGORY_RUN_ORDER = [
+    "core test",            # Quick representative sweep: first test from each category
     "onboarding",           # 1. Pre-onboarding + onboarding (needs fresh state → cmd_onboard sent first)
     "capability",           # 2. What can Asmi do?
     "sticky_message",       # 3. Core: does Asmi respond unprompted?

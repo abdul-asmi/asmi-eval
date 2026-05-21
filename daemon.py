@@ -370,7 +370,7 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
                 pass
 
     output = "".join(output_lines)
-    m = _re.search(r'Raw results:\s*(\S+results_\S+\.json)', output)
+    m = _re_mod.search(r'Raw results:\s*(\S+results_\S+\.json)', output)
     if m:
         try:
             with open(os.path.join(REPORTS_DIR, '.latest_results_path'), 'w') as f:
@@ -432,28 +432,51 @@ def _latest_results_json() -> list:
         return []
 
 
+def _latest_report_html() -> str:
+    """Read the report HTML that matches the latest results pointer."""
+    try:
+        pointer = os.path.join(REPORTS_DIR, ".latest_results_path")
+        chosen = None
+        if os.path.exists(pointer):
+            with open(pointer) as f:
+                candidate = os.path.basename(f.read().strip())
+            m = _re_mod.match(r"results_(.+)\.json$", candidate)
+            if m:
+                report_path = os.path.join(REPORTS_DIR, f"report_{m.group(1)}.html")
+                if os.path.exists(report_path):
+                    chosen = report_path
+
+        if not chosen:
+            report_files = glob.glob(os.path.join(REPORTS_DIR, "report_*.html"))
+            if report_files:
+                report_files.sort(key=os.path.getmtime, reverse=True)
+                chosen = report_files[0]
+
+        if not chosen:
+            return ""
+        with open(chosen, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+
 def _post_output_to_railway(output: str, status: str = "done"):
     """Send run output + results JSON back to Railway UI."""
     if not RAILWAY_URL:
         return
     try:
         results = _latest_results_json() if status == "done" else []
-        report_html = ""
-        if status == "done":
-            try:
-                report_files = glob.glob(os.path.join(REPORTS_DIR, "report_*.html"))
-                if report_files:
-                    report_files.sort(key=os.path.getmtime, reverse=True)
-                    with open(report_files[0], "r", encoding="utf-8") as f:
-                        report_html = f.read()
-            except Exception:
-                report_html = ""
+        report_html = _latest_report_html() if status == "done" else ""
+        asmi_target = next((r.get("asmi_target") for r in results if isinstance(r, dict) and r.get("asmi_target")), "")
+        asmi_handle = next((r.get("asmi_handle") for r in results if isinstance(r, dict) and r.get("asmi_handle")), "")
         body = json.dumps({
             "run_id": _current_run_id,
             "output":  output,
             "status":  status,
             "results": results,
             "report_html": report_html,
+            "asmi_target": asmi_target,
+            "asmi_handle": asmi_handle,
         }).encode()
         req = urllib.request.Request(
             f"{RAILWAY_URL}/api/output",
@@ -476,21 +499,16 @@ def _post_output_to_local_ui(output: str, status: str = "done"):
         return
     try:
         results = _latest_results_json() if status == "done" else []
-        report_html = ""
-        if status == "done":
-            try:
-                report_files = glob.glob(os.path.join(REPORTS_DIR, "report_*.html"))
-                if report_files:
-                    report_files.sort(key=os.path.getmtime, reverse=True)
-                    with open(report_files[0], "r", encoding="utf-8") as f:
-                        report_html = f.read()
-            except Exception:
-                report_html = ""
+        report_html = _latest_report_html() if status == "done" else ""
+        asmi_target = next((r.get("asmi_target") for r in results if isinstance(r, dict) and r.get("asmi_target")), "")
+        asmi_handle = next((r.get("asmi_handle") for r in results if isinstance(r, dict) and r.get("asmi_handle")), "")
         body = json.dumps({
             "output":  output,
             "status":  status,
             "results": results,
             "report_html": report_html,
+            "asmi_target": asmi_target,
+            "asmi_handle": asmi_handle,
         }).encode()
         req = urllib.request.Request(
             f"{LOCAL_UI_URL}/api/output",
@@ -562,6 +580,7 @@ def run():
                 try:
                     response = _run_with_stop(cmd, extra_env={
                         "ASMI_INTERACTIVE_AUTO_CONTINUE": pending.get("interactive_auto_continue", "1"),
+                        "ASMI_TARGET": target_key,
                         "ASMI_HANDLE": target_handle,
                         "ASMI_TEST_CASES_JSON": json.dumps(pending.get("test_cases") or []),
                     })

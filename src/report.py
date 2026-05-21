@@ -9,6 +9,7 @@ _VERDICT_COLOR = {"PASS": "#22c55e", "FAIL": "#ef4444", "UNCLEAR": "#f59e0b"}
 _VERDICT_BG    = {"PASS": "#f0fdf4", "FAIL": "#fef2f2", "UNCLEAR": "#fffbeb"}
 
 CATEGORIES = {
+    "core test":       "Core Test",
     "onboarding":      "Onboarding",
     "capability":      "Capability",
     "sticky_message":  "Sticky Message",
@@ -24,11 +25,34 @@ CATEGORIES = {
 }
 
 
-def generate(results: list[dict], output_path: str = "report.html"):
+def _target_label(asmi_target: str = "", asmi_handle: str = "") -> str:
+    key = (asmi_target or "").strip().lower()
+    handle = (asmi_handle or "").strip()
+    if key == "prod":
+        return "Prod"
+    if key == "dev":
+        return "Dev"
+    if handle:
+        return "Custom"
+    return "Unknown"
+
+
+def generate(results: list[dict], output_path: str = "report.html", asmi_target: str = "", asmi_handle: str = ""):
     total  = len(results)
     passed = sum(1 for r in results if r["verdict"] == "PASS")
     failed = sum(1 for r in results if r["verdict"] == "FAIL")
     other  = total - passed - failed
+
+    if not asmi_target and results:
+        asmi_target = str(results[0].get("asmi_target") or "")
+    if not asmi_handle and results:
+        asmi_handle = str(results[0].get("asmi_handle") or "")
+    target_label = _target_label(asmi_target, asmi_handle)
+    target_color = "#991b1b" if target_label == "Prod" else "#1d4ed8" if target_label == "Dev" else "#475569"
+    target_bg = "#fee2e2" if target_label == "Prod" else "#dbeafe" if target_label == "Dev" else "#f1f5f9"
+    target_detail = f"{target_label}"
+    if asmi_handle:
+        target_detail += f" ({asmi_handle})"
 
     by_cat = defaultdict(list)
     for r in results:
@@ -84,6 +108,7 @@ def generate(results: list[dict], output_path: str = "report.html"):
             <details class="test-row" style="background:{bg};border-left:4px solid {color}">
                 <summary>
                     <span class="badge" style="background:{color}22;color:{color}">{v}</span>
+                    <span class="badge" style="background:{target_bg};color:{target_color}">{target_label}</span>
                     <strong>[{r["id"]}]</strong> {r["name"]}
                 </summary>
                 <div class="test-detail">
@@ -173,10 +198,11 @@ def generate(results: list[dict], output_path: str = "report.html"):
 </head>
 <body>
   <h1>Asmi Eval Report</h1>
-  <div class="subtitle">Run at {run_time} &nbsp;·&nbsp; v0.10.37.2 regression suite &nbsp;·&nbsp; iMessage only</div>
+  <div class="subtitle">Run at {run_time} &nbsp;·&nbsp; Target: {target_detail} &nbsp;·&nbsp; v0.10.37.2 regression suite &nbsp;·&nbsp; iMessage only</div>
 
   <div class="summary">
     <div class="stat"><div class="num">{total}</div><div class="lbl">Total</div></div>
+    <div class="stat"><div class="num" style="font-size:1.35rem;color:{target_color}">{target_label}</div><div class="lbl">Target</div></div>
     <div class="stat"><div class="num" style="color:#22c55e">{passed}</div><div class="lbl">Passed</div></div>
     <div class="stat"><div class="num" style="color:#ef4444">{failed}</div><div class="lbl">Failed</div></div>
     <div class="stat"><div class="num" style="color:#f59e0b">{other}</div><div class="lbl">Unclear</div></div>

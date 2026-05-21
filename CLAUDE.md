@@ -37,11 +37,11 @@ python run_eval.py --id sticky_03
 open report_YYYYMMDD_HHMM.html
 ```
 
-## Shipping to Railway
+## Shipping to Render
 
-Railway deploys from GitHub. Before starting work, `git pull`. After changes, `git push` so Railway can deploy the latest commit.
+Render deploys from GitHub. Before starting work, `git pull`. After changes, commit and `git push` so Render can deploy the latest commit.
 
-Important: local edits are not live until they are committed and pushed to `main`. When a user expects a fix to be live, do not stop after local file changes; either push the change or explicitly say it has not been pushed/deployed yet.
+Important: local edits are not live until they are committed and pushed to `main`. When the user asks for a product/UI fix, assume they want it pushed/deployed too unless they explicitly say local-only. Do not stop after local file changes; either push the change or explicitly say it has not been pushed/deployed yet.
 
 ## Troubleshooting: run shows old report / doesn’t run
 
@@ -56,8 +56,10 @@ The web UI only queues a run; execution happens on the Mac runner that polls the
 When asked for the “daemon restart” command, use:
 
 ```bash
-cd ~/Desktop/asmi-eval && pkill -f daemon.py; nohup python daemon.py > daemon.log 2>&1 &
+cd ~/Desktop/asmi/eval && set -a; source .env.local; set +a; pkill -f daemon.py 2>/dev/null || true; nohup python3 daemon.py > daemon.log 2>&1 &
 ```
+
+On this Mac, use `python3` for daemon/UI commands; `python` may not exist.
 
 ## Re-judging existing results (no iMessages sent)
 
@@ -74,10 +76,10 @@ Rejudge passes ALL responses from the full run to Gemini so it can match respons
 
 ```bash
 # Start the daemon (listens for iMessage commands sent to yourself)
-python daemon.py
+python3 daemon.py
 
 # Run in background
-nohup python daemon.py > daemon.log 2>&1 &
+nohup python3 daemon.py > daemon.log 2>&1 &
 pkill -f daemon.py   # to stop
 
 # Then iMessage yourself at a.shaikriyaz123@gmail.com with commands like:

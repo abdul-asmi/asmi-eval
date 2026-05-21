@@ -100,6 +100,28 @@ ASMI_TARGET_HANDLES = {
     "prod": "+14082303488",
 }
 
+def _target_from_handle(handle: str | None) -> str:
+    clean = (handle or "").strip()
+    for key, value in ASMI_TARGET_HANDLES.items():
+        if clean and clean == value:
+            return key
+    return ""
+
+
+def _annotate_results_target(results: list, asmi_target: str | None = None, asmi_handle: str | None = None) -> list:
+    target = (asmi_target or "").strip().lower()
+    handle = (asmi_handle or "").strip()
+    if not target:
+        target = _target_from_handle(handle)
+    for r in results or []:
+        if not isinstance(r, dict):
+            continue
+        if target and not r.get("asmi_target"):
+            r["asmi_target"] = target
+        if handle and not r.get("asmi_handle"):
+            r["asmi_handle"] = handle
+    return results
+
 CATEGORIES = [
     "sticky_message","call_dedup","call_summary","language_pref",
     "location_memory","onboarding","capability","threep_nudge","interactive","generated",
@@ -687,9 +709,13 @@ def _build_overall_analysis_text(test_rows: list[dict], summary: dict) -> str:
     fail_reason_counter = Counter(
         " ".join((t.get("reason") or "").split())[:140] for t in failed_rows if (t.get("reason") or "").strip()
     )
+    target_counter = Counter((t.get("asmi_target") or _target_from_handle(t.get("asmi_handle")) or "unknown").lower() for t in test_rows)
+    fail_target_counter = Counter((t.get("asmi_target") or _target_from_handle(t.get("asmi_handle")) or "unknown").lower() for t in failed_rows)
 
     top_fail_tests = ", ".join(f"{k} ({v})" for k, v in fail_test_counter.most_common(3)) or "none"
     top_fail_cats = ", ".join(f"{k} ({v})" for k, v in fail_cat_counter.most_common(3)) or "none"
+    target_mix = ", ".join(f"{k} ({v})" for k, v in target_counter.most_common()) or "unknown"
+    target_fail_mix = ", ".join(f"{k} ({v})" for k, v in fail_target_counter.most_common()) or "none"
     top_fail_reasons = "\n".join(
         f"- {reason} ({count})" for reason, count in fail_reason_counter.most_common(3)
     ) or "- none"
@@ -698,7 +724,7 @@ def _build_overall_analysis_text(test_rows: list[dict], summary: dict) -> str:
         f"OVERALL_SCORE: {passed}/{total} passed ({pass_rate}%)",
         (
             f"SUMMARY: Across all recorded runs, the system has {failed} failures and {unclear} unclear outcomes. "
-            f"The current cumulative pass rate is {pass_rate}%."
+            f"The current cumulative pass rate is {pass_rate}%. Target mix: {target_mix}."
         ),
         "HITS:",
         f"- Total passed outcomes so far: {passed}.",
@@ -706,6 +732,7 @@ def _build_overall_analysis_text(test_rows: list[dict], summary: dict) -> str:
         "MISSES:",
         f"- Most repeated failing tests: {top_fail_tests}.",
         f"- Most affected categories: {top_fail_cats}.",
+        f"- Failures by target: {target_fail_mix}.",
         "BEHAVIOR_PATTERN:",
         (
             "Recent failures cluster around repeated scenarios rather than random spread, which suggests a few persistent behavior gaps."
@@ -742,9 +769,13 @@ def _build_analysis_payload() -> dict:
             continue
 
         summary = _result_summary(data)
+        asmi_target = next((r.get("asmi_target") for r in data if isinstance(r, dict) and r.get("asmi_target")), "")
+        asmi_handle = next((r.get("asmi_handle") for r in data if isinstance(r, dict) and r.get("asmi_handle")), "")
         runs.append({
             "stem": stem,
             "ts": stem,
+            "asmi_target": asmi_target,
+            "asmi_handle": asmi_handle,
             **summary,
         })
 
@@ -755,6 +786,8 @@ def _build_analysis_payload() -> dict:
                 "id": r.get("id"),
                 "name": r.get("name"),
                 "category": r.get("category"),
+                "asmi_target": r.get("asmi_target") or asmi_target,
+                "asmi_handle": r.get("asmi_handle") or asmi_handle,
                 "verdict": (r.get("verdict") or "UNCLEAR").upper(),
                 "reason": r.get("reason", ""),
                 "tasks_sent_count": len(r.get("tasks_sent", []) or []),
@@ -763,9 +796,13 @@ def _build_analysis_payload() -> dict:
 
     if _run_results and _run_result_stem and not any(r["stem"] == _run_result_stem for r in runs):
         summary = _result_summary(_run_results)
+        asmi_target = next((r.get("asmi_target") for r in _run_results if isinstance(r, dict) and r.get("asmi_target")), "")
+        asmi_handle = next((r.get("asmi_handle") for r in _run_results if isinstance(r, dict) and r.get("asmi_handle")), "")
         runs.insert(0, {
             "stem": _run_result_stem,
             "ts": _run_result_stem,
+            "asmi_target": asmi_target,
+            "asmi_handle": asmi_handle,
             **summary,
         })
         for r in _run_results:
@@ -775,6 +812,8 @@ def _build_analysis_payload() -> dict:
                 "id": r.get("id"),
                 "name": r.get("name"),
                 "category": r.get("category"),
+                "asmi_target": r.get("asmi_target") or asmi_target,
+                "asmi_handle": r.get("asmi_handle") or asmi_handle,
                 "verdict": (r.get("verdict") or "UNCLEAR").upper(),
                 "reason": r.get("reason", ""),
                 "tasks_sent_count": len(r.get("tasks_sent", []) or []),
@@ -819,10 +858,11 @@ def _build_analysis_payload() -> dict:
     }
 
 
-def _persist_run_artifacts(stem: str, results: list[dict], report_html: str = ""):
+def _persist_run_artifacts(stem: str, results: list[dict], report_html: str = "", asmi_target: str | None = None, asmi_handle: str | None = None):
     """Persist the latest run locally and sync it to GitHub when configured."""
     if not stem or not results:
         return
+    results = _annotate_results_target(results, asmi_target, asmi_handle)
 
     os.makedirs(REPORTS_DIR, exist_ok=True)
     results_name = f"results_{stem}.json"
@@ -835,7 +875,7 @@ def _persist_run_artifacts(stem: str, results: list[dict], report_html: str = ""
     if report_html:
         _write_text(report_path, report_html)
     else:
-        generate_report(results, output_path=report_path)
+        generate_report(results, output_path=report_path, asmi_target=asmi_target or "", asmi_handle=asmi_handle or "")
     _write_text(pointer_path, results_name)
 
     analysis = _build_analysis_payload()
@@ -3687,9 +3727,14 @@ function _renderTranscriptCard(run, test) {
   const vColor = verdict === 'PASS' ? '#166534' : verdict === 'FAIL' ? '#991b1b' : '#92400e';
   const vBg = verdict === 'PASS' ? '#dcfce7' : verdict === 'FAIL' ? '#fee2e2' : '#fef3c7';
   const ts = _responseTimestamp(test.started_at || run.stem || test.stem || '');
+  const target = _targetBadge({
+    asmi_target: test.asmi_target || run.asmi_target,
+    asmi_handle: test.asmi_handle || run.asmi_handle,
+  });
   return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
       <span style="font-weight:700;color:#0f172a;">${esc(test.id)}: ${esc(test.name)}</span>
+      ${target}
       <span style="background:${vBg};color:${vColor};padding:4px 8px;border-radius:999px;font-size:0.75rem;">${verdict}</span>
       <span style="color:#64748b;font-size:0.78rem;font-family:monospace;">${esc(ts)}</span>
       <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:999px;font-size:0.75rem;">${turns.length} turn(s)</span>
@@ -3711,6 +3756,8 @@ function _flattenConversationRows(data) {
             runStem: run.stem || '',
             testId: test.id || '',
             testName: test.name || '',
+            asmi_target: test.asmi_target || run.asmi_target || '',
+            asmi_handle: test.asmi_handle || run.asmi_handle || '',
             side: 'you',
             text: (test.tasks_sent || []).join('\\n'),
           });
@@ -3721,6 +3768,8 @@ function _flattenConversationRows(data) {
             runStem: run.stem || '',
             testId: test.id || '',
             testName: test.name || '',
+            asmi_target: test.asmi_target || run.asmi_target || '',
+            asmi_handle: test.asmi_handle || run.asmi_handle || '',
             side: 'asmi',
             text: (test.responses || []).join('\\n'),
           });
@@ -3733,6 +3782,8 @@ function _flattenConversationRows(data) {
           runStem: run.stem || '',
           testId: test.id || '',
           testName: test.name || '',
+          asmi_target: test.asmi_target || run.asmi_target || '',
+          asmi_handle: test.asmi_handle || run.asmi_handle || '',
           side: 'you',
           text: turn.user || '',
         });
@@ -3742,6 +3793,8 @@ function _flattenConversationRows(data) {
             runStem: run.stem || '',
             testId: test.id || '',
             testName: test.name || '',
+            asmi_target: test.asmi_target || run.asmi_target || '',
+            asmi_handle: test.asmi_handle || run.asmi_handle || '',
             side: 'asmi',
             text: rsp || '',
           });
@@ -3790,6 +3843,7 @@ async function loadResponses(silent = false) {
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
                   <span style="font-size:0.72rem;color:#64748b;font-family:monospace;">${esc(formatDisplayTimestamp(row.ts || ''))}</span>
                   <span style="font-size:0.72rem;font-weight:700;color:#334155;background:#e2e8f0;padding:2px 8px;border-radius:999px;">${esc(row.runStem || '')}</span>
+                  ${_targetBadge({asmi_target: row.asmi_target, asmi_handle: row.asmi_handle})}
                   <span style="font-size:0.72rem;color:#475569;">${esc(row.testId || '')} · ${esc(row.testName || '')}</span>
                   <span style="font-size:0.72rem;font-weight:700;color:${row.side === 'you' ? '#1d4ed8' : '#15803d'};background:${row.side === 'you' ? '#dbeafe' : '#dcfce7'};padding:2px 8px;border-radius:999px;">${row.side === 'you' ? 'You' : 'Asmi'}</span>
                 </div>
@@ -3808,6 +3862,7 @@ async function loadResponses(silent = false) {
       html += `<div style="border:1px solid #e2e8f0;border-radius:14px;padding:18px;background:#f8fafc;">
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;">
           <div style="font-size:0.95rem;font-weight:700;color:#0f172a;">Run ${ts}</div>
+          ${_targetBadge(run)}
           <div style="background:#e2e8f0;color:#1d4ed8;padding:4px 10px;border-radius:999px;font-size:0.78rem;">${run.tests.length} test${run.tests.length===1?'':'s'}</div>
           <div style="background:#d1fae5;color:#15803d;padding:4px 10px;border-radius:999px;font-size:0.78rem;">${run.totalResponses} total responses</div>
         </div>
@@ -3852,9 +3907,11 @@ async function loadAnalysis(silent = false) {
       const verdict = (t.verdict || 'UNCLEAR').toUpperCase();
       const vColor = verdict === 'PASS' ? '#166534' : verdict === 'FAIL' ? '#991b1b' : '#92400e';
       const vBg = verdict === 'PASS' ? '#dcfce7' : verdict === 'FAIL' ? '#fee2e2' : '#fef3c7';
+      const target = _targetBadge(t);
       return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#fff;">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
           <span style="font-family:monospace;color:#64748b;font-size:0.78rem;">${esc(formatTimestamp(t.stem || ''))}</span>
+          ${target}
           <span style="background:${vBg};color:${vColor};padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;">${verdict}</span>
           <span style="font-weight:700;color:#0f172a;">${esc(t.id || '')}</span>
           <span style="color:#334155;">${esc(t.name || '')}</span>
@@ -4155,9 +4212,13 @@ class Handler(BaseHTTPRequestHandler):
                             passed  = sum(1 for r in data if r.get("verdict") == "PASS")
                             failed  = sum(1 for r in data if r.get("verdict") == "FAIL")
                             unclear = sum(1 for r in data if r.get("verdict") == "UNCLEAR")
+                            asmi_target = next((r.get("asmi_target") for r in data if isinstance(r, dict) and r.get("asmi_target")), "")
+                            asmi_handle = next((r.get("asmi_handle") for r in data if isinstance(r, dict) and r.get("asmi_handle")), "")
                             history.append({
                                 "stem":    stem,
                                 "ts":      stem,
+                                "asmi_target": asmi_target,
+                                "asmi_handle": asmi_handle,
                                 "total":   len(data),
                                 "passed":  passed,
                                 "failed":  failed,
@@ -4170,9 +4231,13 @@ class Handler(BaseHTTPRequestHandler):
                         passed  = sum(1 for r in _run_results if r.get("verdict") == "PASS")
                         failed  = sum(1 for r in _run_results if r.get("verdict") == "FAIL")
                         unclear = sum(1 for r in _run_results if r.get("verdict") == "UNCLEAR")
+                        asmi_target = next((r.get("asmi_target") for r in _run_results if isinstance(r, dict) and r.get("asmi_target")), "")
+                        asmi_handle = next((r.get("asmi_handle") for r in _run_results if isinstance(r, dict) and r.get("asmi_handle")), "")
                         history.insert(0, {
                             "stem": _run_result_stem,
                             "ts": _run_result_stem,
+                            "asmi_target": asmi_target,
+                            "asmi_handle": asmi_handle,
                             "total": len(_run_results),
                             "passed": passed,
                             "failed": failed,
@@ -4187,7 +4252,7 @@ class Handler(BaseHTTPRequestHandler):
                         "/rest/v1/runs",
                         token=token,
                         params={
-                            "select": "id,created_at,results",
+                            "select": "id,created_at,results,asmi_target,asmi_handle",
                             "owner_user_id": f"eq.{uid}",
                             "status": "neq.canceled",
                             "order": "created_at.desc",
@@ -4202,6 +4267,8 @@ class Handler(BaseHTTPRequestHandler):
                         results = r.get("results") if isinstance(r, dict) else []
                         if not isinstance(results, list):
                             results = []
+                        asmi_target = r.get("asmi_target")
+                        asmi_handle = r.get("asmi_handle")
                         total_responses = 0
                         tests = []
                         for rr in results:
@@ -4211,6 +4278,8 @@ class Handler(BaseHTTPRequestHandler):
                                 "id": rr.get("id"),
                                 "name": rr.get("name"),
                                 "category": rr.get("category"),
+                                "asmi_target": rr.get("asmi_target") or asmi_target,
+                                "asmi_handle": rr.get("asmi_handle") or asmi_handle,
                                 "verdict": rr.get("verdict"),
                                 "reason": rr.get("reason"),
                                 "started_at": rr.get("started_at"),
@@ -4223,6 +4292,8 @@ class Handler(BaseHTTPRequestHandler):
                         responses.append({
                             "stem": (r.get("id") or "")[:8],
                             "run_id": r.get("id"),
+                            "asmi_target": asmi_target,
+                            "asmi_handle": asmi_handle,
                             "tests": tests,
                             "totalResponses": total_responses,
                         })
@@ -4239,6 +4310,8 @@ class Handler(BaseHTTPRequestHandler):
                         try:
                             with open(f) as fp:
                                 data = json.load(fp)
+                            asmi_target = next((r.get("asmi_target") for r in data if isinstance(r, dict) and r.get("asmi_target")), "")
+                            asmi_handle = next((r.get("asmi_handle") for r in data if isinstance(r, dict) and r.get("asmi_handle")), "")
                             tests = []
                             total_responses = 0
                             for r in data:
@@ -4246,6 +4319,8 @@ class Handler(BaseHTTPRequestHandler):
                                     "id": r.get("id"),
                                     "name": r.get("name"),
                                     "category": r.get("category"),
+                                    "asmi_target": r.get("asmi_target") or asmi_target,
+                                    "asmi_handle": r.get("asmi_handle") or asmi_handle,
                                     "verdict": r.get("verdict"),
                                     "reason": r.get("reason"),
                                     "started_at": r.get("started_at"),
@@ -4257,6 +4332,8 @@ class Handler(BaseHTTPRequestHandler):
                                 total_responses += len(r.get("responses", []))
                             responses.append({
                                 "stem": stem,
+                                "asmi_target": asmi_target,
+                                "asmi_handle": asmi_handle,
                                 "tests": tests,
                                 "totalResponses": total_responses,
                             })
@@ -4265,11 +4342,15 @@ class Handler(BaseHTTPRequestHandler):
                     if _run_results and _run_result_stem and not any(r.get("stem") == _run_result_stem for r in responses):
                         tests = []
                         total_responses = 0
+                        asmi_target = next((r.get("asmi_target") for r in _run_results if isinstance(r, dict) and r.get("asmi_target")), "")
+                        asmi_handle = next((r.get("asmi_handle") for r in _run_results if isinstance(r, dict) and r.get("asmi_handle")), "")
                         for r in _run_results:
                             tests.append({
                                 "id": r.get("id"),
                                 "name": r.get("name"),
                                 "category": r.get("category"),
+                                "asmi_target": r.get("asmi_target") or asmi_target,
+                                "asmi_handle": r.get("asmi_handle") or asmi_handle,
                                 "verdict": r.get("verdict"),
                                 "reason": r.get("reason"),
                                 "started_at": r.get("started_at"),
@@ -4281,6 +4362,8 @@ class Handler(BaseHTTPRequestHandler):
                             total_responses += len(r.get("responses", []))
                         responses.insert(0, {
                             "stem": _run_result_stem,
+                            "asmi_target": asmi_target,
+                            "asmi_handle": asmi_handle,
                             "tests": tests,
                             "totalResponses": total_responses,
                         })
@@ -4292,7 +4375,7 @@ class Handler(BaseHTTPRequestHandler):
                         "/rest/v1/runs",
                         token=token,
                         params={
-                            "select": "id,created_at,results",
+                            "select": "id,created_at,results,asmi_target,asmi_handle",
                             "owner_user_id": f"eq.{uid}",
                             "status": "neq.canceled",
                             "order": "created_at.desc",
@@ -4310,8 +4393,10 @@ class Handler(BaseHTTPRequestHandler):
                         data = r.get("results") if isinstance(r, dict) else []
                         if not isinstance(data, list):
                             data = []
+                        asmi_target = r.get("asmi_target")
+                        asmi_handle = r.get("asmi_handle")
                         summary = _result_summary(data)
-                        runs.append({"stem": stem, "ts": r.get("created_at"), **summary, "run_id": r.get("id")})
+                        runs.append({"stem": stem, "ts": r.get("created_at"), "asmi_target": asmi_target, "asmi_handle": asmi_handle, **summary, "run_id": r.get("id")})
                         for rr in data:
                             if not isinstance(rr, dict):
                                 continue
@@ -4321,6 +4406,8 @@ class Handler(BaseHTTPRequestHandler):
                                 "id": rr.get("id"),
                                 "name": rr.get("name"),
                                 "category": rr.get("category"),
+                                "asmi_target": rr.get("asmi_target") or asmi_target,
+                                "asmi_handle": rr.get("asmi_handle") or asmi_handle,
                                 "verdict": (rr.get("verdict") or "UNCLEAR").upper(),
                                 "reason": rr.get("reason", ""),
                                 "tasks_sent_count": len(rr.get("tasks_sent", []) or []),
@@ -4610,6 +4697,9 @@ class Handler(BaseHTTPRequestHandler):
                     results = data.get("results", []) or []
                     if not isinstance(results, list):
                         results = []
+                    asmi_target = (data.get("asmi_target") or (results[0].get("asmi_target") if results and isinstance(results[0], dict) else "") or "").strip().lower()
+                    asmi_handle = (data.get("asmi_handle") or (results[0].get("asmi_handle") if results and isinstance(results[0], dict) else "") or "").strip()
+                    results = _annotate_results_target(results, asmi_target, asmi_handle)
                     progress = data.get("progress") or {}
                     # Persist to runs table
                     sb_service_patch(
@@ -4664,10 +4754,14 @@ class Handler(BaseHTTPRequestHandler):
                     _run_status      = data.get("status", "done")
                     _run_report_html = data.get("report_html", "")
                     _run_results     = data.get("results", [])
+                    asmi_target = (data.get("asmi_target") or (_run_results[0].get("asmi_target") if _run_results and isinstance(_run_results[0], dict) else "") or "").strip().lower()
+                    asmi_handle = (data.get("asmi_handle") or (_run_results[0].get("asmi_handle") if _run_results and isinstance(_run_results[0], dict) else "") or "").strip()
+                    if isinstance(_run_results, list):
+                        _run_results = _annotate_results_target(_run_results, asmi_target, asmi_handle)
                     m = re.search(r"Raw results:\s*\S*results_(\d{8}_?\d{4,6})\.json", _run_output)
                     _run_result_stem = m.group(1) if m else _et_now_str("%Y%m%d_%H%M%S")
                     if _run_status == "done" and _run_results:
-                        _persist_run_artifacts(_run_result_stem, _run_results, _run_report_html)
+                        _persist_run_artifacts(_run_result_stem, _run_results, _run_report_html, asmi_target, asmi_handle)
                     self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
