@@ -3,6 +3,7 @@
 # Called by daemon.py when a new command message arrives.
 
 import glob
+import hashlib
 import json
 import os
 import re as _re
@@ -35,6 +36,7 @@ HELP_TEXT = """
 !run [category]       → run one category
 !run [test_id]        → run one specific test
 !status               → summary of last run
+!keystatus            → show daemon Gemini key fingerprint
 !list                 → list all test IDs
 !add test [describe]  → add a new test case with Gemini
 !menu                 → show this message
@@ -59,6 +61,8 @@ def handle(text: str) -> str:
 
     if lower in ["status", "results", "last run", "last results"]:
         return _status()
+    if lower in ["keystatus", "key status", "env", "debug key"]:
+        return _keystatus()
 
     if lower in ["list", "tests", "list tests"]:
         return _list_tests()
@@ -177,6 +181,21 @@ def _list_tests() -> str:
         return "\n".join(lines)
     except Exception as e:
         return f"❌ Could not list tests: {e}"
+
+
+def _keystatus() -> str:
+    key = (os.environ.get("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY or "").strip()
+    if not key:
+        return "❌ GEMINI_API_KEY is not configured in daemon runtime."
+    masked = f"{key[:6]}...{key[-4:]}" if len(key) > 10 else "*" * len(key)
+    fp = hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+    return (
+        "🔑 Daemon key status\n"
+        f"Model: {GEMINI_MODEL}\n"
+        f"Masked: {masked}\n"
+        f"len: {len(key)}\n"
+        f"sha256_12: {fp}"
+    )
 
 
 def _add_test(description: str) -> str:
