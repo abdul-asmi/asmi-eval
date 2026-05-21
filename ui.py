@@ -287,12 +287,21 @@ def load_or_seed_test_cases_supabase(token: str, user_id: str) -> list[dict]:
     """
     Load the current user's Supabase test cases.
     If this is a fresh account with no rows yet, seed it from local defaults.
+    If repo defaults add new tests later, append only the missing default IDs.
     """
     cases = load_test_cases_supabase(token)
-    if cases:
-        return cases
-
     defaults = load_test_cases()
+    if cases:
+        existing_ids = {str(tc.get("id") or "").strip() for tc in cases if isinstance(tc, dict)}
+        missing_defaults = [
+            tc for tc in defaults
+            if isinstance(tc, dict) and str(tc.get("id") or "").strip() and str(tc.get("id") or "").strip() not in existing_ids
+        ]
+        if missing_defaults:
+            cases = cases + missing_defaults
+            save_test_cases_supabase(token, user_id, cases)
+        return sorted(cases, key=_test_case_sort_key)
+
     if defaults:
         save_test_cases_supabase(token, user_id, defaults)
     return defaults
@@ -1783,6 +1792,19 @@ let _sortBy = 'default';
 let _categoryOrder = [];
 let _responsesViewMode = 'transcript';
 let _dragState = null;
+let _customCategories = new Set();
+
+try {
+  _customCategories = new Set(JSON.parse(localStorage.getItem('customCategories') || '[]'));
+} catch(e) {
+  _customCategories = new Set();
+}
+
+function _saveCustomCategories() {
+  try {
+    localStorage.setItem('customCategories', JSON.stringify(Array.from(_customCategories)));
+  } catch(e) {}
+}
 
 const ASMI_TARGETS = {
   dev:  {label: 'Dev',  handle: '+14082307921'},
@@ -1790,6 +1812,7 @@ const ASMI_TARGETS = {
 };
 
 const CAT_META = {
+  'core test':        {label:'Core Test',         color:'#0f766e', bg:'#ccfbf1'},
   onboarding:         {label:'Onboarding',        color:'#7c3aed', bg:'#f5f3ff'},
   capability:         {label:'Capability',         color:'#1d4ed8', bg:'#eff6ff'},
   sticky_message:     {label:'Sticky Message',     color:'#15803d', bg:'#f0fdf4'},
@@ -1813,6 +1836,7 @@ const CAT_META = {
   generated:          {label:'Generated',          color:'#334155', bg:'#f1f5f9'},
 };
 const KNOWN_CAT_ORDER = [
+  'core test',
   'onboarding','capability','sticky_message','call_dedup','cadence_control',
   'call_summary','voicemail','task_reliability','task_specific_call','threep_nudge',
   'location_memory','language_pref','timezone','checklist','chat_brevity','chat_flow',
@@ -1822,6 +1846,7 @@ const KNOWN_CAT_ORDER = [
 
 function _allCategories(list = tests) {
   const set = new Set();
+  _customCategories.forEach(c => { if (c) set.add(c); });
   (list || []).forEach(t => { if (t && t.category) set.add(t.category); });
   return Array.from(set);
 }
@@ -1873,6 +1898,8 @@ function _confirmNewCategory() {
   const btn = document.getElementById('new_cat_btn');
 
   CAT_META[name] = {label: name.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), color: '#64748b', bg: '#f1f5f9'};
+  _customCategories.add(name);
+  _saveCustomCategories();
   _initCatDropdowns();
 
   el.style.display = '';
@@ -2435,6 +2462,10 @@ function addNew() {
   tc.id = _nextTestId(category);
 
   tests.push(tc);
+  if (category) {
+    _customCategories.add(category);
+    _saveCustomCategories();
+  }
   toggleNew();
   render();
 }
