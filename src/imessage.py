@@ -163,8 +163,6 @@ def send_imessage(message: str, handle: str | None = None) -> bool:
     retry_delay = max(0.5, float(IMESSAGE_SEND_RETRY_DELAY or 2.0))
     verify_timeout = max(1.0, float(IMESSAGE_SEND_VERIFY_TIMEOUT or 12.0))
     verify_poll = max(0.2, float(IMESSAGE_SEND_VERIFY_POLL or 0.6))
-    had_script_success = False
-
     for attempt in range(1, attempts + 1):
         attempt_started = datetime.now(timezone.utc)
         script = f'''
@@ -186,12 +184,18 @@ def send_imessage(message: str, handle: str | None = None) -> bool:
             result = None
 
         if result is not None and result.returncode == 0:
-            had_script_success = True
             if _wait_for_outgoing_match(handle, message, attempt_started, verify_timeout, verify_poll):
                 if attempt > 1:
                     print(f"  ✓ Send recovered on attempt {attempt}/{attempts}")
                 return True
-            print(f"  [send verify] attempt {attempt}/{attempts}: no outgoing message found in chat.db")
+            # Important: do NOT re-send after a successful AppleScript send.
+            # chat.db sync can lag and cause false-negative verification, which
+            # would duplicate messages if we retried the send.
+            print(
+                "  [send verify warning] AppleScript send succeeded but chat.db "
+                "did not confirm in time; treating as sent to avoid duplicates"
+            )
+            return True
         else:
             stderr = (result.stderr or "").strip() if result is not None else ""
             stdout = (result.stdout or "").strip() if result is not None else ""
@@ -202,12 +206,6 @@ def send_imessage(message: str, handle: str | None = None) -> bool:
             backoff = retry_delay * attempt
             print(f"  ↻ Retrying send in {backoff:.1f}s…")
             time.sleep(backoff)
-
-    # Last-resort success path: if AppleScript accepted the send but chat.db sync
-    #/handle matching failed verification, continue run instead of hard-failing.
-    if had_script_success:
-        print("  [send verify warning] AppleScript send succeeded; proceeding despite chat.db verify miss")
-        return True
 
     print("  [send failed] all attempts exhausted")
     return False
