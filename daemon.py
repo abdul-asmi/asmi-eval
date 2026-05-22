@@ -40,6 +40,10 @@ from config import (
 from commands import handle
 from imessage import send_imessage, _mac_ts
 from test_case_store import load_test_cases as _load_test_cases
+from slack import (
+    get_bot_channels, poll_slack_commands_multi,
+    post_message_to_slack, get_latest_slack_ts,
+)
 
 ASMI_TARGET_HANDLES = {
     "dev": "+14082307921",
@@ -609,6 +613,21 @@ def run():
     since_ns    = _mac_ts(datetime.now(timezone.utc))
     processed   = set()
 
+    # Initialize Slack command polling tracking
+    slack_last_ts = {}
+    slack_token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    if slack_token:
+        print("  [Slack] Initializing channel timestamps...")
+        try:
+            bot_channels = get_bot_channels()
+            for ch in bot_channels:
+                latest_ts = get_latest_slack_ts(ch)
+                if latest_ts:
+                    slack_last_ts[ch] = latest_ts
+            print(f"  [Slack] Listening on channels: {', '.join(bot_channels)}")
+        except Exception as e:
+            print(f"  [Slack] Initialization error: {e}")
+
     print(f"""
 ╔══════════════════════════════════════════════════════╗
   Asmi Eval Daemon — running
@@ -716,6 +735,52 @@ def run():
                     response = f"❌ Error executing command: {e}"
 
                 print(f"  → Reply ({len(response)} chars): {response[:120]}")
+
+            # ─── Poll Slack Commands ───
+            if slack_token:
+                try:
+                    # Dynamically refresh joined channels in case the bot was added/removed
+                    bot_channels = get_bot_channels()
+                    for ch in bot_channels:
+                        if ch not in slack_last_ts:
+                            slack_last_ts[ch] = get_latest_slack_ts(ch)
+
+                    # Remove channels we are no longer in
+                    for ch in list(slack_last_ts.keys()):
+                        if ch not in bot_channels:
+                            slack_last_ts.pop(ch, None)
+
+                    # Poll for commands
+                    slack_cmds, updated_ts_dict = poll_slack_commands_multi(slack_last_ts)
+                    slack_last_ts = updated_ts_dict
+
+                    for smsg in slack_cmds:
+                        text = smsg["text"].strip()
+                        ch_id = smsg["channel_id"]
+                        
+                        clean = text.lstrip("!").strip()
+                        ts_str = datetime.now().strftime("%H:%M:%S")
+                        print(f"\n  [{ts_str}] Slack Command received from channel {ch_id}: {text[:80]}")
+
+                        # Temporarily override SLACK_CHANNEL so runner and uploads go to this channel
+                        old_slack_channel = os.environ.get("SLACK_CHANNEL")
+                        os.environ["SLACK_CHANNEL"] = ch_id
+
+                        try:
+                            response = handle(clean)
+                        except Exception as e:
+                            response = f"❌ Error executing command: {e}"
+
+                        # Restore SLACK_CHANNEL env var
+                        if old_slack_channel is not None:
+                            os.environ["SLACK_CHANNEL"] = old_slack_channel
+                        else:
+                            os.environ.pop("SLACK_CHANNEL", None)
+
+                        print(f"  → Slack Reply ({len(response)} chars): {response[:120]}")
+                        post_message_to_slack(response, channel_id=ch_id)
+                except Exception as e:
+                    print(f"  [Slack Command loop error] {e}")
 
         except KeyboardInterrupt:
             print("\n\n  Daemon stopped.")

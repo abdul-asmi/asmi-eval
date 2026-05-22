@@ -3,6 +3,22 @@
 
 import os
 
+# Load .env.local if present to populate os.environ before fetching them
+_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env.local")
+if os.path.exists(_env_path):
+    with open(_env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#"):
+                _parts = _line.split("=", 1)
+                if len(_parts) == 2:
+                    _k, _v = _parts[0].strip(), _parts[1].strip()
+                    # Strip quotes if present
+                    if (_v.startswith('"') and _v.endswith('"')) or (_v.startswith("'") and _v.endswith("'")):
+                        _v = _v[1:-1]
+                    if _k not in os.environ:
+                        os.environ[_k] = _v
+
 ASMI_HANDLE = "+14082307921"          # Asmi's iMessage number
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()

@@ -6,16 +6,16 @@ import os
 import sys
 import requests
 
-def upload_file_to_slack(filepath: str, title: str, initial_comment: str = "") -> bool:
+def upload_file_to_slack(filepath: str, title: str, initial_comment: str = "", channel_id: str = None) -> bool:
     """
     Upload a local file to Slack using the modern 3-step file upload API.
     Zero external dependencies besides standard `requests` library.
     """
     token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
-    channel_id = os.environ.get("SLACK_CHANNEL", "").strip()
+    target_channel = (channel_id or os.environ.get("SLACK_CHANNEL", "")).strip()
 
-    if not token or not channel_id:
-        print("  [Slack] Skipping upload: SLACK_BOT_TOKEN or SLACK_CHANNEL not set.")
+    if not token or not target_channel:
+        print("  [Slack] Skipping upload: SLACK_BOT_TOKEN or target channel not set.")
         return False
 
     if not filepath or not os.path.exists(filepath):
@@ -55,7 +55,7 @@ def upload_file_to_slack(filepath: str, title: str, initial_comment: str = "") -
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "files": [{"id": file_id, "title": title}],
-                "channel_id": channel_id,
+                "channel_id": target_channel,
                 "initial_comment": initial_comment,
             },
             timeout=15,
@@ -66,7 +66,7 @@ def upload_file_to_slack(filepath: str, title: str, initial_comment: str = "") -
             print(f"  [Slack] completeUploadExternal failed: {complete_data}")
             return False
 
-        print(f"  [Slack] Uploaded {filename} to channel {channel_id}")
+        print(f"  [Slack] Uploaded {filename} to channel {target_channel}")
         return True
     except Exception as e:
         print(f"  [Slack] Failed to upload {filename}: {e}")
@@ -77,7 +77,8 @@ def send_call_to_slack(
     conversation_id: str,
     test_id: str,
     test_name: str,
-    call_transcript_result: dict | None = None
+    call_transcript_result: dict | None = None,
+    channel_id: str = None
 ) -> dict:
     """
     Download the call audio recording, generate the analysis PDF,
@@ -128,13 +129,13 @@ def send_call_to_slack(
     if recording_path and os.path.exists(recording_path):
         comment = f"📞 *Call Audio Recording*\n*Test:* {test_id} - {test_name}\n*Conversation ID:* `{conversation_id}`"
         title = f"Call Audio - {test_id} ({conversation_id[:8]})"
-        state["audio_uploaded"] = upload_file_to_slack(recording_path, title=title, initial_comment=comment)
+        state["audio_uploaded"] = upload_file_to_slack(recording_path, title=title, initial_comment=comment, channel_id=channel_id)
 
     # 4. Upload PDF to Slack
     if pdf_path and os.path.exists(pdf_path):
         comment = f"📄 *Call Evaluation Report*\n*Test:* {test_id} - {test_name}\n*Conversation ID:* `{conversation_id}`"
         title = f"Call Report - {test_id} ({conversation_id[:8]})"
-        state["pdf_uploaded"] = upload_file_to_slack(pdf_path, title=title, initial_comment=comment)
+        state["pdf_uploaded"] = upload_file_to_slack(pdf_path, title=title, initial_comment=comment, channel_id=channel_id)
 
     return state
 
@@ -195,6 +196,235 @@ def seed_slack_recordings(limit: int = 25) -> int:
 
     print(f"\n  [Slack Seeding] Backfill completed. Successfully seeded {success_count} conversations to Slack.")
     return success_count
+
+
+def post_message_to_slack(text: str, channel_id: str = None) -> bool:
+    """
+    Post a plain text message to the Slack channel.
+    """
+    token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    target_channel = (channel_id or os.environ.get("SLACK_CHANNEL", "")).strip()
+
+    if not token or not target_channel:
+        return False
+
+    try:
+        res = requests.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json={"channel": target_channel, "text": text},
+            timeout=15,
+        )
+        res.raise_for_status()
+        data = res.json()
+        return bool(data.get("ok"))
+    except Exception as e:
+        print(f"  [Slack] Failed to post message: {e}")
+        return False
+
+
+def _is_slack_command(text: str) -> bool:
+    """Check if a message looks like a command."""
+    t = text.strip().lower()
+    if t.startswith("!"):
+        return True
+    keywords = ["run ", "rejudge", "status", "list", "help", "add test"]
+    return any(t.startswith(k) for k in keywords)
+
+
+def get_latest_slack_ts(channel_id: str = None) -> str | None:
+    """
+    Get the timestamp of the latest message in the Slack channel.
+    Useful for initializing polling to ignore older history.
+    """
+    token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    target_channel = (channel_id or os.environ.get("SLACK_CHANNEL", "")).strip()
+
+    if not token or not target_channel:
+        return None
+
+    try:
+        res = requests.get(
+            "https://slack.com/api/conversations.history",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"channel": target_channel, "limit": 1},
+            timeout=15,
+        )
+        res.raise_for_status()
+        data = res.json()
+        if data.get("ok") and data.get("messages"):
+            return data["messages"][0].get("ts")
+    except Exception as e:
+        print(f"  [Slack] Failed to get latest ts: {e}")
+    return None
+
+
+def poll_slack_commands(last_ts: str | None) -> tuple[list[dict], str | None]:
+    """
+    Poll the Slack channel for new command messages sent after last_ts.
+    Returns (list of command_dicts, updated_last_ts).
+    Each command_dict contains: {"text": str, "ts": str}
+    """
+    token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    channel_id = os.environ.get("SLACK_CHANNEL", "").strip()
+
+    if not token or not channel_id:
+        return [], last_ts
+
+    try:
+        res = requests.get(
+            "https://slack.com/api/conversations.history",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"channel": channel_id, "limit": 10},
+            timeout=15,
+        )
+        res.raise_for_status()
+        data = res.json()
+        if not data.get("ok"):
+            print(f"  [Slack Polling] history failed: {data}")
+            return [], last_ts
+
+        messages = data.get("messages") or []
+        if not messages:
+            return [], last_ts
+
+        # Sort messages from oldest to newest (by ts)
+        messages = sorted(messages, key=lambda m: float(m.get("ts") or 0))
+
+        new_commands = []
+        current_last_ts = last_ts
+
+        for msg in messages:
+            msg_ts = msg.get("ts")
+            if not msg_ts:
+                continue
+
+            # Update highest ts seen
+            if not current_last_ts or float(msg_ts) > float(current_last_ts):
+                current_last_ts = msg_ts
+
+            # If this is not newer than our last processed ts, skip
+            if last_ts and float(msg_ts) <= float(last_ts):
+                continue
+
+            # Ignore bot messages to avoid feedback loops
+            if msg.get("bot_id") or msg.get("subtype") or "bot" in msg.get("user", "").lower():
+                continue
+
+            text = msg.get("text", "").strip()
+            if not text:
+                continue
+
+            if _is_slack_command(text):
+                new_commands.append({"text": text, "ts": msg_ts})
+
+        return new_commands, current_last_ts
+
+    except Exception as e:
+        print(f"  [Slack Polling] Error polling commands: {e}")
+        return [], last_ts
+
+
+def get_bot_channels() -> list[str]:
+    """
+    Get the list of all channel IDs the bot is a member of.
+    """
+    token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    if not token:
+        return []
+
+    channels = []
+    try:
+        res = requests.get(
+            "https://slack.com/api/users.conversations",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"types": "public_channel,private_channel", "limit": 100},
+            timeout=15,
+        )
+        res.raise_for_status()
+        data = res.json()
+        if data.get("ok"):
+            for ch in data.get("channels", []):
+                ch_id = ch.get("id")
+                if ch_id:
+                    channels.append(ch_id)
+    except Exception as e:
+        print(f"  [Slack] Failed to list bot channels: {e}")
+    
+    # Always include the default SLACK_CHANNEL if configured and not already present
+    default_channel = os.environ.get("SLACK_CHANNEL", "").strip()
+    if default_channel and default_channel not in channels:
+        channels.append(default_channel)
+        
+    return channels
+
+
+def poll_slack_commands_multi(channel_last_ts: dict[str, str]) -> tuple[list[dict], dict[str, str]]:
+    """
+    Poll all joined Slack channels for new command messages sent after their respective last_ts.
+    channel_last_ts: dict mapping channel_id -> last_ts string.
+    Returns (list of command_dicts, updated dict of channel_last_ts).
+    Each command_dict contains: {"text": str, "ts": str, "channel_id": str}
+    """
+    token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    if not token:
+        return [], channel_last_ts
+
+    new_commands = []
+    updated_ts_dict = dict(channel_last_ts)
+
+    for channel_id in list(channel_last_ts.keys()):
+        last_ts = channel_last_ts[channel_id]
+        try:
+            res = requests.get(
+                "https://slack.com/api/conversations.history",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"channel": channel_id, "limit": 10},
+                timeout=15,
+            )
+            res.raise_for_status()
+            data = res.json()
+            if not data.get("ok"):
+                continue
+
+            messages = data.get("messages") or []
+            if not messages:
+                continue
+
+            # Sort messages from oldest to newest (by ts)
+            messages = sorted(messages, key=lambda m: float(m.get("ts") or 0))
+
+            for msg in messages:
+                msg_ts = msg.get("ts")
+                if not msg_ts:
+                    continue
+
+                # Update highest ts seen for this channel
+                if not updated_ts_dict.get(channel_id) or float(msg_ts) > float(updated_ts_dict[channel_id]):
+                    updated_ts_dict[channel_id] = msg_ts
+
+                # If this is not newer than our last processed ts, skip
+                if last_ts and float(msg_ts) <= float(last_ts):
+                    continue
+
+                # Ignore bot messages to avoid feedback loops
+                if msg.get("bot_id") or msg.get("subtype") or "bot" in msg.get("user", "").lower():
+                    continue
+
+                text = msg.get("text", "").strip()
+                if not text:
+                    continue
+
+                if _is_slack_command(text):
+                    new_commands.append({"text": text, "ts": msg_ts, "channel_id": channel_id})
+
+        except Exception as e:
+            print(f"  [Slack Polling] Error polling channel {channel_id}: {e}")
+
+    return new_commands, updated_ts_dict
 
 
 if __name__ == "__main__":
