@@ -255,8 +255,13 @@ def get_latest_slack_ts(channel_id: str = None) -> str | None:
         )
         res.raise_for_status()
         data = res.json()
-        if data.get("ok") and data.get("messages"):
-            return data["messages"][0].get("ts")
+        if data.get("ok"):
+            if data.get("messages"):
+                return data["messages"][0].get("ts")
+        else:
+            print(f"  [Slack] conversations.history error for {target_channel}: {data.get('error')} (needed scopes: {data.get('needed')})")
+            if data.get("error") == "missing_scope":
+                print("  [Slack] ⚠ Please verify that your Slack Bot Token has the 'channels:history' scope!")
     except Exception as e:
         print(f"  [Slack] Failed to get latest ts: {e}")
     return None
@@ -351,6 +356,10 @@ def get_bot_channels() -> list[str]:
                 ch_id = ch.get("id")
                 if ch_id:
                     channels.append(ch_id)
+        else:
+            print(f"  [Slack] users.conversations error: {data.get('error')} (needed scopes: {data.get('needed')})")
+            if data.get("error") == "missing_scope":
+                print("  [Slack] ⚠ Please verify that your Slack Bot Token has the 'channels:read' scope!")
     except Exception as e:
         print(f"  [Slack] Failed to list bot channels: {e}")
     
@@ -388,6 +397,9 @@ def poll_slack_commands_multi(channel_last_ts: dict[str, str]) -> tuple[list[dic
             res.raise_for_status()
             data = res.json()
             if not data.get("ok"):
+                print(f"  [Slack Polling] conversations.history error for {channel_id}: {data.get('error')} (needed scopes: {data.get('needed')})")
+                if data.get("error") == "missing_scope":
+                    print("  [Slack] ⚠ Please verify that your Slack Bot Token has the 'channels:history' scope!")
                 continue
 
             messages = data.get("messages") or []
