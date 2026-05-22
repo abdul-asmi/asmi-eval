@@ -16,6 +16,12 @@ SEQUENCE_DELAY     = 12.0  # seconds between sequential task sends
 SILENCE_AFTER      = 30.0  # seconds of silence after last response before stopping capture
 JUDGE_DELAY        = 4     # seconds between Gemini judge calls (free tier ~15 RPM)
 
+# iMessage send hardening (prevents silent send failures from one-shot AppleScript)
+IMESSAGE_SEND_ATTEMPTS      = int(os.environ.get("IMESSAGE_SEND_ATTEMPTS", "3"))
+IMESSAGE_SEND_RETRY_DELAY   = float(os.environ.get("IMESSAGE_SEND_RETRY_DELAY", "2.0"))
+IMESSAGE_SEND_VERIFY_TIMEOUT = float(os.environ.get("IMESSAGE_SEND_VERIFY_TIMEOUT", "12.0"))
+IMESSAGE_SEND_VERIFY_POLL   = float(os.environ.get("IMESSAGE_SEND_VERIFY_POLL", "0.6"))
+
 CHAT_DB = os.path.expanduser("~/Library/Messages/chat.db")
 
 # ─── Command Daemon ────────────────────────────────────────────────────────────

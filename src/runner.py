@@ -491,6 +491,7 @@ def collect(tc: dict) -> dict:
         burst_delay = tc.get("burst_delay", BURST_SEND_DELAY)
         wait = tc.get("wait", BURST_WAIT)
         session_start = None
+        sent_success_count = 0
         for i, msg in enumerate(msgs):
             if _stop_requested():
                 stopped_early = True
@@ -499,7 +500,13 @@ def collect(tc: dict) -> dict:
             if session_start is None:
                 session_start = sent_at
             print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
-            send_imessage(msg)
+            ok = send_imessage(msg)
+            if not ok:
+                stopped_early = True
+                result["reason"] = f"Send failed at burst message {i+1}/{len(msgs)}."
+                print(f"  ⚠ {result['reason']}")
+                break
+            sent_success_count += 1
             if i < len(msgs) - 1:
                 delay = _next_message_delay(msg, burst_delay)
                 print(f"  (waiting {delay}s before next message…)")
@@ -508,15 +515,19 @@ def collect(tc: dict) -> dict:
                     break
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
         session_start = session_start or datetime.now(timezone.utc)
-        raw = wait_for_responses(
-            session_start,
-            count=expected,
-            timeout=wait,
-            max_responses=max(10, expected + 6),
-            drain_all=True,
-            return_raw=True,
-            silence_after=silence_after,
-        )
+        if sent_success_count > 0:
+            wait_expected = min(int(expected), sent_success_count)
+            raw = wait_for_responses(
+                session_start,
+                count=max(1, wait_expected),
+                timeout=wait,
+                max_responses=max(10, expected + 6),
+                drain_all=True,
+                return_raw=True,
+                silence_after=silence_after,
+            )
+        else:
+            raw = []
         transcript = reconstruct_transcript(session_start, raw, default_user=msgs[0] if msgs else None)
         result["transcript"] = transcript
         result["tasks_sent"] = [t["user"] for t in transcript]
@@ -538,7 +549,16 @@ def collect(tc: dict) -> dict:
             return result
         print(f"  → Setup: {setup}")
         setup_sent = datetime.now(timezone.utc)
-        send_imessage(setup)
+        setup_ok = send_imessage(setup)
+        if not setup_ok:
+            stopped_early = True
+            result["reason"] = "Send failed for setup message."
+            result["transcript"] = reconstruct_transcript(setup_sent, [], default_user=setup)
+            result["tasks_sent"] = [setup]
+            result["responses"] = []
+            result["finished_at"] = datetime.now(timezone.utc).isoformat()
+            print("  ⚠ Send failed for setup message")
+            return result
         setup_delay = _next_message_delay(setup, tc.get("setup_wait", 20))
         print(f"  (waiting {setup_delay}s before burst messages…)")
         if not _sleep_interruptible(setup_delay):
@@ -551,26 +571,37 @@ def collect(tc: dict) -> dict:
         burst_delay = tc.get("burst_delay", BURST_SEND_DELAY)
         wait = tc.get("wait", BURST_WAIT)
         session_start = setup_sent
+        sent_success_count = 0
         for i, msg in enumerate(msgs):
             if _stop_requested():
                 stopped_early = True
                 break
             print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
-            send_imessage(msg)
+            ok = send_imessage(msg)
+            if not ok:
+                stopped_early = True
+                result["reason"] = f"Send failed at burst message {i+1}/{len(msgs)}."
+                print(f"  ⚠ {result['reason']}")
+                break
+            sent_success_count += 1
             if i < len(msgs) - 1:
                 if not _sleep_interruptible(burst_delay):
                     stopped_early = True
                     break
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
-        raw = wait_for_responses(
-            session_start,
-            count=expected,
-            timeout=wait,
-            max_responses=max(10, expected + 6),
-            drain_all=True,
-            return_raw=True,
-            silence_after=silence_after,
-        )
+        if sent_success_count > 0:
+            wait_expected = min(int(expected), sent_success_count)
+            raw = wait_for_responses(
+                session_start,
+                count=max(1, wait_expected),
+                timeout=wait,
+                max_responses=max(10, expected + 6),
+                drain_all=True,
+                return_raw=True,
+                silence_after=silence_after,
+            )
+        else:
+            raw = []
         transcript = reconstruct_transcript(session_start, raw, default_user=setup)
         result["transcript"] = transcript
         result["tasks_sent"] = [t["user"] for t in transcript]
@@ -622,6 +653,11 @@ def collect(tc: dict) -> dict:
                 # Catch any manual user messages that synced late to chat.db
                 late = catch_up_manual_messages(session_start, seen_keys)
                 all_raw.extend(late)
+            else:
+                stopped_early = True
+                result["reason"] = f"Send failed at sequence step {i+1}/{len(msgs)}."
+                print(f"  ⚠ {result['reason']}")
+                break
             if i < len(msgs) - 1:
                 delay = _next_message_delay(msg, sequence_delay)
                 print(f"  (waiting {delay}s before next message…)")
@@ -657,25 +693,38 @@ def collect(tc: dict) -> dict:
             return result
         print(f"  → Sending msg 1: {msg1[:70]}")
         all_raw.append({"text": msg1, "timestamp": datetime.now(timezone.utc), "is_from_me": True})
-        send_imessage(msg1)
+        ok1 = send_imessage(msg1)
+        if not ok1:
+            stopped_early = True
+            result["reason"] = "Send failed for dedup message 1."
+            print("  ⚠ Send failed for dedup message 1")
         next_delay = _next_message_delay(msg1, delay)
         print(f"  (waiting {next_delay}s before msg 2…)")
-        if _sleep_interruptible(next_delay):
+        if ok1 and _sleep_interruptible(next_delay):
             print(f"  → Sending msg 2: {msg2[:70]}")
             all_raw.append({"text": msg2, "timestamp": datetime.now(timezone.utc), "is_from_me": True})
-            send_imessage(msg2)
+            ok2 = send_imessage(msg2)
+            if not ok2:
+                stopped_early = True
+                result["reason"] = "Send failed for dedup message 2."
+                print("  ⚠ Send failed for dedup message 2")
+        elif not ok1:
+            pass
         else:
             stopped_early = True
 
-        raw = wait_for_responses(
-            session_start,
-            count=expected + 1,
-            timeout=wait,
-            max_responses=max_responses,
-            drain_all=True,
-            return_raw=True,
-            silence_after=silence_after,
-        )
+        if ok1:
+            raw = wait_for_responses(
+                session_start,
+                count=expected + 1,
+                timeout=wait,
+                max_responses=max_responses,
+                drain_all=True,
+                return_raw=True,
+                silence_after=silence_after,
+            )
+        else:
+            raw = []
         for m in raw or []:
             all_raw.append(m)
             
@@ -725,7 +774,12 @@ def collect(tc: dict) -> dict:
                 session_start = sent_at
             
             # Send the automated user message
-            send_imessage(current_user)
+            ok = send_imessage(current_user)
+            if not ok:
+                stopped_early = True
+                result["reason"] = f"Send failed at interactive turn {turn_idx+1}."
+                print(f"  ⚠ {result['reason']}")
+                break
             
             poll = wait_for_responses(
                 session_start,
@@ -856,6 +910,11 @@ def collect(tc: dict) -> dict:
                     all_raw.append(m)
                 late = catch_up_manual_messages(session_start, seen_keys)
                 all_raw.extend(late)
+            else:
+                stopped_early = True
+                result["reason"] = f"Send failed at call_eval step {i+1}/{len(msgs)}."
+                print(f"  ⚠ {result['reason']}")
+                break
             if i < len(msgs) - 1:
                 delay = _next_message_delay(msg, sequence_delay)
                 print(f"  (waiting {delay}s before next message…)")

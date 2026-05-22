@@ -11,7 +11,16 @@ import time
 import os
 from datetime import datetime, timezone, timedelta
 
-from config import CHAT_DB, ASMI_HANDLE as _CFG_ASMI_HANDLE, POLL_INTERVAL, SILENCE_AFTER
+from config import (
+    CHAT_DB,
+    ASMI_HANDLE as _CFG_ASMI_HANDLE,
+    POLL_INTERVAL,
+    SILENCE_AFTER,
+    IMESSAGE_SEND_ATTEMPTS,
+    IMESSAGE_SEND_RETRY_DELAY,
+    IMESSAGE_SEND_VERIFY_TIMEOUT,
+    IMESSAGE_SEND_VERIFY_POLL,
+)
 
 # Mac Absolute Time epoch (2001-01-01 UTC)
 _MAC_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
@@ -35,28 +44,111 @@ def _resolve_handle(handle: str | None) -> str:
     return (handle or env_handle or _CFG_ASMI_HANDLE).strip()
 
 
+def _normalize_text(text: str) -> str:
+    return " ".join((text or "").strip().split())
+
+
+def _has_outgoing_match(
+    handle: str,
+    message: str,
+    sent_after: datetime,
+) -> bool:
+    """
+    Check chat.db for a just-sent outgoing message matching `message`.
+    We require is_from_me and a timestamp at/after the attempted send.
+    """
+    lookback = sent_after - timedelta(seconds=1)
+    msgs = _query_messages(handle, _mac_ts(lookback), limit=200)
+    needle = _normalize_text(message)
+    for m in msgs:
+        if not m.get("is_from_me"):
+            continue
+        ts = m.get("timestamp")
+        if not isinstance(ts, datetime):
+            continue
+        if ts < lookback:
+            continue
+        text = _normalize_text(m.get("text") or "")
+        if not text:
+            continue
+        if text == needle:
+            return True
+        # Fallback for line-break / whitespace normalization differences.
+        if len(needle) >= 24 and (needle in text or text in needle):
+            return True
+    return False
+
+
+def _wait_for_outgoing_match(
+    handle: str,
+    message: str,
+    sent_after: datetime,
+    timeout: float,
+    poll_interval: float,
+) -> bool:
+    deadline = time.time() + max(0.5, float(timeout))
+    while time.time() < deadline:
+        if _has_outgoing_match(handle, message, sent_after):
+            return True
+        time.sleep(max(0.2, float(poll_interval)))
+    return False
+
+
 def send_imessage(message: str, handle: str | None = None) -> bool:
-    """Send an iMessage using AppleScript. Returns True on success."""
+    """
+    Send an iMessage using AppleScript with retries and chat.db verification.
+    Returns True only when a send attempt is confirmed in chat.db.
+    """
     stop_file = os.environ.get("ASMI_STOP_FILE", "").strip()
     if stop_file and os.path.exists(stop_file):
         print("  ⏹ Stop requested — not sending another iMessage")
         return False
     handle = _resolve_handle(handle)
-    safe_msg = message.replace('"', '\\"')
-    script = f'''
-        tell application "Messages"
-            set targetService to 1st service whose service type = iMessage
-            set targetBuddy to buddy "{handle}" of targetService
-            send "{safe_msg}" to targetBuddy
-        end tell
-    '''
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True, text=True, timeout=15
-    )
-    if result.returncode != 0:
-        print(f"  [send error] {result.stderr.strip()}")
-    return result.returncode == 0
+    safe_msg = message.replace("\\", "\\\\").replace('"', '\\"')
+    attempts = max(1, int(IMESSAGE_SEND_ATTEMPTS or 1))
+    retry_delay = max(0.5, float(IMESSAGE_SEND_RETRY_DELAY or 2.0))
+    verify_timeout = max(1.0, float(IMESSAGE_SEND_VERIFY_TIMEOUT or 12.0))
+    verify_poll = max(0.2, float(IMESSAGE_SEND_VERIFY_POLL or 0.6))
+
+    for attempt in range(1, attempts + 1):
+        attempt_started = datetime.now(timezone.utc)
+        script = f'''
+            tell application "Messages"
+                set targetService to 1st service whose service type = iMessage
+                set targetBuddy to buddy "{handle}" of targetService
+                send "{safe_msg}" to targetBuddy
+            end tell
+        '''
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+        except subprocess.TimeoutExpired:
+            print(f"  [send error] attempt {attempt}/{attempts}: AppleScript timed out")
+            result = None
+
+        if result is not None and result.returncode == 0:
+            if _wait_for_outgoing_match(handle, message, attempt_started, verify_timeout, verify_poll):
+                if attempt > 1:
+                    print(f"  ✓ Send recovered on attempt {attempt}/{attempts}")
+                return True
+            print(f"  [send verify] attempt {attempt}/{attempts}: no outgoing message found in chat.db")
+        else:
+            stderr = (result.stderr or "").strip() if result is not None else ""
+            stdout = (result.stdout or "").strip() if result is not None else ""
+            details = stderr or stdout or "unknown AppleScript error"
+            print(f"  [send error] attempt {attempt}/{attempts}: {details}")
+
+        if attempt < attempts:
+            backoff = retry_delay * attempt
+            print(f"  ↻ Retrying send in {backoff:.1f}s…")
+            time.sleep(backoff)
+
+    print("  [send failed] all attempts exhausted")
+    return False
 
 
 # ─── Receive ──────────────────────────────────────────────────────────────────
@@ -203,5 +295,4 @@ def wait_for_responses(
     if return_raw:
         return collected
     return [m["text"] for m in collected if not m.get("is_from_me")][:max_responses]
-
 
