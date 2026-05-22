@@ -782,6 +782,7 @@ def collect(tc: dict) -> dict:
             try:
                 call_transcript_result = wait_for_call_transcript(
                     call_started_after=call_started_at,
+                    preferred_conversation_id=(monitor_state.get("conversation_id") or "").strip() or None,
                     timeout=call_timeout,
                 )
             except Exception as e:

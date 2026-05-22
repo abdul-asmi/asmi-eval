@@ -80,6 +80,7 @@ def get_conversation_audio(conversation_id: str) -> tuple[bytes, str]:
 def wait_for_call_transcript(
     call_started_after: datetime,
     agent_id: str | None = None,
+    preferred_conversation_id: str | None = None,
     timeout: int = 180,
     poll_interval: int = 5,
 ) -> dict | None:
@@ -99,12 +100,47 @@ def wait_for_call_transcript(
     started_ts = call_started_after.replace(tzinfo=timezone.utc) if call_started_after.tzinfo is None else call_started_after.astimezone(timezone.utc)
 
     deadline = time.time() + timeout
-    found_id = None
+    found_id = (preferred_conversation_id or "").strip() or None
+    last_sig = ""
+    unchanged_polls = 0
     print(f"\n  [ElevenLabs] Waiting up to {timeout}s for call transcript (agent={agent_id})…", end="", flush=True)
 
     while time.time() < deadline:
         time.sleep(poll_interval)
         print(".", end="", flush=True)
+
+        # If we already know the conversation id, poll details directly.
+        if found_id:
+            try:
+                detail = get_conversation(found_id)
+            except Exception as e:
+                print(f"\n  [ElevenLabs] detail fetch error (id={found_id}): {e}")
+                continue
+
+            parsed = _parse_conversation(detail)
+            status = str(parsed.get("status") or detail.get("status") or "").lower().strip()
+            transcript = parsed.get("transcript") or []
+            parsed["status"] = status
+
+            sig = "|".join(
+                f"{t.get('role')}::{t.get('time_in_call_secs')}::{t.get('message')}"
+                for t in transcript
+            )
+            if sig == last_sig:
+                unchanged_polls += 1
+            else:
+                last_sig = sig
+                unchanged_polls = 0
+
+            if status in {"done", "completed", "finished", "ended", "failed", "error", "aborted"}:
+                print(f"\n  [ElevenLabs] Call finished (status={status}) — transcript ready (id={found_id})")
+                return parsed
+
+            # Some calls never expose a terminal status promptly. If transcript
+            # stops changing for multiple polls, treat it as settled and proceed.
+            if transcript and unchanged_polls >= 2:
+                print(f"\n  [ElevenLabs] Transcript settled (status={status or 'unknown'}) — proceeding (id={found_id})")
+                return parsed
 
         try:
             convos = list_recent_conversations(agent_id)
@@ -139,7 +175,7 @@ def wait_for_call_transcript(
                 continue
 
             # This convo started AFTER our test — track it
-            found_id = convo.get("conversation_id") or convo.get("id")
+            found_id = found_id or convo.get("conversation_id") or convo.get("id")
             status = (convo.get("status") or "").lower()
 
             if status in {"done", "completed", "finished", "ended"}:
