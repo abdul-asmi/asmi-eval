@@ -138,6 +138,28 @@ def _poll_railway_full() -> dict:
                     req.add_header("X-Owner-User-Id", DAEMON_OWNER_USER_ID)
                 with urllib.request.urlopen(req, timeout=timeout_s, context=_SSL_CTX) as resp:
                     return json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                body = ""
+                try:
+                    body = e.read().decode("utf-8", errors="ignore")
+                except Exception:
+                    body = ""
+                if e.code in (401, 403) and "Invalid daemon token" in body:
+                    _log_poll_error_throttled(
+                        "remote-auth",
+                        RAILWAY_URL,
+                        RuntimeError(
+                            "Invalid daemon token. Update DAEMON_TOKEN in local .env.local to match Render."
+                        ),
+                    )
+                elif e.code in (401, 403):
+                    _log_poll_error_throttled(
+                        "remote-auth",
+                        RAILWAY_URL,
+                        RuntimeError(f"Unauthorized ({e.code}). Check DAEMON_TOKEN and DAEMON_OWNER_USER_ID."),
+                    )
+                else:
+                    _log_poll_error_throttled("remote", RAILWAY_URL, e)
             except Exception as e:
                 _log_poll_error_throttled("remote", RAILWAY_URL, e)
     if LOCAL_UI_URL:
@@ -581,6 +603,10 @@ def run():
         print(f"  Remote UI: {RAILWAY_URL}")
     if LOCAL_UI_URL:
         print(f"  Local UI fallback: {LOCAL_UI_URL}\n")
+    if not DAEMON_TOKEN:
+        print("  ⚠ DAEMON_TOKEN is empty in local env. Remote Render poll will be rejected.")
+    if not DAEMON_OWNER_USER_ID:
+        print("  ⚠ DAEMON_OWNER_USER_ID is empty in local env. Owner-scoped run polling may fail.")
 
     poll_count = 0
     while True:
