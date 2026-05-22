@@ -42,7 +42,8 @@ pkill -f daemon.py 2>/dev/null || true
 sleep 1
 
 echo "Starting daemon with nohup..."
-nohup "$PYTHON" daemon.py > "$LOG" 2>&1 &
+export PYTHONUNBUFFERED=1
+nohup "$PYTHON" -u daemon.py > "$LOG" 2>&1 &
 PID=$!
 
 sleep 1
