@@ -2312,7 +2312,7 @@ function renderRow(t, cat) {
           </div>
           <div><label>Type</label>
             <select onchange="update(${idx},'type',this.value)">
-              ${['single','burst','sequence','dedup','burst_with_setup','interactive']
+              ${['single','burst','sequence','dedup','burst_with_setup','interactive','call_eval']
                 .map(tp=>`<option value="${tp}" ${t.type===tp?'selected':''}>${tp}</option>`).join('')}
             </select>
           </div>
@@ -2524,7 +2524,7 @@ function toggleNew() {
 
 function toggleNewMsgFields() {
   const type = document.getElementById('new_type').value;
-  const multi = ['burst','sequence','burst_with_setup'].includes(type);
+  const multi = ['burst','sequence','burst_with_setup','call_eval'].includes(type);
   const interactive = type === 'interactive';
   const msgInput = document.getElementById('new_message');
   document.getElementById('new_msg_wrap').style.display  = multi ? 'none' : '';
@@ -2543,7 +2543,7 @@ function addNew() {
     type:         type,
     pass_criteria: document.getElementById('new_pass_criteria').value.trim(),
   };
-  if (['burst','sequence','burst_with_setup'].includes(type)) {
+  if (['burst','sequence','burst_with_setup','call_eval'].includes(type)) {
     tc.messages = document.getElementById('new_messages').value.split('\\n').map(s=>s.trim()).filter(Boolean);
     const waitVal = document.getElementById('new_wait_preset').value;
     if (waitVal) tc.wait = parseInt(waitVal);

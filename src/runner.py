@@ -561,6 +561,12 @@ def collect(tc: dict) -> dict:
         sequence_delay = tc.get("sequence_delay", SEQUENCE_DELAY)
         call_timeout = int(tc.get("call_transcript_timeout") or CALL_TRANSCRIPT_TIMEOUT)
 
+        if not msgs:
+            result["reason"] = "call_eval test is missing messages — add a messages list or message before running."
+            result["verdict"] = "UNCLEAR"
+            result["finished_at"] = datetime.now(timezone.utc).isoformat()
+            return result
+
         # Substitute {{call_number}} placeholder with the configured Twilio number
         call_phone = CALL_EVAL_PHONE.strip()
         msgs = [
