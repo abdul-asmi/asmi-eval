@@ -3651,9 +3651,9 @@ async function loadLogs() {
     
     let displayedText = text;
     if (filterInput.value) {
-      const lines = text.split('\n');
+      const lines = text.split('\\n');
       const query = filterInput.value.toLowerCase();
-      displayedText = lines.filter(line => line.toLowerCase().includes(query)).join('\n');
+      displayedText = lines.filter(line => line.toLowerCase().includes(query)).join('\\n');
       if (!displayedText) {
         displayedText = 'No logs matching "' + filterInput.value + '" found.';
       }
