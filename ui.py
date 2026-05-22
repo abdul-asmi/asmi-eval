@@ -163,8 +163,9 @@ def _annotate_results_target(results: list, asmi_target: str | None = None, asmi
 CATEGORIES = [
     "sticky_message","call_dedup","call_summary","language_pref",
     "location_memory","onboarding","capability","threep_nudge","interactive","generated",
+    "call_eval",
 ]
-TYPES = ["single","burst","sequence","dedup","burst_with_setup","interactive"]
+TYPES = ["single","burst","sequence","dedup","burst_with_setup","interactive","call_eval"]
 
 
 # ── GitHub API helpers ─────────────────────────────────────────────────────────
@@ -1452,6 +1453,7 @@ textarea { resize: vertical; min-height: 70px; }
           <option value="dedup">dedup</option>
           <option value="burst_with_setup">burst_with_setup</option>
           <option value="interactive">interactive</option>
+          <option value="call_eval">call_eval</option>
         </select>
       </div>
       <div class="form-full" id="new_msg_wrap">
