@@ -345,6 +345,7 @@ def wait_for_responses(
     return_raw: bool = False,
     silence_after: float = SILENCE_AFTER,
     seen_keys: set | None = None,
+    is_call_active_fn=None,
 ) -> list[str] | list[dict]:
     """
     Wait up to `timeout` seconds for `count` responses from Asmi after `sent_at`.
@@ -390,8 +391,10 @@ def wait_for_responses(
         # even if the original timeout would have ended earlier.
         if last_new_time is not None:
             deadline = max(deadline, last_new_time + silence_after)
-        if last_new_time is not None and time.time() - last_new_time >= silence_after:
-            break
+        is_active = is_call_active_fn() if is_call_active_fn else False
+        if not is_active or assistant_count >= count:
+            if last_new_time is not None and time.time() - last_new_time >= silence_after:
+                break
         print(".", end="", flush=True)
         time.sleep(POLL_INTERVAL)
 

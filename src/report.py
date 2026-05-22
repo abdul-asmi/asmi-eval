@@ -414,3 +414,140 @@ def generate(results: list[dict], output_path: str = "report.html", asmi_target:
 
     print(f"\n  📄 Report saved to: {output_path}")
     return output_path
+
+
+def generate_call_analysis_pdf(call_data: dict, test_id: str, test_name: str, call_phone: str, output_path: str) -> str:
+    """
+    Generate a visually clean PDF containing the ElevenLabs call transcript and analysis.
+    Uses pure PDF generation (backward-compatible and robust, with no external dependencies).
+    """
+    convo_id = call_data.get("conversation_id") or ""
+    status = call_data.get("status") or ""
+    duration = call_data.get("duration_secs") or "0"
+    analysis = call_data.get("analysis") or {}
+
+    summary = analysis.get("transcript_summary") or "No ElevenLabs summary generated."
+    sentiment = analysis.get("user_sentiment") or "Unknown"
+    successful = analysis.get("call_successful") or "Unknown"
+
+    transcript_text = call_data.get("transcript_text") or "(no transcript captured)"
+    run_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Build the document lines
+    lines = [
+        "ELEVENLABS CALL EVALUATION & ANALYSIS REPORT",
+        "==========================================================================================",
+        f"Generated at: {run_time}",
+        "",
+        "Test Details:",
+        "------------------------------------------------------------------------------------------",
+        f"  Test ID:       {test_id}",
+        f"  Test Name:     {test_name}",
+        f"  Target Phone:  +{call_phone}",
+        "",
+        "Call Details:",
+        "------------------------------------------------------------------------------------------",
+        f"  Conversation ID:  {convo_id}",
+        f"  Call Duration:    {duration} seconds",
+        f"  Call Status:      {status}",
+        "",
+        "ElevenLabs Conversation Analysis:",
+        "------------------------------------------------------------------------------------------",
+        f"  Call Successful:  {successful}",
+        f"  User Sentiment:   {sentiment}",
+        "",
+        "Call Summary:",
+        "  " + summary,
+        "",
+        "Full Call Transcript:",
+        "------------------------------------------------------------------------------------------",
+    ]
+
+    # Append the transcript lines
+    for line in transcript_text.splitlines():
+        lines.append("  " + line)
+
+    wrapped_lines = []
+    for line in lines:
+        safe_line = _pdf_safe_text(line)
+        if not safe_line:
+            wrapped_lines.append("")
+            continue
+        # Wrap long lines but keep their leading indentation structure
+        indent = ""
+        if safe_line.startswith("    "):
+            indent = "    "
+        elif safe_line.startswith("  "):
+            indent = "  "
+        wrapped_lines.extend(textwrap.wrap(safe_line, width=95, subsequent_indent=indent) or [""])
+
+    page_width = 612
+    page_height = 792
+    margin = 48
+    font_size = 9
+    leading = 13
+    max_lines = max(1, int((page_height - (margin * 2)) / leading))
+    pages = [wrapped_lines[i:i + max_lines] for i in range(0, len(wrapped_lines), max_lines)] or [[]]
+
+    def _page_stream(page_lines: list[str]) -> bytes:
+        y_start = page_height - margin
+        parts = ["BT", f"/F1 {font_size} Tf", f"{leading} TL", f"1 0 0 1 {margin} {y_start} Tm"]
+        for idx, line in enumerate(page_lines):
+            if idx > 0:
+                parts.append("T*")
+            parts.append(f"({_pdf_escape(line)}) Tj")
+        parts.append("ET")
+        return "\n".join(parts).encode("latin-1", "replace")
+
+    objects: list[bytes] = []
+
+    def _add_object(payload: bytes | str) -> int:
+        raw = payload.encode("latin-1") if isinstance(payload, str) else payload
+        objects.append(raw)
+        return len(objects)
+
+    font_id = _add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>") # Monospace font for perfect table layouts
+    page_ids: list[int] = []
+    content_ids: list[int] = []
+
+    for page_lines in pages:
+        stream = _page_stream(page_lines)
+        content_id = _add_object(
+            b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream"
+        )
+        content_ids.append(content_id)
+        page_id = _add_object(
+            f"<< /Type /Page /Parent 0 0 R /MediaBox [0 0 {page_width} {page_height}] "
+            f"/Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>"
+        )
+        page_ids.append(page_id)
+
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    pages_id = _add_object(f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>")
+    catalog_id = _add_object(f"<< /Type /Catalog /Pages {pages_id} 0 R >>")
+
+    for page_id in page_ids:
+        objects[page_id - 1] = objects[page_id - 1].replace(b"/Parent 0 0 R", f"/Parent {pages_id} 0 R".encode("ascii"))
+
+    pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for idx, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{idx} 0 obj\n".encode("ascii"))
+        pdf.extend(obj)
+        pdf.extend(b"\nendobj\n")
+
+    xref_start = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    pdf.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    pdf.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root {catalog_id} 0 R >>\nstartxref\n{xref_start}\n%%EOF\n".encode("ascii")
+    )
+
+    with open(output_path, "wb") as f:
+        f.write(pdf)
+
+    print(f"  [PDF Analysis] Call analysis PDF saved: {output_path}")
+    return output_path

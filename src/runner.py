@@ -283,39 +283,92 @@ def _public_call_recording_url(conversation_id: str) -> str:
     return f"{base}/api/public/call-audio/{conv}.mp3?token={token}"
 
 
-def _save_and_send_call_recording(conversation_id: str, test_id: str, test_name: str) -> dict:
+def _save_and_send_call_recording(conversation_id: str, test_id: str, test_name: str, call_transcript_result: dict | None = None) -> dict:
     """
-    Send a server-hosted ElevenLabs recording link to the user's command chat.
-    The link streams from Render, so playback does not depend on a local Mac file.
+    Send call audio recording and visually clean PDF analysis report to Asmi.
+    Also sends the server-hosted ElevenLabs recording link to the command chat.
     """
     state = {"status": "not_started", "public_url": "", "sent": False, "error": ""}
     if not conversation_id:
         state["status"] = "skipped"
         state["error"] = "missing conversation_id"
         return state
-    if os.environ.get("SEND_CALL_RECORDING_TO_CHAT", "1").strip().lower() in {"0", "false", "no", "off"}:
-        state["status"] = "disabled"
-        return state
 
+    from config import REPORTS_DIR, ASMI_HANDLE
+    from imessage import send_imessage_attachment
+
+    # 1. Download ElevenLabs audio
+    recording_path = os.path.join(REPORTS_DIR, f"recording_{conversation_id}.mp3")
+    try:
+        from elevenlabs_phone import get_conversation_audio
+        audio_bytes, _ = get_conversation_audio(conversation_id)
+        with open(recording_path, "wb") as f:
+            f.write(audio_bytes)
+        print(f"  [ElevenLabs audio] Downloaded recording to {recording_path}")
+    except Exception as e:
+        print(f"  [ElevenLabs audio] Failed to download recording: {e}")
+        recording_path = None
+
+    # 2. Generate analysis PDF
+    pdf_path = os.path.join(REPORTS_DIR, f"analysis_{conversation_id}.pdf")
+    try:
+        from report import generate_call_analysis_pdf
+        
+        # If call_transcript_result was not passed, fetch it
+        if not call_transcript_result:
+            from elevenlabs_phone import get_conversation, _parse_conversation
+            detail = get_conversation(conversation_id)
+            call_transcript_result = _parse_conversation(detail)
+            
+        generate_call_analysis_pdf(
+            call_data=call_transcript_result,
+            test_id=test_id,
+            test_name=test_name,
+            call_phone=CALL_EVAL_PHONE,
+            output_path=pdf_path,
+        )
+        print(f"  [ElevenLabs PDF] Generated analysis PDF at {pdf_path}")
+    except Exception as e:
+        print(f"  [ElevenLabs PDF] Failed to generate analysis PDF: {e}")
+        pdf_path = None
+
+    # 3. Always send the attachments (audio + PDF) to Asmi number (ASMI_HANDLE)
+    attachments_sent = False
+    asmi_number = ASMI_HANDLE or "+14082307921"
+    print(f"  [iMessage Attachments] Attempting to send audio & PDF to Asmi at {asmi_number}…")
+    
+    audio_sent = False
+    if recording_path and os.path.exists(recording_path):
+        audio_sent = send_imessage_attachment(recording_path, handle=asmi_number)
+        print(f"  [iMessage Attachments] Sent audio recording: {audio_sent}")
+        
+    pdf_sent = False
+    if pdf_path and os.path.exists(pdf_path):
+        pdf_sent = send_imessage_attachment(pdf_path, handle=asmi_number)
+        print(f"  [iMessage Attachments] Sent analysis PDF: {pdf_sent}")
+        
+    attachments_sent = audio_sent or pdf_sent
+    state["attachments_sent"] = attachments_sent
+
+    # 4. Standard public Render link logic for command chat
     try:
         public_url = _public_call_recording_url(conversation_id)
-        if not public_url:
-            state["status"] = "error"
+        if public_url:
+            dest = os.environ.get("CALL_RECORDING_CHAT_HANDLE", "").strip() or COMMAND_HANDLE
+            label = (
+                f"Call recording for {test_id}: {test_name}\n"
+                f"Conversation: {conversation_id}\n"
+                f"{public_url}"
+            )
+            sent = send_imessage(label, handle=dest)
+            state["public_url"] = public_url
+            state["sent"] = bool(sent)
+            state["status"] = "link_sent" if sent else "link_send_failed"
+            print(f"  [ElevenLabs audio] public link → {public_url}")
+            print(f"  [ElevenLabs audio] link sent to chat={dest}: {sent}")
+        else:
+            state["status"] = "link_skipped"
             state["error"] = "missing CALL_RECORDING_PUBLIC_BASE_URL/REMOTE_UI_URL or signing secret"
-            return state
-
-        dest = os.environ.get("CALL_RECORDING_CHAT_HANDLE", "").strip() or COMMAND_HANDLE
-        label = (
-            f"Call recording for {test_id}: {test_name}\n"
-            f"Conversation: {conversation_id}\n"
-            f"{public_url}"
-        )
-        sent = send_imessage(label, handle=dest)
-        state["public_url"] = public_url
-        state["sent"] = bool(sent)
-        state["status"] = "link_sent" if sent else "link_send_failed"
-        print(f"  [ElevenLabs audio] public link → {public_url}")
-        print(f"  [ElevenLabs audio] link sent to chat={dest}: {sent}")
     except Exception as e:
         state["status"] = "error"
         state["error"] = str(e)
@@ -998,16 +1051,45 @@ def collect(tc: dict) -> dict:
             ok = send_imessage(msg)
             if ok:
                 is_cmd = msg.strip().startswith("cmd_")
-                raw = wait_for_responses(
-                    session_start,
-                    count=1,
-                    timeout=10 if is_cmd else wait,
-                    max_responses=max_responses,
-                    drain_all=False if is_cmd else True,
-                    return_raw=True,
-                    silence_after=2.0 if is_cmd else silence_after,
-                    seen_keys=seen_keys,
-                )
+                is_last_call_eval = (test_type == "call_eval" and i == len(msgs) - 1 and not is_cmd)
+                if is_last_call_eval:
+                    def is_call_active() -> bool:
+                        if call_started_at is None:
+                            return False
+                        elapsed = (datetime.now(timezone.utc) - call_started_at.astimezone(timezone.utc)).total_seconds()
+                        if elapsed > 150:
+                            return False
+                        status = str(monitor_state.get("conversation_status") or "").lower().strip()
+                        if status in {"done", "completed", "finished", "ended", "failed", "error", "aborted"}:
+                            return False
+                        if monitor_thread and monitor_thread.is_alive():
+                            return True
+                        if elapsed < 30:
+                            return True
+                        return False
+
+                    raw = wait_for_responses(
+                        session_start,
+                        count=4,
+                        timeout=180,
+                        max_responses=max_responses,
+                        drain_all=True,
+                        return_raw=True,
+                        silence_after=silence_after,
+                        seen_keys=seen_keys,
+                        is_call_active_fn=is_call_active,
+                    )
+                else:
+                    raw = wait_for_responses(
+                        session_start,
+                        count=1,
+                        timeout=10 if is_cmd else wait,
+                        max_responses=max_responses,
+                        drain_all=False if is_cmd else True,
+                        return_raw=True,
+                        silence_after=2.0 if is_cmd else silence_after,
+                        seen_keys=seen_keys,
+                    )
                 for m in raw or []:
                     all_raw.append(m)
                 late = catch_up_manual_messages(session_start, seen_keys)
@@ -1049,21 +1131,31 @@ def collect(tc: dict) -> dict:
         result["tasks_sent"] = [t["user"] for t in result["transcript"]]
         result["responses"] = [m.get("text") for m in all_raw if (m.get("text") or "").strip() and not m.get("is_from_me")]
 
+        convo_id = (monitor_state.get("conversation_id") or "").strip()
         if call_transcript_result:
             result["call_transcript"] = call_transcript_result.get("transcript_text", "")
             result["call_transcript_raw"] = call_transcript_result.get("transcript", [])
             result["call_conversation_id"] = call_transcript_result.get("conversation_id", "")
             result["call_duration_secs"] = call_transcript_result.get("duration_secs")
             print(f"  ✓ Call transcript captured ({len(call_transcript_result.get('transcript', []))} turns, {call_transcript_result.get('duration_secs', '?')}s)")
-            result["call_recording_chat"] = _save_and_send_call_recording(
-                result["call_conversation_id"],
-                test_id,
-                tc.get("name") or test_id,
-            )
+        elif convo_id:
+            result["call_transcript"] = None
+            result["call_conversation_id"] = convo_id
+            print(f"  ⚠ Call transcript fetching timed out/failed but conversation ID was captured: {convo_id}")
         else:
             result["call_transcript"] = None
+            print("  ⚠ No call transcript or conversation ID captured")
+
+        active_convo_id = result.get("call_conversation_id")
+        if active_convo_id:
+            result["call_recording_chat"] = _save_and_send_call_recording(
+                active_convo_id,
+                test_id,
+                tc.get("name") or test_id,
+                call_transcript_result=call_transcript_result,
+            )
+        else:
             result["call_recording_chat"] = {"status": "skipped", "sent": False, "error": "no call transcript/conversation id"}
-            print("  ⚠ No call transcript captured")
 
         if monitor_events:
             result["call_monitor_events"] = monitor_events[-200:]

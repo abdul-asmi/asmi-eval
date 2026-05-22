@@ -251,6 +251,7 @@ def _parse_conversation(detail: dict) -> dict:
         "transcript": normalized,
         "transcript_text": format_call_transcript(normalized),
         "duration_secs": duration,
+        "analysis": detail.get("analysis") or {},
     }
 
 
