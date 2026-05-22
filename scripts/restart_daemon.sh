@@ -51,15 +51,16 @@ if [ -f "$PLIST" ]; then
   launchctl enable "$DOMAIN/$LABEL" 2>/dev/null || true
   launchctl kickstart -k "$DOMAIN/$LABEL" 2>/dev/null || true
   sleep 2
-  if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
-    echo "Daemon LaunchAgent is loaded: $LABEL"
+  if pgrep -f "$EVAL_DIR/daemon.py" >/dev/null 2>&1; then
+    echo "Daemon LaunchAgent is running: $LABEL"
     echo "Log: $LOG"
     echo ""
     echo "Follow logs:"
     echo "  tail -f \"$LOG\""
     exit 0
   fi
-  echo "LaunchAgent did not stay loaded; falling back to nohup..."
+  echo "LaunchAgent loaded but daemon process is not alive; falling back to nohup..."
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null || true
 fi
 
 echo "Starting daemon with nohup..."
