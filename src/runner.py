@@ -5,10 +5,11 @@ from datetime import datetime, timezone
 import os
 import json
 
-from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT
+from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT, CALL_EVAL_MAX_DURATION
 from imessage import send_imessage, wait_for_responses, catch_up_manual_messages
 from judge import judge_status, judge_with_context, judge_response_count
 from elevenlabs_phone import list_recent_conversations, wait_for_call_transcript
+from twilio_phone import twilio_configured, newest_active_call_sid, end_call
 
 try:
     import websockets
@@ -162,6 +163,82 @@ def _start_elevenlabs_monitor(agent_id: str, started_after: datetime, events: li
             except Exception as e:
                 state["error"] = str(e)
             break
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    return thread
+
+
+def _start_twilio_hard_cap_watchdog(
+    *,
+    call_started_at: datetime,
+    to_number: str,
+    max_duration_secs: int,
+    state: dict,
+    stop_event: threading.Event,
+) -> threading.Thread | None:
+    """
+    Enforce a hard call cap by ending the matching Twilio call after max_duration_secs.
+    """
+    if not twilio_configured():
+        state["status"] = "disabled"
+        state["error"] = "TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN missing"
+        return None
+
+    if not to_number or max_duration_secs <= 0:
+        state["status"] = "disabled"
+        state["error"] = "invalid to_number or max_duration_secs"
+        return None
+
+    started_at_utc = call_started_at if call_started_at.tzinfo else call_started_at.replace(tzinfo=timezone.utc)
+    started_at_utc = started_at_utc.astimezone(timezone.utc)
+
+    def _runner():
+        state["status"] = "watching"
+        state["max_duration_secs"] = int(max_duration_secs)
+        state["to_number"] = to_number
+        deadline = time.time() + int(max_duration_secs)
+        sid = ""
+
+        # Try to discover the active call SID while the timer is running.
+        while time.time() < deadline and not stop_event.is_set():
+            if not sid:
+                try:
+                    sid = newest_active_call_sid(to_number=to_number, started_after=started_at_utc)
+                    if sid:
+                        state["call_sid"] = sid
+                        print(f"  [Twilio watchdog] tracking call sid={sid}")
+                except Exception as e:
+                    state["error"] = str(e)
+            time.sleep(2)
+
+        if stop_event.is_set():
+            state["status"] = "stopped"
+            return
+
+        # Cap reached. Try ending tracked SID first; if missing, resolve once more.
+        if not sid:
+            try:
+                sid = newest_active_call_sid(to_number=to_number, started_after=started_at_utc)
+            except Exception as e:
+                state["error"] = str(e)
+
+        if not sid:
+            state["status"] = "no_call_found_at_cap"
+            return
+
+        try:
+            ok = end_call(sid)
+            state["call_sid"] = sid
+            state["status"] = "ended" if ok else "end_failed"
+            if ok:
+                print(f"  [Twilio watchdog] hard cap reached ({max_duration_secs}s) — ended call sid={sid}")
+            else:
+                print(f"  [Twilio watchdog] hard cap reached ({max_duration_secs}s) — failed to end sid={sid}")
+        except Exception as e:
+            state["status"] = "end_failed"
+            state["error"] = str(e)
+            print(f"  [Twilio watchdog] end error: {e}")
 
     thread = threading.Thread(target=_runner, daemon=True)
     thread.start()
@@ -732,6 +809,9 @@ def collect(tc: dict) -> dict:
         monitor_state: dict = {"status": "not_started", "conversation_id": "", "conversation_status": "", "connected": False, "error": ""}
         monitor_stop = threading.Event()
         monitor_thread: threading.Thread | None = None
+        twilio_watchdog_state: dict = {"status": "not_started", "max_duration_secs": int(CALL_EVAL_MAX_DURATION or 0), "to_number": call_phone, "call_sid": "", "error": ""}
+        twilio_watchdog_stop = threading.Event()
+        twilio_watchdog_thread: threading.Thread | None = None
 
         for i, msg in enumerate(msgs):
             if _stop_requested():
@@ -751,6 +831,14 @@ def collect(tc: dict) -> dict:
                 if monitor_thread is None:
                     agent_id = os.environ.get("ELEVENLABS_AGENT_ID", "").strip()
                     monitor_thread = _start_elevenlabs_monitor(agent_id, call_started_at, monitor_events, monitor_state, monitor_stop)
+                if twilio_watchdog_thread is None and int(CALL_EVAL_MAX_DURATION or 0) > 0:
+                    twilio_watchdog_thread = _start_twilio_hard_cap_watchdog(
+                        call_started_at=call_started_at,
+                        to_number=call_phone,
+                        max_duration_secs=int(CALL_EVAL_MAX_DURATION or 0),
+                        state=twilio_watchdog_state,
+                        stop_event=twilio_watchdog_stop,
+                    )
 
             ok = send_imessage(msg)
             if ok:
@@ -817,6 +905,10 @@ def collect(tc: dict) -> dict:
         if monitor_thread is not None:
             monitor_stop.set()
             monitor_thread.join(timeout=5)
+        if twilio_watchdog_thread is not None:
+            twilio_watchdog_stop.set()
+            twilio_watchdog_thread.join(timeout=5)
+        result["twilio_hard_cap"] = twilio_watchdog_state
 
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
     if stopped_early:
