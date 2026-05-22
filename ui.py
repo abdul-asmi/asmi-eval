@@ -4138,7 +4138,7 @@ function _renderCallMonitorDetails(test) {
   const state = test.call_monitor_state || {};
   const log = (test.call_monitor_log || '').trim();
   const events = Array.isArray(test.call_monitor_events) ? test.call_monitor_events : [];
-  const lines = log ? log.split('\n').filter(Boolean) : [];
+  const lines = log ? log.split('\\n').filter(Boolean) : [];
   const recentLines = lines.slice(-20);
   const statusBits = [
     state.status ? `status: ${state.status}` : '',
@@ -4159,7 +4159,7 @@ function _renderCallMonitorDetails(test) {
       </summary>
       <div style="margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;">
         ${statusBits.length ? `<div style="color:#334155;font-size:0.82rem;line-height:1.5;margin-bottom:8px;">${esc(statusBits.join(' · '))}</div>` : '<div style="color:#64748b;font-size:0.82rem;">No monitor metadata captured yet.</div>'}
-        ${recentLines.length ? `<div style="margin-top:8px;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:12px;font-family:monospace;font-size:0.78rem;white-space:pre-wrap;line-height:1.6;max-height:260px;overflow-y:auto;border:1px solid #1e293b;">${esc(recentLines.join('\n'))}</div>` : ''}
+        ${recentLines.length ? `<div style="margin-top:8px;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:12px;font-family:monospace;font-size:0.78rem;white-space:pre-wrap;line-height:1.6;max-height:260px;overflow-y:auto;border:1px solid #1e293b;">${esc(recentLines.join('\\n'))}</div>` : ''}
         ${eventPreview ? `<div style="margin-top:10px;">${eventPreview}</div>` : ''}
       </div>
     </details>`;
