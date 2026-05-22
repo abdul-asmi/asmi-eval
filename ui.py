@@ -1329,6 +1329,70 @@ textarea { resize: vertical; min-height: 70px; }
 .inline-result.done { display:block; }
 .inline-running-dots::after { content:'...'; animation:dots 1.2s steps(4,end) infinite; }
 @keyframes dots { 0%,20%{content:'.'} 40%{content:'..'} 60%,100%{content:'...'} }
+
+/* Live running card bubble chat elements */
+#liveRunCard { border-radius: 8px; margin-bottom: 12px; }
+.pulsing-record {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background-color: #ef4444;
+  border-radius: 50%;
+  animation: pulse-red 1.5s infinite;
+  vertical-align: middle;
+}
+@keyframes pulse-red {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+/* Chat Bubbles Layout */
+.chat-bubble {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin-bottom: 4px;
+  word-wrap: break-word;
+  display: flex;
+  flex-direction: column;
+}
+.chat-bubble.sent {
+  align-self: flex-end;
+  background: #3b82f6;
+  color: white;
+  border-bottom-right-radius: 2px;
+}
+.chat-bubble.received {
+  align-self: flex-start;
+  background: #334155;
+  color: #f1f5f9;
+  border-bottom-left-radius: 2px;
+}
+.chat-bubble.call-user {
+  align-self: flex-end;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-bottom-right-radius: 2px;
+}
+.chat-bubble.call-agent {
+  align-self: flex-start;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-bottom-left-radius: 2px;
+}
+.chat-bubble-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+  opacity: 0.8;
+}
 </style>
 </head>
 <body>
@@ -1376,6 +1440,30 @@ textarea { resize: vertical; min-height: 70px; }
     </div>
     <div style="background:#334155;border-radius:99px;height:5px;overflow:hidden">
       <div id="progressFill" style="background:#7c3aed;height:100%;width:0%;transition:width .4s ease;border-radius:99px"></div>
+    </div>
+  </div>
+  <div id="liveRunCard" style="display:none;padding:16px 24px;background:#111827;border-top:1px solid #1f2937;">
+    <!-- Live ElevenLabs Listen Box -->
+    <div id="liveCallListening" style="display:none;margin-bottom:16px;background:rgba(124, 58, 237, 0.1);border:1px solid rgba(124, 58, 237, 0.2);border-radius:12px;padding:12px 16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="pulsing-record"></span>
+          <span style="font-size:0.8rem;font-weight:700;color:#c4b5fd;">📞 Live Phone Call listening</span>
+        </div>
+        <span id="liveCallDuration" style="font-size:0.72rem;color:#94a3b8;font-family:monospace;">Active</span>
+      </div>
+      <div id="liveCallAudioPlayer">
+        <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:6px;">🎙️ Call connected. Speech turns streaming live below.</div>
+      </div>
+    </div>
+
+    <!-- Live Messages Stream -->
+    <div style="font-weight:700;font-size:0.8rem;color:#94a3b8;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+      <span>💬 Live iMessage & Call Transcript Feed</span>
+      <span style="font-size:0.7rem;font-weight:normal;color:#64748b;">(Updating live)</span>
+    </div>
+    <div id="liveChatBubbleFeed" style="background:#0f172a;border:1px solid #1f2937;border-radius:12px;padding:14px;max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+      <div style="color:#64748b;font-size:0.75rem;text-align:center;font-style:italic;">Waiting for messages...</div>
     </div>
   </div>
   <div id="outputBodyText"></div>
@@ -2659,6 +2747,7 @@ async function saveAll() {
 	let _historyRefreshTimer = null;
 	let selectedTestIds = new Set();
 	let interactiveAutoContinue = true;
+	let _liveCallCompletedConvoId = null;
 
 	const _RUN_QUEUE_HIDDEN_KEY = 'asmi_runQueueHidden';
 	const _RUN_QUEUE_MIN_KEY = 'asmi_runQueueMinimized';
@@ -2900,6 +2989,14 @@ function _openOutput(label) {
   document.getElementById('behaviorAnalysisPanel').style.display = 'none';
   document.getElementById('behaviorAnalysisBox').textContent = '';
   _lastRunAnalysis = '';
+  
+  // Clear live message feed and audio cards
+  _liveCallCompletedConvoId = null;
+  document.getElementById('liveRunCard').style.display = 'none';
+  document.getElementById('liveCallListening').style.display = 'none';
+  document.getElementById('liveChatBubbleFeed').innerHTML = '<div style="color:#64748b;font-size:0.75rem;text-align:center;font-style:italic;">Waiting for messages...</div>';
+  document.getElementById('liveCallAudioPlayer').innerHTML = '<div style="font-size:0.75rem;color:#94a3b8;margin-bottom:6px;">🎙️ Call connected. Speech turns streaming live below.</div>';
+  
   document.getElementById('stopBtn').style.display = 'inline-block';
   // For single-test runs, hide the top panel — result shows inline in card
   if (_activeTestId) {
@@ -3009,6 +3106,132 @@ function _cleanOutput(text) {
     .trim();
 }
 
+function _updateLiveFeed(output, progress, runStatus) {
+  const container = document.getElementById('liveRunCard');
+  if (!container) return;
+  
+  if (!output && (!progress || !progress.current_test) && runStatus !== 'running') {
+    container.style.display = 'none';
+    return;
+  }
+  
+  container.style.display = 'block';
+  
+  const feed = document.getElementById('liveChatBubbleFeed');
+  if (!feed) return;
+  
+  const items = [];
+  if (output) {
+    const lines = output.split('\n');
+    for (let line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      
+      if (trimmed.includes('→')) {
+        let text = trimmed;
+        if (text.includes('Sending [') && text.includes(':')) {
+          text = text.substring(text.indexOf(':') + 1).trim();
+        } else if (text.includes('Reply (') && text.includes(':')) {
+          text = text.substring(text.indexOf(':') + 1).trim();
+        } else {
+          text = text.replace(/^[→\\s\\-\\>]+/g, '').trim();
+        }
+        if (text.endsWith('…')) text = text.slice(0, -1);
+        if (text && !text.includes('Reply (0 chars):')) {
+          items.push({ type: 'sent', label: 'iMessage Sent', text });
+        }
+      }
+      else if (trimmed.includes('✓ Got response') || trimmed.includes('✉ Captured user message')) {
+        let text = trimmed;
+        if (text.includes(':')) {
+          text = text.substring(text.indexOf(':') + 1).trim();
+        } else {
+          text = text.replace(/^[✓✉\\s\\-\\[\\]a-zA-Z_0-9\\/]+:/g, '').trim();
+        }
+        if (text.endsWith('…')) text = text.slice(0, -1);
+        if (text) {
+          items.push({ type: 'received', label: 'Response Received', text });
+        }
+      }
+      else if (trimmed.includes('[ElevenLabs live]')) {
+        const idx = trimmed.indexOf('[ElevenLabs live]');
+        const livePart = trimmed.substring(idx + 17).trim();
+        if (livePart.startsWith('user_transcript:')) {
+          const text = livePart.substring(16).trim();
+          if (text) {
+            items.push({ type: 'call-user', label: 'User Speech', text });
+          }
+        } else if (livePart.startsWith('agent_response:')) {
+          const text = livePart.substring(15).trim();
+          if (text) {
+            items.push({ type: 'call-agent', label: 'Agent Speech', text });
+          }
+        }
+      }
+    }
+  }
+  
+  if (items.length === 0) {
+    feed.innerHTML = '<div style="color:#64748b;font-size:0.75rem;text-align:center;font-style:italic;">Waiting for messages...</div>';
+  } else {
+    let html = '';
+    for (const item of items) {
+      html += `<div class="chat-bubble ${item.type}">
+        <span class="chat-bubble-label">${esc(item.label)}</span>
+        <span>${esc(item.text)}</span>
+      </div>`;
+    }
+    
+    if (feed.innerHTML !== html) {
+      const isAtBottom = feed.scrollHeight - feed.clientHeight - feed.scrollTop < 60;
+      feed.innerHTML = html;
+      if (isAtBottom || feed.innerHTML.includes('Waiting for messages...')) {
+        feed.scrollTop = feed.scrollHeight;
+      }
+    }
+  }
+  
+  const listenBox = document.getElementById('liveCallListening');
+  const playerContainer = document.getElementById('liveCallAudioPlayer');
+  
+  if (progress && progress.conversation_id) {
+    listenBox.style.display = 'block';
+    const convoId = progress.conversation_id;
+    
+    const isCompleted = runStatus === 'done' || runStatus === 'stopped' || (
+      output && (
+        output.includes('Run complete') || 
+        output.includes('✓ Collected') || 
+        output.includes('⚠ Timeout') ||
+        output.includes('⏹ Stop requested')
+      )
+    );
+    
+    if (isCompleted) {
+      document.getElementById('liveCallDuration').textContent = 'Completed';
+      document.getElementById('liveCallDuration').style.color = '#10b981';
+      
+      if (_liveCallCompletedConvoId !== convoId) {
+        _liveCallCompletedConvoId = convoId;
+        loadCallRecording(convoId, 'liveCallAudioPlayer');
+      }
+    } else {
+      document.getElementById('liveCallDuration').textContent = 'Active';
+      document.getElementById('liveCallDuration').style.color = '#f59e0b';
+      
+      const playerHtml = `<div style="font-size:0.75rem;color:#c4b5fd;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+        <span>🎙️ Listening to live audio turns...</span>
+        <a href="https://elevenlabs.io/app/conversational-ai/history?conversation_id=${convoId}" target="_blank" style="color:#a78bfa;text-decoration:none;font-weight:600;">View in ElevenLabs ↗</a>
+      </div>`;
+      if (playerContainer.innerHTML !== playerHtml) {
+        playerContainer.innerHTML = playerHtml;
+      }
+    }
+  } else {
+    listenBox.style.display = 'none';
+  }
+}
+
 async function _pollOutput() {
   try {
     const res  = await apiFetch('/api/output');
@@ -3017,6 +3240,9 @@ async function _pollOutput() {
     const secs = Math.round((Date.now() - _runStart) / 1000);
     if (!_activeTestId)
       document.getElementById('outputElapsed').textContent = `${secs}s elapsed`;
+
+    // Parse and stream live feed updates
+    _updateLiveFeed(data.output, data.progress, data.status);
 
     if (data.status === 'running') {
       if (!_activeTestId)
@@ -5561,6 +5787,8 @@ class Handler(BaseHTTPRequestHandler):
                         "completed": data.get("completed", 0),
                         "total": data.get("total", 0),
                     }
+                    if "conversation_id" in data:
+                        prog["conversation_id"] = data["conversation_id"]
                     if run_id:
                         sb_service_patch(
                             "/rest/v1/runs",
@@ -5575,6 +5803,8 @@ class Handler(BaseHTTPRequestHandler):
                         "completed": data.get("completed", 0),
                         "total": data.get("total", 0),
                     }
+                    if "conversation_id" in data:
+                        _run_progress["conversation_id"] = data["conversation_id"]
                     self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})

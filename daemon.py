@@ -242,6 +242,13 @@ def _push_logs_to_ui():
 def _parse_progress_line(line: str, total: int):
     """Detect test start lines (format: '  [test_id] Name') and post progress."""
     global _progress_state
+    
+    if "  [ElevenLabs] conversation_id: " in line:
+        convo_id = line.split("  [ElevenLabs] conversation_id: ")[-1].strip()
+        _progress_state["conversation_id"] = convo_id
+        _post_progress()
+        return
+
     # Match lines like "  [sticky_01] Single research task…"
     # Must be a word_number pattern, not [1/28] judge lines
     m = _re_mod.match(r'^\s+\[([a-z][a-z0-9_]+)\]\s+\S', line)
@@ -255,6 +262,7 @@ def _parse_progress_line(line: str, total: int):
     _progress_state["current_test"]     = test_id
     _progress_state["current_category"] = category
     _progress_state["total"]            = total
+    _progress_state.pop("conversation_id", None) # Clear conversation ID for the new test!
     # completed = tests we've *started* so far (updated after each "✓ Collected")
     _post_progress()
 
@@ -268,13 +276,16 @@ def _mark_test_done(line: str):
 
 def _post_progress():
     """Post current progress dict to Railway and local UI."""
-    payload = json.dumps({
+    payload_dict = {
         "run_id":          _current_run_id,
         "current_test":     _progress_state.get("current_test"),
         "current_category": _progress_state.get("current_category"),
         "completed":        _progress_state.get("completed", 0),
         "total":            _progress_state.get("total", 0),
-    }).encode()
+    }
+    if "conversation_id" in _progress_state:
+        payload_dict["conversation_id"] = _progress_state["conversation_id"]
+    payload = json.dumps(payload_dict).encode()
 
     for url in filter(None, [RAILWAY_URL, LOCAL_UI_URL]):
         try:
@@ -413,6 +424,7 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
 
     # Read output continuously without blocking delays
     try:
+        last_post_time = time.time()
         for line in proc.stdout:
             if stop_flag:
                 break
@@ -420,6 +432,16 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
             print(line, end="", flush=True)
             _parse_progress_line(line, total_count)
             _mark_test_done(line)
+
+            # Post live output update every 2.0 seconds in a background thread
+            now = time.time()
+            if now - last_post_time >= 2.0:
+                current_output = "".join(output_lines)
+                def _post_bg(out=current_output):
+                    _post_output_to_local_ui(out, status="running")
+                    _post_output_to_railway(out, status="running")
+                threading.Thread(target=_post_bg, daemon=True).start()
+                last_post_time = now
     except Exception as e:
         print(f"  [read error] {e}")
     finally:

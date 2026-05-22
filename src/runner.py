@@ -158,6 +158,7 @@ def _start_elevenlabs_monitor(agent_id: str, started_after: datetime, events: li
                     continue
                 state["conversation_id"] = conversation_id
                 state["conversation_status"] = str(convo.get("status") or "").lower()
+                print(f"  [ElevenLabs] conversation_id: {conversation_id}", flush=True)
                 break
 
             if not conversation_id:
