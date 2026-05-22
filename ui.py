@@ -3294,9 +3294,9 @@ async function _pollOutput() {
           document.getElementById('behaviorAnalysisPanel').style.display = 'none';
           if (hasPending) {
             document.getElementById('outputBodyText').textContent =
-              '📞 Messages sent! The call is happening and the analysis is running in background.\n' +
+              'Messages sent! The call is happening and analysis is running in background. ' +
               'You can run other tests now. Check the Reports tab in a few minutes for the final verdict.';
-            toast('📞 Call triggered! Analysis running in background — check Reports tab soon.');
+            toast('Call triggered! Analysis running in background -- check Reports tab soon.');
           } else {
             document.getElementById('outputBodyText').textContent = 'Run complete. Open the Reports tab to view results and download the report.';
             toast('Run complete. Check Reports tab.');
