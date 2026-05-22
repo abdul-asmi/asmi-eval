@@ -31,6 +31,16 @@ def _sleep_interruptible(seconds: float) -> bool:
     return not _stop_requested()
 
 
+def _next_message_delay(msg: str, default_delay: float, command_delay: float = 10.0) -> float:
+    """
+    Shorten the pause after command-style messages so the next task follows quickly.
+    """
+    text = (msg or "").strip()
+    if text.startswith("cmd_"):
+        return float(command_delay)
+    return float(default_delay or 0.0)
+
+
 def _skip_ids() -> set[str]:
     path = os.environ.get("ASMI_SKIP_FILE", "").strip()
     if not path or not os.path.exists(path):
@@ -287,7 +297,9 @@ def collect(tc: dict) -> dict:
             print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
             send_imessage(msg)
             if i < len(msgs) - 1:
-                if not _sleep_interruptible(burst_delay):
+                delay = _next_message_delay(msg, burst_delay)
+                print(f"  (waiting {delay}s before next message…)")
+                if not _sleep_interruptible(delay):
                     stopped_early = True
                     break
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
@@ -323,7 +335,9 @@ def collect(tc: dict) -> dict:
         print(f"  → Setup: {setup}")
         setup_sent = datetime.now(timezone.utc)
         send_imessage(setup)
-        if not _sleep_interruptible(tc.get("setup_wait", 20)):
+        setup_delay = _next_message_delay(setup, tc.get("setup_wait", 20))
+        print(f"  (waiting {setup_delay}s before burst messages…)")
+        if not _sleep_interruptible(setup_delay):
             stopped_early = True
             result["transcript"] = reconstruct_transcript(setup_sent, [], default_user=setup)
             result["tasks_sent"] = [setup]
@@ -405,8 +419,9 @@ def collect(tc: dict) -> dict:
                 late = catch_up_manual_messages(session_start, seen_keys)
                 all_raw.extend(late)
             if i < len(msgs) - 1:
-                print(f"  (waiting {sequence_delay}s before next message…)")
-                if not _sleep_interruptible(sequence_delay):
+                delay = _next_message_delay(msg, sequence_delay)
+                print(f"  (waiting {delay}s before next message…)")
+                if not _sleep_interruptible(delay):
                     stopped_early = True
                     break
 
@@ -439,7 +454,9 @@ def collect(tc: dict) -> dict:
         print(f"  → Sending msg 1: {msg1[:70]}")
         all_raw.append({"text": msg1, "timestamp": datetime.now(timezone.utc), "is_from_me": True})
         send_imessage(msg1)
-        if _sleep_interruptible(delay):
+        next_delay = _next_message_delay(msg1, delay)
+        print(f"  (waiting {next_delay}s before msg 2…)")
+        if _sleep_interruptible(next_delay):
             print(f"  → Sending msg 2: {msg2[:70]}")
             all_raw.append({"text": msg2, "timestamp": datetime.now(timezone.utc), "is_from_me": True})
             send_imessage(msg2)
@@ -618,8 +635,9 @@ def collect(tc: dict) -> dict:
                 late = catch_up_manual_messages(session_start, seen_keys)
                 all_raw.extend(late)
             if i < len(msgs) - 1:
-                print(f"  (waiting {sequence_delay}s before next message…)")
-                if not _sleep_interruptible(sequence_delay):
+                delay = _next_message_delay(msg, sequence_delay)
+                print(f"  (waiting {delay}s before next message…)")
+                if not _sleep_interruptible(delay):
                     stopped_early = True
                     break
 
