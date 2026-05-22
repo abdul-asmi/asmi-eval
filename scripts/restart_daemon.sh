@@ -8,6 +8,9 @@ if [ ! -x "$PYTHON" ]; then
   PYTHON="$(command -v python3 || command -v python)"
 fi
 LOG="$EVAL_DIR/daemon.log"
+PLIST="$HOME/Library/LaunchAgents/com.asmi.eval.daemon.plist"
+LABEL="com.asmi.eval.daemon"
+DOMAIN="gui/$(id -u)"
 
 cd "$EVAL_DIR"
 
@@ -40,6 +43,24 @@ fi
 echo "Stopping existing daemon processes..."
 pkill -f daemon.py 2>/dev/null || true
 sleep 1
+
+if [ -f "$PLIST" ]; then
+  echo "Restarting LaunchAgent daemon..."
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null || true
+  launchctl bootstrap "$DOMAIN" "$PLIST" 2>/dev/null || launchctl load "$PLIST"
+  launchctl enable "$DOMAIN/$LABEL" 2>/dev/null || true
+  launchctl kickstart -k "$DOMAIN/$LABEL" 2>/dev/null || true
+  sleep 2
+  if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
+    echo "Daemon LaunchAgent is loaded: $LABEL"
+    echo "Log: $LOG"
+    echo ""
+    echo "Follow logs:"
+    echo "  tail -f \"$LOG\""
+    exit 0
+  fi
+  echo "LaunchAgent did not stay loaded; falling back to nohup..."
+fi
 
 echo "Starting daemon with nohup..."
 export PYTHONUNBUFFERED=1
