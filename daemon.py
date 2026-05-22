@@ -389,6 +389,8 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
         json.dump([], f)
     env["ASMI_STOP_FILE"] = stop_path
     env["ASMI_SKIP_FILE"] = skip_path
+    if _current_run_id:
+        env["ASMI_RUN_ID"] = _current_run_id
 
     proc = subprocess.Popen(
         proc_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

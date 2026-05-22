@@ -121,6 +121,12 @@ def wait_for_call_transcript(
     print(f"\n  [ElevenLabs] Waiting up to {timeout}s for call transcript (agent={agent_id})…", end="", flush=True)
 
     while time.time() < deadline:
+        # Enforce an absolute 4-minute cap from the last message sent
+        elapsed = (datetime.now(timezone.utc) - started_ts).total_seconds()
+        if elapsed > 240.0:
+            print("\n  [ElevenLabs] Absolute 4-minute cap reached — using transcript captured so far")
+            break
+
         if _stop_requested():
             print("\n  [ElevenLabs] Stop requested — using transcript captured so far")
             break

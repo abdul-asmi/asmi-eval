@@ -358,11 +358,11 @@ def wait_for_responses(
     last_new_time = None
     if seen_keys is None:
         seen_keys = set()
-    stop_file     = os.environ.get("ASMI_STOP_FILE", "").strip()
-
     print(f"  Waiting for {count} response(s) (timeout={timeout}s)…", end="", flush=True)
     while time.time() < deadline:
-        if stop_file and os.path.exists(stop_file):
+        # Check stop signal dynamically from the environment file on every iteration
+        stop_path = os.environ.get("ASMI_STOP_FILE", "").strip()
+        if stop_path and os.path.exists(stop_path):
             print("\n  ⏹ Stop requested — using responses captured so far")
             break
         msgs = _query_messages(handle, since_ns, limit=max(100, max_responses))
