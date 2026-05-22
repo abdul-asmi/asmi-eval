@@ -14,6 +14,12 @@ Asmi handles real-world tasks: web research, restaurant/appointment/travel booki
 outbound phone calls to businesses, and sending emails.
 Be strict but fair. Only mark PASS if the criteria are clearly met.
 
+When evaluating outbound phone call tests, you will be provided with both the formatted plain-text transcript (voice call dialogue) and the ElevenLabs-provided evaluation analysis (structured metadata, success status, and data collection answers). You MUST evaluate both of these pieces of evidence coherently and together as a single unified context.
+Do not treat the formatted plain-text transcript and the ElevenLabs-provided evaluation analysis as separate, isolated, or conflicting sources. Instead, cross-reference them to synthesize a complete and coherent picture of the call's outcome:
+- Verify that what was spoken in the formatted plain-text transcript is accurately and consistently reflected in the ElevenLabs-provided evaluation analysis answers and data collection results.
+- Use the structured metadata's success status and data collection answers to resolve or clarify any details that might be ambiguous or unclear in the plain-text dialogue transcript, and vice versa.
+- A call passes ONLY when BOTH the formatted plain-text transcript and the ElevenLabs-provided evaluation analysis coherently and together demonstrate that the call criteria were fully achieved.
+
 Control commands may appear in the task list. These are setup/reset/testing messages
 that start with `cmd_` (examples below). They are NOT the user task being evaluated
 unless the pass_criteria explicitly asks you to judge the command behavior.
@@ -58,7 +64,7 @@ Pass criteria:
 
 ══ FULL RESPONSE POOL (all {total} responses from entire run) ══════════════════
 {all_responses}
-══ CALL TRANSCRIPT ══════════════════════════════════════════════════
+══ CALL EVIDENCE (TRANSCRIPT & EVALUATION ANALYSIS) ═══════════════════════════════
 {call_transcript_section}
 ════════════════════════════════════════════════════
 
@@ -66,7 +72,7 @@ Steps:
 1. From the full pool, identify which response(s) are answering the task(s) above.
    A response is relevant if it directly addresses the task content.
 2. If you find a relevant response: evaluate it against the pass criteria.
-3. If a CALL TRANSCRIPT is present, also evaluate what happened during the actual voice call.
+3. If voice call information is present, evaluate both the formatted plain-text transcript and the ElevenLabs-provided evaluation analysis coherently and together. Do not analyze or evaluate them separately or in isolation. You must synthesize the spoken conversation flow and the structured evaluation analysis metrics into a single, unified, coherent verdict.
 4. If no response in the pool addresses this task: verdict is FAIL.
 
 Reply in EXACTLY this format (no extra text):
@@ -78,12 +84,13 @@ REASON: One sentence.
 
 
 def judge_with_context(test_name, category, tasks, captured, all_responses, pass_criteria,
-                       call_transcript: str | None = None):
+                       call_transcript: str | None = None,
+                       elevenlabs_analysis: dict | None = None):
     """
     Context-aware judge — gives Gemini the full response pool from the entire
     run so it can find which response actually answers this specific task,
     regardless of which test window it was captured in.
-    Optionally includes the ElevenLabs call transcript for call_eval tests.
+    Optionally includes the ElevenLabs call transcript and analysis metadata for call_eval tests.
     """
     valid_captured = [r for r in captured if r] if captured else []
 
@@ -93,12 +100,50 @@ def judge_with_context(test_name, category, tasks, captured, all_responses, pass
     )
 
     # Format call transcript section
+    transcript_parts = []
+    if elevenlabs_analysis:
+        analysis_str = ""
+        success_status = elevenlabs_analysis.get("call_successful")
+        if success_status is not None:
+            analysis_str += f"ElevenLabs Call Successful Status: {success_status}\n"
+        agent_sent = elevenlabs_analysis.get("agent_sentiment")
+        if agent_sent:
+            analysis_str += f"Agent Sentiment: {agent_sent}\n"
+        user_sent = elevenlabs_analysis.get("user_sentiment")
+        if user_sent:
+            analysis_str += f"User Sentiment: {user_sent}\n"
+        summary = elevenlabs_analysis.get("transcript_summary")
+        if summary:
+            analysis_str += f"Transcript Summary: {summary}\n"
+        
+        data_collection = elevenlabs_analysis.get("data_collection_results") or {}
+        if data_collection:
+            analysis_str += "ElevenLabs Data Collection Answers:\n"
+            for q_id, q_val in data_collection.items():
+                if isinstance(q_val, dict):
+                    q_text = q_val.get("question") or q_id
+                    val = q_val.get("value")
+                    rationale = q_val.get("rationale")
+                    analysis_str += f"  - Question: {q_text}\n"
+                    analysis_str += f"    Answer: {val}\n"
+                    if rationale:
+                        analysis_str += f"    Rationale: {rationale}\n"
+                else:
+                    analysis_str += f"  - {q_id}: {q_val}\n"
+        if analysis_str:
+            transcript_parts.append("=== ELEVENLABS-PROVIDED EVALUATION ANALYSIS ===\n" + analysis_str.strip() + "\n==============================================")
+
     if call_transcript and call_transcript.strip():
-        call_transcript_section = (
+        transcript_parts.append(
+            "=== FORMATTED PLAIN-TEXT TRANSCRIPT ===\n"
             "The following is the actual voice call transcript between Asmi (the AI agent)\n"
-            "and the third-party persona (played by ElevenLabs)::\n\n"
+            "and the third-party persona (played by ElevenLabs):\n\n"
             + call_transcript
+            + "\n========================================"
         )
+    
+    if transcript_parts:
+        call_transcript_section = "\n\n".join(transcript_parts)
     else:
         call_transcript_section = (
             "NO ELEVENLABS CALL TRANSCRIPT WAS CAPTURED.\n"
