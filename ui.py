@@ -113,6 +113,8 @@ _stop_requested  = False  # True when the user clicks Stop
 _run_progress    = {}     # dict {current_test, current_category, completed, total}
 _run_queue       = []     # ordered list of {id, name, category, status}
 _skip_requested  = set()  # test IDs to skip before they start
+_daemon_logs_buffer = ""  # in-memory buffer of recent daemon logs
+
 
 USE_SUPABASE = bool((SUPABASE_URL or "").strip())
 SINGLE_USER_OWNER_ID = os.environ.get("ASMI_OWNER_USER_ID", "").strip()
@@ -1369,6 +1371,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="tab-btn tab-reports" id="tabHistory" onclick="showTab('history')">Reports</button>
     <button class="tab-btn tab-responses" id="tabResponses" onclick="showTab('responses')">Responses</button>
     <button class="tab-btn tab-analysis" id="tabAnalysis" onclick="showTab('analysis')">Analysis</button>
+    <button class="tab-btn tab-logs" id="tabLogs" onclick="showTab('logs')">Daemon Log</button>
     <button class="tab-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle light/dark mode">🌙 Dark</button>
   </div>
 
@@ -1405,6 +1408,22 @@ textarea { resize: vertical; min-height: 70px; }
 
   <div class="tab-menu" id="menuAnalysis">
     <span style="font-size:0.82rem;color:#0f172a;">See cumulative verdict trends and per-test reasoning.</span>
+  </div>
+
+  <div class="tab-menu" id="menuLogs" style="display:none;">
+    <div style="display:flex; align-items:center; gap:10px; width:100%; flex-wrap:wrap;">
+      <span style="font-size:0.82rem;color:#0f172a;white-space:nowrap;">View active daemon log output.</span>
+      <div style="display:flex; align-items:center; gap:6px; margin-left:auto; flex-wrap:wrap;">
+        <span style="font-size:0.75rem; color:#475569;">Show:</span>
+        <select id="logLimitSelect" onchange="loadLogs()" style="font-size:0.75rem; padding:3px 8px; border:1px solid #d1d5db; border-radius:6px; background:white; color:#0f172a;">
+          <option value="100">Last 100 lines</option>
+          <option value="300">Last 300 lines</option>
+          <option value="500" selected>Last 500 lines</option>
+          <option value="1000">Last 1000 lines</option>
+        </select>
+        <input type="text" id="logSearchInput" placeholder="Filter logs..." oninput="loadLogs()" style="font-size:0.75rem; padding:3px 8px; border:1px solid #d1d5db; border-radius:6px; width:150px; background:white; color:#0f172a;">
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1564,6 +1583,23 @@ textarea { resize: vertical; min-height: 70px; }
     <h2 style="margin-bottom:16px;">Analysis</h2>
     <div id="analysisSummary" style="display:grid;gap:12px;"></div>
     <div id="analysisList" style="margin-top:16px;display:grid;gap:12px;"></div>
+  </div>
+
+  <div id="logsSection" style="display:none; padding:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+      <h2 style="margin:0; color:#0f172a;">Daemon Log</h2>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-outline" onclick="loadLogs()" style="font-size:0.75rem; padding:4px 10px;">🔄 Refresh</button>
+        <a href="/api/debug/logs" target="_blank" class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px; text-decoration:none; display:inline-flex; align-items:center; color:#0f172a; border-color:#d1d5db;">📋 Open Raw</a>
+      </div>
+    </div>
+    <div style="position:relative; background:#0f172a; border-radius:12px; border:1px solid #1e293b; padding:16px; box-shadow:0 4px 20px rgba(0,0,0,0.15);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:0.75rem; color:#94a3b8; font-family:monospace; border-bottom:1px solid #1e293b; padding-bottom:8px;">
+        <span>daemon.log</span>
+        <span id="logTime">Not loaded yet</span>
+      </div>
+      <pre id="logContent" style="margin:0; background:#0f172a; color:#e2e8f0; font-family:monospace; font-size:0.8rem; white-space:pre-wrap; line-height:1.6; max-height:600px; overflow-y:auto; word-break:break-all; text-align:left;"></pre>
+    </div>
   </div>
 </main>
 	<div id="toast"></div>
@@ -3496,12 +3532,13 @@ function _setTabMenu(tab) {
     history: 'menuHistory',
     responses: 'menuResponses',
     analysis: 'menuAnalysis',
+    logs: 'menuLogs',
   };
   Object.values(map).forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
-  const activeMenu = document.getElementById(map[tab] || map.main);
+  const activeMenu = document.getElementById(map[tab]);
   if (activeMenu) activeMenu.style.display = 'flex';
 }
 
@@ -3511,6 +3548,7 @@ function _setActiveTabStyle(tab) {
     history: 'tabHistory',
     responses: 'tabResponses',
     analysis: 'tabAnalysis',
+    logs: 'tabLogs',
   };
   Object.values(tabMap).forEach(id => {
     const el = document.getElementById(id);
@@ -3526,6 +3564,7 @@ function showTab(tab) {
   const historySection = document.getElementById('historySection');
   const responsesSection = document.getElementById('responsesSection');
   const analysisSection = document.getElementById('analysisSection');
+  const logsSection = document.getElementById('logsSection');
   const tabMain = document.getElementById('tabMain');
   const tabHistory = document.getElementById('tabHistory');
   const tabResponses = document.getElementById('tabResponses');
@@ -3538,24 +3577,66 @@ function showTab(tab) {
     historySection.style.display = 'block';
     responsesSection.style.display = 'none';
     analysisSection.style.display = 'none';
+    logsSection.style.display = 'none';
     loadHistory();
   } else if (tab === 'responses') {
     mainSection.style.display = 'none';
     historySection.style.display = 'none';
     responsesSection.style.display = 'block';
     analysisSection.style.display = 'none';
+    logsSection.style.display = 'none';
     loadResponses();
   } else if (tab === 'analysis') {
     mainSection.style.display = 'none';
     historySection.style.display = 'none';
     responsesSection.style.display = 'none';
     analysisSection.style.display = 'block';
+    logsSection.style.display = 'none';
     loadAnalysis();
+  } else if (tab === 'logs') {
+    mainSection.style.display = 'none';
+    historySection.style.display = 'none';
+    responsesSection.style.display = 'none';
+    analysisSection.style.display = 'none';
+    logsSection.style.display = 'block';
+    loadLogs();
   } else {
     mainSection.style.display = 'block';
     historySection.style.display = 'none';
     responsesSection.style.display = 'none';
     analysisSection.style.display = 'none';
+    logsSection.style.display = 'none';
+  }
+}
+
+async function loadLogs() {
+  const logContent = document.getElementById('logContent');
+  const logTime = document.getElementById('logTime');
+  const limitSelect = document.getElementById('logLimitSelect') || { value: 500 };
+  const filterInput = document.getElementById('logSearchInput') || { value: '' };
+  
+  logContent.innerHTML = '<span style="color:#64748b;">Fetching daemon logs...</span>';
+  try {
+    const res = await apiFetch('/api/debug/logs?limit=' + limitSelect.value);
+    const text = await res.text();
+    
+    let displayedText = text;
+    if (filterInput.value) {
+      const lines = text.split('\n');
+      const query = filterInput.value.toLowerCase();
+      displayedText = lines.filter(line => line.toLowerCase().includes(query)).join('\n');
+      if (!displayedText) {
+        displayedText = 'No logs matching "' + filterInput.value + '" found.';
+      }
+    }
+    
+    logContent.textContent = displayedText;
+    logTime.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+    
+    // Auto-scroll to the bottom
+    logContent.scrollTop = logContent.scrollHeight;
+  } catch(e) {
+    logContent.innerHTML = '<span style="color:#ef4444;">Error fetching logs: ' + e.message + '</span>';
   }
 }
 
@@ -4248,6 +4329,58 @@ class Handler(BaseHTTPRequestHandler):
                     },
                     "notes": "Masked + fingerprint only; full secret is never returned.",
                 })
+            elif path == "/api/debug/logs":
+                if USE_SUPABASE:
+                    # Auth required: either a signed-in UI user or daemon token.
+                    authed = False
+                    try:
+                        self._require_user()
+                        authed = True
+                    except Exception:
+                        authed = False
+                    if not authed:
+                        try:
+                            self._require_daemon()
+                            authed = True
+                        except Exception:
+                            authed = False
+                    if not authed:
+                        self._unauthorized()
+                        return
+
+                # Get limit parameter
+                qs = urllib.parse.parse_qs(urlparse(self.path).query)
+                limit = 500
+                try:
+                    limit = int(qs.get("limit", [500])[0])
+                except Exception:
+                    pass
+
+                logs = ""
+                # Try local daemon.log first
+                log_path = os.path.join(EVAL_DIR, "daemon.log")
+                if os.path.exists(log_path):
+                    try:
+                        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                            lines = f.readlines()
+                            logs = "".join(lines[-limit:])
+                    except Exception as e:
+                        logs = f"Error reading log file: {e}\n"
+
+                # Fallback to received logs buffer
+                if not logs or not logs.strip():
+                    global _daemon_logs_buffer
+                    if _daemon_logs_buffer:
+                        lines = _daemon_logs_buffer.splitlines()
+                        logs = "\n".join(lines[-limit:])
+                    else:
+                        logs = logs or "No logs in daemon.log and no remote logs received yet."
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(logs.encode("utf-8"))
             elif path == "/api/progress":
                 self._json(_run_progress)
             elif path == "/api/artifact-signed":
@@ -4608,6 +4741,22 @@ class Handler(BaseHTTPRequestHandler):
                     save_test_cases_supabase(token, uid, cases)
                 else:
                     save_test_cases(cases)
+                self._json({"ok": True})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+        elif path == "/api/debug/logs":
+            if USE_SUPABASE:
+                try:
+                    self._require_daemon()
+                except Exception as e:
+                    self._unauthorized(str(e))
+                    return
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                data = json.loads(body)
+                global _daemon_logs_buffer
+                _daemon_logs_buffer = data.get("logs", "")
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})

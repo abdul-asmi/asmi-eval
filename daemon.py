@@ -177,6 +177,34 @@ def _refresh_tc_map():
     except Exception:
         _TC_MAP = {}
 
+def _push_logs_to_ui():
+    """Read the last 300 lines of daemon.log and push it to the UI server."""
+    log_path = os.path.join(EVAL_DIR, "daemon.log")
+    if not os.path.exists(log_path):
+        return
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+            logs = "".join(lines[-300:])
+        
+        payload = json.dumps({"logs": logs}).encode()
+        
+        for url in filter(None, [RAILWAY_URL, LOCAL_UI_URL]):
+            try:
+                req = urllib.request.Request(f"{url}/api/debug/logs", data=payload, method="POST")
+                req.add_header("Content-Type", "application/json")
+                if url == RAILWAY_URL:
+                    if DAEMON_TOKEN:
+                        req.add_header("X-Daemon-Token", DAEMON_TOKEN)
+                    if DAEMON_OWNER_USER_ID:
+                        req.add_header("X-Owner-User-Id", DAEMON_OWNER_USER_ID)
+                ctx = _SSL_CTX if url.startswith("https") else None
+                urllib.request.urlopen(req, timeout=4, context=ctx)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
 def _parse_progress_line(line: str, total: int):
     """Detect test start lines (format: '  [test_id] Name') and post progress."""
@@ -542,9 +570,10 @@ def run():
     poll_count = 0
     while True:
         try:
-            # Heartbeat: poll UI to stay online
             poll_data = _poll_railway_full()
             poll_count += 1
+            if poll_count % 2 == 0 or poll_count == 1:
+                _push_logs_to_ui()
             if poll_count % 10 == 0:  # Log every 50 seconds (10 polls × 5s)
                 has_run = bool(poll_data.get("run"))
                 print(f"  [poll #{poll_count}] UI poll ok, pending_run={has_run}")
