@@ -99,6 +99,7 @@ def _run(arg: str) -> str:
     try:
         result = subprocess.run(
             cmd,
+            stdin=subprocess.DEVNULL,
             capture_output=True, text=True,
             cwd=EVAL_DIR, timeout=600
         )

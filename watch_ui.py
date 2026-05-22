@@ -19,7 +19,7 @@ def get_mtime(path):
 
 def start_server():
     print(f"Starting UI server: {UI_SCRIPT}")
-    return subprocess.Popen([sys.executable, UI_SCRIPT], cwd=ROOT)
+    return subprocess.Popen([sys.executable, UI_SCRIPT], stdin=subprocess.DEVNULL, cwd=ROOT)
 
 
 def stop_server(proc):

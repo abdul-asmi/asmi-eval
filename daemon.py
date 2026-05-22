@@ -376,6 +376,7 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
 
     proc = subprocess.Popen(
         proc_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
         text=True, bufsize=1, cwd=EVAL_DIR, env=env,
     )
 
