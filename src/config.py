@@ -8,8 +8,8 @@ ASMI_HANDLE = "+14082307921"          # Asmi's iMessage number
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-preview").strip()
 
-RESPONSE_TIMEOUT   = 60    # default seconds to wait for a single response
-BURST_WAIT         = 60    # default seconds to wait when expecting multiple responses
+RESPONSE_TIMEOUT   = 30    # default seconds to wait for a single response
+BURST_WAIT         = 30    # default seconds to wait when expecting multiple responses
 POLL_INTERVAL      = 3     # seconds between chat.db polls
 BURST_SEND_DELAY   = 1.0   # seconds between rapid-fire sends (default)
 SEQUENCE_DELAY     = 12.0  # seconds between sequential task sends

@@ -391,8 +391,7 @@ def wait_for_responses(
         if last_new_time is not None:
             deadline = max(deadline, last_new_time + silence_after)
         if last_new_time is not None and time.time() - last_new_time >= silence_after:
-            if drain_all or assistant_count >= count:
-                break
+            break
         print(".", end="", flush=True)
         time.sleep(POLL_INTERVAL)
 

@@ -566,14 +566,15 @@ def collect(tc: dict) -> dict:
             result["responses"] = []
             result["transcript"] = reconstruct_transcript(sent_at, [], default_user=msg)
         else:
+            is_cmd = msg.strip().startswith("cmd_")
             raw = wait_for_responses(
                 sent_at,
                 count=expected,
-                timeout=wait,
+                timeout=10 if is_cmd else wait,
                 max_responses=max_responses,
-                drain_all=True,
+                drain_all=False if is_cmd else True,
                 return_raw=True,
-                silence_after=silence_after,
+                silence_after=2.0 if is_cmd else silence_after,
             )
             transcript = reconstruct_transcript(sent_at, raw, default_user=msg)
             result["transcript"] = transcript
@@ -736,14 +737,15 @@ def collect(tc: dict) -> dict:
             
             ok = send_imessage(msg)
             if ok:
+                is_cmd = msg.strip().startswith("cmd_")
                 raw = wait_for_responses(
                     session_start,
                     count=1,
-                    timeout=wait,
+                    timeout=10 if is_cmd else wait,
                     max_responses=max_responses,
-                    drain_all=True,
+                    drain_all=False if is_cmd else True,
                     return_raw=True,
-                    silence_after=silence_after,
+                    silence_after=2.0 if is_cmd else silence_after,
                     seen_keys=seen_keys,
                 )
                 for m in raw or []:
@@ -994,14 +996,15 @@ def collect(tc: dict) -> dict:
 
             ok = send_imessage(msg)
             if ok:
+                is_cmd = msg.strip().startswith("cmd_")
                 raw = wait_for_responses(
                     session_start,
                     count=1,
-                    timeout=wait,
+                    timeout=10 if is_cmd else wait,
                     max_responses=max_responses,
-                    drain_all=True,
+                    drain_all=False if is_cmd else True,
                     return_raw=True,
-                    silence_after=silence_after,
+                    silence_after=2.0 if is_cmd else silence_after,
                     seen_keys=seen_keys,
                 )
                 for m in raw or []:
@@ -1222,8 +1225,8 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
             else:
                 print(f"\n  ━━━ Sending cmd_onboard to reset Asmi state ━━━")
                 send_imessage(CMD_ONBOARD)
-                print(f"  Waiting 15s for Asmi to reset…")
-                time.sleep(15)
+                print(f"  Waiting 10s for Asmi to reset…")
+                time.sleep(10)
 
         # Print a separator when switching categories
         if cat != last_category:
