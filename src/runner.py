@@ -662,7 +662,25 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
             print(f"{'─'*65}")
             last_category = cat
 
-        r = collect(tc)
+        try:
+            r = collect(tc)
+        except Exception as e:
+            print(f"  ❌ Error collecting responses for {tc.get('id')}: {e}")
+            r = {
+                "id":           tc.get("id"),
+                "name":         tc.get("name", "Unknown"),
+                "category":     tc.get("category", "Unknown"),
+                "type":         tc.get("type", "single"),
+                "tasks_sent":   [],
+                "responses":    [],
+                "verdict":      "FAIL",
+                "reason":       f"Setup error: {e}",
+                "count_verdict": {"verdict": "FAIL", "reason": str(e)},
+                "manual_check": tc.get("manual_check"),
+                "note":         tc.get("note"),
+                "started_at":   datetime.now(timezone.utc).isoformat(),
+                "finished_at":  datetime.now(timezone.utc).isoformat(),
+            }
         results.append(r)
         if _stop_requested():
             print("\n  ⏹ Stop requested — judging captured results so far")
