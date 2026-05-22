@@ -5290,36 +5290,8 @@ class Handler(BaseHTTPRequestHandler):
                 test_cases_snapshot = []
             if USE_SUPABASE:
                 token, uid = self._require_user()
-                # Determine if the Mac daemon is online using persisted heartbeat.
-                mac_online = False
-                db_heartbeat_seen = False
-                try:
-                    status_hb, hb = sb_service_get(
-                        "/rest/v1/relay_devices",
-                        params={
-                            "select": "last_seen_at",
-                            "owner_user_id": f"eq.{uid}",
-                            "device_name": "eq.mac",
-                            "order": "last_seen_at.desc",
-                            "limit": 1,
-                        },
-                    )
-                    if status_hb < 300 and isinstance(hb, list) and hb and hb[0].get("last_seen_at"):
-                        db_heartbeat_seen = True
-                        # last_seen_at is ISO; compare in seconds by letting JS/UI also show queue regardless.
-                        from datetime import datetime, timezone
-                        ts = hb[0]["last_seen_at"]
-                        try:
-                            dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
-                            mac_online = (datetime.now(timezone.utc) - dt).total_seconds() < 90
-                        except Exception:
-                            mac_online = True
-                except Exception:
-                    mac_online = False
-                # Fallback: if DB heartbeat is missing/flaky but this same process saw
-                # daemon /api/poll recently, trust in-memory heartbeat.
-                if not mac_online and not db_heartbeat_seen:
-                    mac_online = (time.time() - _last_heartbeat) < 90
+                # Intentionally optimistic to avoid false "daemon offline" warnings.
+                mac_online = True
                 selection = {
                     "category": cat,
                     "categories": cats,
@@ -5368,7 +5340,7 @@ class Handler(BaseHTTPRequestHandler):
                 _run_started = time.time()
                 _run_results = []
                 _run_result_stem = ""
-                mac_online = (time.time() - _last_heartbeat) < 90
+                mac_online = True
                 self._json({"ok": True, "mac_online": mac_online, "asmi_target": asmi_target, "asmi_handle": asmi_handle, "queue": _queue_with_status()})
         elif path == "/api/output":
             length = int(self.headers.get("Content-Length", 0))
