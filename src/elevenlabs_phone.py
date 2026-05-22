@@ -65,6 +65,18 @@ def get_conversation(conversation_id: str) -> dict:
     return resp.json()
 
 
+def get_conversation_audio(conversation_id: str) -> tuple[bytes, str]:
+    """
+    Fetch the raw audio recording for a given conversation_id.
+    Returns (audio_bytes, content_type).
+    """
+    url = f"{_BASE}/convai/conversations/{conversation_id}/audio"
+    resp = requests.get(url, headers=_headers(), timeout=30)
+    resp.raise_for_status()
+    content_type = resp.headers.get("Content-Type", "audio/mpeg")
+    return resp.content, content_type
+
+
 def wait_for_call_transcript(
     call_started_after: datetime,
     agent_id: str | None = None,

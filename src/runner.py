@@ -1,4 +1,6 @@
 import time
+import asyncio
+import threading
 from datetime import datetime, timezone
 import os
 import json
@@ -6,13 +8,14 @@ import json
 from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT
 from imessage import send_imessage, wait_for_responses, catch_up_manual_messages
 from judge import judge_status, judge_with_context, judge_response_count
+from elevenlabs_phone import list_recent_conversations, wait_for_call_transcript
+
 try:
-    from elevenlabs_phone import wait_for_call_transcript
-    _ELEVENLABS_AVAILABLE = True
+    import websockets
+    _WEBSOCKETS_AVAILABLE = True
 except ImportError:
-    _ELEVENLABS_AVAILABLE = False
-    def wait_for_call_transcript(*a, **kw):
-        return None
+    websockets = None
+    _WEBSOCKETS_AVAILABLE = False
 
 
 def _stop_requested() -> bool:
@@ -39,6 +42,130 @@ def _next_message_delay(msg: str, default_delay: float, command_delay: float = 1
     if text.startswith("cmd_"):
         return float(command_delay)
     return float(default_delay or 0.0)
+
+
+def _monitor_event_summary(event: dict) -> str:
+    etype = str(event.get("type") or "event").strip()
+    if etype == "user_transcript":
+        payload = event.get("user_transcription_event") or {}
+        text = str(payload.get("user_transcript") or "").strip()
+        return f"user_transcript: {text}" if text else "user_transcript"
+    if etype == "agent_response":
+        payload = event.get("agent_response_event") or {}
+        text = str(payload.get("agent_response") or "").strip()
+        return f"agent_response: {text}" if text else "agent_response"
+    if etype == "agent_chat_response_part":
+        payload = event.get("text_response_part") or {}
+        part = str(payload.get("type") or "").strip()
+        text = str(payload.get("text") or "").strip()
+        if part == "delta" and text:
+            return f"agent_chat_response_part: {text}"
+        return f"agent_chat_response_part({part})" if part else "agent_chat_response_part"
+    if etype == "agent_tool_response":
+        payload = event.get("agent_tool_response") or {}
+        tool = str(payload.get("tool_name") or "tool").strip()
+        if payload.get("is_error"):
+            return f"agent_tool_response: {tool} (error)"
+        return f"agent_tool_response: {tool}"
+    if etype == "agent_response_complete":
+        return "agent_response_complete"
+    return etype
+
+
+def _start_elevenlabs_monitor(agent_id: str, started_after: datetime, events: list[dict], state: dict, stop_event: threading.Event) -> threading.Thread | None:
+    if not _WEBSOCKETS_AVAILABLE or not agent_id or not started_after:
+        return None
+
+    api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    if not api_key:
+        state["error"] = "ELEVENLABS_API_KEY is missing"
+        return None
+
+    started_ts = started_after.replace(tzinfo=timezone.utc) if started_after.tzinfo is None else started_after.astimezone(timezone.utc)
+
+    async def _monitor_ws(conversation_id: str):
+        url = f"wss://api.elevenlabs.io/v1/convai/conversations/{conversation_id}/monitor"
+        headers = [("xi-api-key", api_key)]
+        async with websockets.connect(url, additional_headers=headers, open_timeout=10) as ws:
+            state["connected"] = True
+            state["conversation_id"] = conversation_id
+            state["status"] = "monitoring"
+            while not stop_event.is_set():
+                try:
+                    msg = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                except Exception as e:
+                    state["error"] = str(e)
+                    break
+
+                ts = datetime.now(timezone.utc).isoformat()
+                try:
+                    evt = json.loads(msg) if isinstance(msg, str) else {"type": "raw", "raw": msg}
+                except Exception:
+                    evt = {"type": "raw", "raw": msg}
+                events.append({
+                    "timestamp": ts,
+                    "type": evt.get("type") or "raw",
+                    "summary": _monitor_event_summary(evt),
+                    "raw": evt,
+                })
+                print(f"  [ElevenLabs live] {events[-1]['summary']}")
+
+    def _runner():
+        deadline = time.time() + 300
+        conversation_id = None
+        while time.time() < deadline and not stop_event.is_set():
+            try:
+                convos = list_recent_conversations(agent_id)
+            except Exception as e:
+                state["error"] = f"list_recent_conversations: {e}"
+                time.sleep(1)
+                continue
+
+            for convo in convos:
+                raw_start = (
+                    convo.get("start_time_unix_secs")
+                    or convo.get("started_at_unix_secs")
+                    or convo.get("created_at_unix_secs")
+                    or 0
+                )
+                if raw_start:
+                    convo_start = datetime.fromtimestamp(raw_start, tz=timezone.utc)
+                else:
+                    iso = convo.get("start_time") or convo.get("started_at") or ""
+                    if not iso:
+                        continue
+                    try:
+                        convo_start = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+                    except Exception:
+                        continue
+                if convo_start < started_ts:
+                    continue
+                conversation_id = convo.get("conversation_id") or convo.get("id")
+                if not conversation_id:
+                    continue
+                state["conversation_id"] = conversation_id
+                state["conversation_status"] = str(convo.get("status") or "").lower()
+                break
+
+            if not conversation_id:
+                time.sleep(1)
+                continue
+
+            if state.get("conversation_status") in {"done", "completed", "finished", "ended"}:
+                state["status"] = "finished-before-monitor"
+                break
+
+            try:
+                asyncio.run(_monitor_ws(conversation_id))
+            except Exception as e:
+                state["error"] = str(e)
+            break
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    return thread
 
 
 def _skip_ids() -> set[str]:
@@ -601,6 +728,10 @@ def collect(tc: dict) -> dict:
         seen_keys = set()
         all_raw = []
         call_started_at = None
+        monitor_events: list[dict] = []
+        monitor_state: dict = {"status": "not_started", "conversation_id": "", "conversation_status": "", "connected": False, "error": ""}
+        monitor_stop = threading.Event()
+        monitor_thread: threading.Thread | None = None
 
         for i, msg in enumerate(msgs):
             if _stop_requested():
@@ -617,6 +748,9 @@ def collect(tc: dict) -> dict:
             # (the last non-cmd_ message is most likely the one that causes the call)
             if not msg.strip().startswith("cmd_") and call_started_at is None:
                 call_started_at = sent_at
+                if monitor_thread is None:
+                    agent_id = os.environ.get("ELEVENLABS_AGENT_ID", "").strip()
+                    monitor_thread = _start_elevenlabs_monitor(agent_id, call_started_at, monitor_events, monitor_state, monitor_stop)
 
             ok = send_imessage(msg)
             if ok:
@@ -669,6 +803,19 @@ def collect(tc: dict) -> dict:
         else:
             result["call_transcript"] = None
             print("  ⚠ No call transcript captured")
+
+        if monitor_events:
+            result["call_monitor_events"] = monitor_events[-200:]
+            result["call_monitor_log"] = "\n".join(
+                f"[{idx+1:03d}] {evt.get('summary', '')}" for idx, evt in enumerate(result["call_monitor_events"])
+            )
+        else:
+            result["call_monitor_events"] = []
+            result["call_monitor_log"] = ""
+        result["call_monitor_state"] = monitor_state
+        if monitor_thread is not None:
+            monitor_stop.set()
+            monitor_thread.join(timeout=5)
 
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
     if stopped_early:

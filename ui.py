@@ -1124,7 +1124,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
        background: #eef2f7; color: #1e293b; }
 body.theme-dark { background:#0f172a; color:#e2e8f0; }
 body.theme-dark header, body.theme-dark .toolbar { background:#18122b; border-color:#4c1d95; color:#f8fafc; }
-body.theme-dark main, body.theme-dark #historySection, body.theme-dark #responsesSection, body.theme-dark #analysisSection { color:#e2e8f0; }
+body.theme-dark main, body.theme-dark #historySection, body.theme-dark #responsesSection, body.theme-dark #analysisSection, body.theme-dark #recordingsSection { color:#e2e8f0; }
 body.theme-dark .test-table, body.theme-dark .new-form, body.theme-dark #historyList { background:#111827 !important; box-shadow:0 1px 8px rgba(0,0,0,.35); }
 body.theme-dark .test-table th, body.theme-dark .cat-row td, body.theme-dark .rt-card-hdr { background:#1f2937 !important; border-color:#334155 !important; }
 body.theme-dark .test-table td, body.theme-dark .rt-section, body.theme-dark .rt-card, body.theme-dark .inline-result, body.theme-dark .rt-turn { border-color:#334155 !important; }
@@ -1372,6 +1372,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="tab-btn tab-tests active" id="tabMain" onclick="showTab('main')">Tests</button>
     <button class="tab-btn tab-reports" id="tabHistory" onclick="showTab('history')">Reports</button>
     <button class="tab-btn tab-responses" id="tabResponses" onclick="showTab('responses')">Responses</button>
+    <button class="tab-btn tab-recordings" id="tabRecordings" onclick="showTab('recordings')">Call Recordings</button>
     <button class="tab-btn tab-analysis" id="tabAnalysis" onclick="showTab('analysis')">Analysis</button>
     <button class="tab-btn tab-logs" id="tabLogs" onclick="showTab('logs')">Daemon Log</button>
     <button class="tab-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle light/dark mode">🌙 Dark</button>
@@ -1406,6 +1407,10 @@ textarea { resize: vertical; min-height: 70px; }
 
   <div class="tab-menu" id="menuResponses">
     <span style="font-size:0.82rem;color:#0f172a;">Review sent messages and captured replies by run.</span>
+  </div>
+
+  <div class="tab-menu" id="menuRecordings">
+    <span style="font-size:0.82rem;color:#0f172a;">Listen to ElevenLabs call recordings and review live monitor events.</span>
   </div>
 
   <div class="tab-menu" id="menuAnalysis">
@@ -1580,6 +1585,19 @@ textarea { resize: vertical; min-height: 70px; }
       <button class="btn btn-outline" id="responsesViewHistoryBtn" onclick="setResponsesView('history')" style="font-size:0.75rem;padding:4px 10px;white-space:nowrap">All conversations</button>
     </div>
     <div id="responsesList" style="display:grid;gap:16px;"></div>
+  </div>
+
+  <div id="recordingsSection" style="display:none; padding:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+      <h2 style="margin:0; color:#0f172a;">Call Recordings</h2>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-outline" onclick="loadRecordings()" style="font-size:0.75rem; padding:4px 10px;">🔄 Refresh</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px;color:#64748b;font-size:0.85rem;">
+      Each card shows the ElevenLabs conversation audio, transcript, and any realtime monitor events captured during the call.
+    </div>
+    <div id="recordingsList" style="display:grid;gap:16px;"></div>
   </div>
 
   <div id="analysisSection" style="display:none; padding:16px;">
@@ -3061,10 +3079,12 @@ function _inlineRunningHtml(secs) {
 async function _refreshHistoryTabs() {
   const historySection = document.getElementById('historySection');
   const responsesSection = document.getElementById('responsesSection');
+  const recordingsSection = document.getElementById('recordingsSection');
   const analysisSection = document.getElementById('analysisSection');
   const scrollY = window.scrollY;
   if (historySection && historySection.style.display !== 'none') await loadHistory(true);
   if (responsesSection && responsesSection.style.display !== 'none') await loadResponses(true);
+  if (recordingsSection && recordingsSection.style.display !== 'none') await loadRecordings(true);
   if (analysisSection && analysisSection.style.display !== 'none') await loadAnalysis(true);
   window.scrollTo(0, scrollY);
 }
@@ -3562,6 +3582,7 @@ function _setTabMenu(tab) {
     main: 'menuMain',
     history: 'menuHistory',
     responses: 'menuResponses',
+    recordings: 'menuRecordings',
     analysis: 'menuAnalysis',
     logs: 'menuLogs',
   };
@@ -3578,6 +3599,7 @@ function _setActiveTabStyle(tab) {
     main: 'tabMain',
     history: 'tabHistory',
     responses: 'tabResponses',
+    recordings: 'tabRecordings',
     analysis: 'tabAnalysis',
     logs: 'tabLogs',
   };
@@ -3594,12 +3616,9 @@ function showTab(tab) {
   const mainSection = document.getElementById('mainSection');
   const historySection = document.getElementById('historySection');
   const responsesSection = document.getElementById('responsesSection');
+  const recordingsSection = document.getElementById('recordingsSection');
   const analysisSection = document.getElementById('analysisSection');
   const logsSection = document.getElementById('logsSection');
-  const tabMain = document.getElementById('tabMain');
-  const tabHistory = document.getElementById('tabHistory');
-  const tabResponses = document.getElementById('tabResponses');
-  const tabAnalysis = document.getElementById('tabAnalysis');
   _setTabMenu(tab);
   _setActiveTabStyle(tab);
 
@@ -3607,6 +3626,7 @@ function showTab(tab) {
     mainSection.style.display = 'none';
     historySection.style.display = 'block';
     responsesSection.style.display = 'none';
+    recordingsSection.style.display = 'none';
     analysisSection.style.display = 'none';
     logsSection.style.display = 'none';
     loadHistory();
@@ -3614,13 +3634,23 @@ function showTab(tab) {
     mainSection.style.display = 'none';
     historySection.style.display = 'none';
     responsesSection.style.display = 'block';
+    recordingsSection.style.display = 'none';
     analysisSection.style.display = 'none';
     logsSection.style.display = 'none';
     loadResponses();
+  } else if (tab === 'recordings') {
+    mainSection.style.display = 'none';
+    historySection.style.display = 'none';
+    responsesSection.style.display = 'none';
+    recordingsSection.style.display = 'block';
+    analysisSection.style.display = 'none';
+    logsSection.style.display = 'none';
+    loadRecordings();
   } else if (tab === 'analysis') {
     mainSection.style.display = 'none';
     historySection.style.display = 'none';
     responsesSection.style.display = 'none';
+    recordingsSection.style.display = 'none';
     analysisSection.style.display = 'block';
     logsSection.style.display = 'none';
     loadAnalysis();
@@ -3628,6 +3658,7 @@ function showTab(tab) {
     mainSection.style.display = 'none';
     historySection.style.display = 'none';
     responsesSection.style.display = 'none';
+    recordingsSection.style.display = 'none';
     analysisSection.style.display = 'none';
     logsSection.style.display = 'block';
     loadLogs();
@@ -3635,6 +3666,7 @@ function showTab(tab) {
     mainSection.style.display = 'block';
     historySection.style.display = 'none';
     responsesSection.style.display = 'none';
+    recordingsSection.style.display = 'none';
     analysisSection.style.display = 'none';
     logsSection.style.display = 'none';
   }
@@ -4072,6 +4104,143 @@ async function loadResponses(silent = false) {
     responsesList.innerHTML = html;
   } catch(e) {
     responsesList.innerHTML = '<p style="color:#dc2626;padding:20px;text-align:center;">Failed to load responses: ' + esc(e.message) + '</p>';
+  }
+}
+
+function _safeDomId(text) {
+  return String(text || '').replace(/[^a-zA-Z0-9_-]+/g, '_');
+}
+
+async function loadCallRecording(conversationId, targetId) {
+  const host = document.getElementById(targetId);
+  if (!host) return;
+  host.innerHTML = '<div style="color:#64748b;font-size:0.82rem;">Loading recording…</div>';
+  try {
+    const res = await apiFetch('/api/call-audio?conversation_id=' + encodeURIComponent(conversationId));
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || ('HTTP ' + res.status));
+    }
+    const blob = await res.blob();
+    const audioUrl = URL.createObjectURL(blob);
+    host.innerHTML = `
+      <audio controls autoplay preload="metadata" style="width:100%;margin-top:8px;">
+        <source src="${audioUrl}">
+      </audio>
+      <div style="margin-top:6px;color:#64748b;font-size:0.75rem;">Loaded from ElevenLabs conversation audio.</div>
+    `;
+  } catch (e) {
+    host.innerHTML = '<div style="color:#dc2626;font-size:0.82rem;">Failed to load recording: ' + esc(e.message) + '</div>';
+  }
+}
+
+function _renderCallMonitorDetails(test) {
+  const state = test.call_monitor_state || {};
+  const log = (test.call_monitor_log || '').trim();
+  const events = Array.isArray(test.call_monitor_events) ? test.call_monitor_events : [];
+  const lines = log ? log.split('\n').filter(Boolean) : [];
+  const recentLines = lines.slice(-20);
+  const statusBits = [
+    state.status ? `status: ${state.status}` : '',
+    state.conversation_id ? `conversation: ${state.conversation_id}` : '',
+    state.conversation_status ? `conversation status: ${state.conversation_status}` : '',
+    state.connected ? 'connected' : '',
+    state.error ? `error: ${state.error}` : '',
+  ].filter(Boolean);
+  const eventPreview = events.slice(-5).map(evt => {
+    const stamp = evt.timestamp ? formatDisplayTimestamp(evt.timestamp) : '';
+    const summary = evt.summary || evt.type || 'event';
+    return `<div style="margin-top:4px;color:#334155;font-family:monospace;font-size:0.78rem;white-space:pre-wrap;">${esc(stamp ? `[${stamp}] ` : '')}${esc(summary)}</div>`;
+  }).join('');
+  return `
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;font-weight:700;font-size:0.88rem;color:#0f766e;padding:8px 12px;background:#ccfbf1;border-radius:8px;list-style:none;display:flex;align-items:center;gap:6px;">
+        📡 Live Monitor${statusBits.length ? ' · ' + esc(statusBits.join(' · ')) : ''}
+      </summary>
+      <div style="margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;">
+        ${statusBits.length ? `<div style="color:#334155;font-size:0.82rem;line-height:1.5;margin-bottom:8px;">${esc(statusBits.join(' · '))}</div>` : '<div style="color:#64748b;font-size:0.82rem;">No monitor metadata captured yet.</div>'}
+        ${recentLines.length ? `<div style="margin-top:8px;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:12px;font-family:monospace;font-size:0.78rem;white-space:pre-wrap;line-height:1.6;max-height:260px;overflow-y:auto;border:1px solid #1e293b;">${esc(recentLines.join('\n'))}</div>` : ''}
+        ${eventPreview ? `<div style="margin-top:10px;">${eventPreview}</div>` : ''}
+      </div>
+    </details>`;
+}
+
+function _renderCallRecordingCard(run, test) {
+  const verdict = (test.verdict || 'UNCLEAR').toUpperCase();
+  const vColor = verdict === 'PASS' ? '#166534' : verdict === 'FAIL' ? '#991b1b' : '#92400e';
+  const vBg = verdict === 'PASS' ? '#dcfce7' : verdict === 'FAIL' ? '#fee2e2' : '#fef3c7';
+  const ts = formatTimestamp(run.stem || test.started_at || '');
+  const target = _targetBadge({
+    asmi_target: test.asmi_target || run.asmi_target,
+    asmi_handle: test.asmi_handle || run.asmi_handle,
+  });
+  const convId = (test.call_conversation_id || '').trim();
+  const audioHostId = 'recording_audio_' + _safeDomId(convId || test.id || run.stem || '');
+  const hasTranscript = test.call_transcript && test.call_transcript.trim();
+  const hasMonitor = (test.call_monitor_log && test.call_monitor_log.trim()) || (test.call_monitor_events || []).length || test.call_monitor_state;
+  const dur = test.call_duration_secs ? ` · ${test.call_duration_secs}s` : '';
+  const transcriptHtml = hasTranscript ? `
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;font-weight:700;font-size:0.88rem;color:#0369a1;padding:8px 12px;background:#e0f2fe;border-radius:8px;list-style:none;display:flex;align-items:center;gap:6px;">
+        📝 Transcript${dur}${convId ? ` <span style="font-size:0.72rem;color:#64748b;font-family:monospace;">${esc(convId)}</span>` : ''}
+      </summary>
+      <div style="margin-top:8px;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:14px;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;line-height:1.7;border:1px solid #1e293b;max-height:400px;overflow-y:auto;">${esc(test.call_transcript)}</div>
+    </details>` : '<div style="margin-top:10px;color:#64748b;font-size:0.82rem;">No transcript captured yet.</div>';
+  const audioHtml = convId ? `
+    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <button class="btn btn-outline" onclick='loadCallRecording(${JSON.stringify(convId)}, ${JSON.stringify(audioHostId)})' style="font-size:0.75rem;padding:4px 10px;white-space:nowrap;">▶ Load audio</button>
+      <span style="color:#64748b;font-size:0.78rem;">Conversation ID: <span style="font-family:monospace;">${esc(convId)}</span></span>
+    </div>
+    <div id="${audioHostId}" style="margin-top:8px;"></div>` : '<div style="margin-top:10px;color:#64748b;font-size:0.82rem;">No conversation ID yet, so audio is not available.</div>';
+  const monitorHtml = hasMonitor ? _renderCallMonitorDetails(test) : '';
+  return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+      <span style="font-weight:700;color:#0f172a;">${esc(test.id)}: ${esc(test.name)}</span>
+      ${target}
+      <span style="background:${vBg};color:${vColor};padding:4px 8px;border-radius:999px;font-size:0.75rem;">${verdict}</span>
+      <span style="color:#64748b;font-size:0.78rem;font-family:monospace;">${esc(ts)}</span>
+      ${test.call_conversation_id ? '<span style="background:#d1fae5;color:#065f46;padding:4px 8px;border-radius:999px;font-size:0.75rem;">📞 Recording available</span>' : ''}
+    </div>
+    ${audioHtml}
+    ${transcriptHtml}
+    ${monitorHtml}
+    ${test.reason ? `<div style="margin-top:8px;font-size:0.85rem;color:#475569;"><strong>Judge:</strong> ${esc(test.reason)}</div>` : ''}
+  </div>`;
+}
+
+async function loadRecordings(silent = false) {
+  const recordingsList = document.getElementById('recordingsList');
+  if (!recordingsList) return;
+  if (!silent) recordingsList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Loading recordings…</p>';
+  try {
+    const res = await apiFetch('/api/responses');
+    const data = await res.json();
+    if (!data || !data.length) {
+      recordingsList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">No recordings yet.</p>';
+      return;
+    }
+    const runs = (data || []).map(run => {
+      const tests = (run.tests || []).filter(test => test && (test.category === 'call_eval' || test.call_conversation_id || test.call_transcript || test.call_monitor_log || (test.call_monitor_events || []).length));
+      return tests.length ? {...run, tests} : null;
+    }).filter(Boolean);
+    if (!runs.length) {
+      recordingsList.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">No call recordings available yet.</p>';
+      return;
+    }
+    recordingsList.innerHTML = runs.map(run => {
+      const ts = formatTimestamp(run.stem);
+      const testsHtml = (run.tests || []).map(test => _renderCallRecordingCard(run, test)).join('');
+      return `<div style="border:1px solid #e2e8f0;border-radius:14px;padding:18px;background:#f8fafc;">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;">
+          <div style="font-size:0.95rem;font-weight:700;color:#0f172a;">Run ${ts}</div>
+          ${_targetBadge(run)}
+          <div style="background:#e2e8f0;color:#1d4ed8;padding:4px 10px;border-radius:999px;font-size:0.78rem;">${run.tests.length} call test${run.tests.length===1?'':'s'}</div>
+        </div>
+        <div style="display:grid;gap:12px;">${testsHtml}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    recordingsList.innerHTML = '<p style="color:#dc2626;padding:20px;text-align:center;">Failed to load recordings: ' + esc(e.message) + '</p>';
   }
 }
 
@@ -4598,6 +4767,9 @@ class Handler(BaseHTTPRequestHandler):
                                 "call_transcript": rr.get("call_transcript") or None,
                                 "call_conversation_id": rr.get("call_conversation_id") or None,
                                 "call_duration_secs": rr.get("call_duration_secs") or None,
+                                "call_monitor_events": rr.get("call_monitor_events", []),
+                                "call_monitor_log": rr.get("call_monitor_log") or "",
+                                "call_monitor_state": rr.get("call_monitor_state") or {},
                             })
                             total_responses += len(rr.get("responses", []) or [])
                         responses.append({
@@ -4642,6 +4814,9 @@ class Handler(BaseHTTPRequestHandler):
                                     "call_transcript": r.get("call_transcript") or None,
                                     "call_conversation_id": r.get("call_conversation_id") or None,
                                     "call_duration_secs": r.get("call_duration_secs") or None,
+                                    "call_monitor_events": r.get("call_monitor_events", []),
+                                    "call_monitor_log": r.get("call_monitor_log") or "",
+                                    "call_monitor_state": r.get("call_monitor_state") or {},
                                 })
                                 total_responses += len(r.get("responses", []))
                             responses.append({
@@ -4675,6 +4850,9 @@ class Handler(BaseHTTPRequestHandler):
                                 "call_transcript": r.get("call_transcript") or None,
                                 "call_conversation_id": r.get("call_conversation_id") or None,
                                 "call_duration_secs": r.get("call_duration_secs") or None,
+                                "call_monitor_events": r.get("call_monitor_events", []),
+                                "call_monitor_log": r.get("call_monitor_log") or "",
+                                "call_monitor_state": r.get("call_monitor_state") or {},
                             })
                             total_responses += len(r.get("responses", []))
                         responses.insert(0, {
@@ -4685,6 +4863,64 @@ class Handler(BaseHTTPRequestHandler):
                             "totalResponses": total_responses,
                         })
                     self._json(responses)
+            elif path == "/api/call-audio":
+                if USE_SUPABASE:
+                    self._require_user()
+                query = urllib.parse.parse_qs(urlparse(self.path).query)
+                conversation_id = (query.get("conversation_id", [""])[0] or "").strip()
+                if not conversation_id:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": "Missing conversation_id"}).encode())
+                    return
+                api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+                if not api_key:
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": "ELEVENLABS_API_KEY is not configured"}).encode())
+                    return
+                eleven_url = f"https://api.elevenlabs.io/v1/convai/conversations/{urllib.parse.quote(conversation_id, safe='')}/audio"
+                req = urllib.request.Request(eleven_url, headers={"xi-api-key": api_key})
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        audio = resp.read()
+                        content_type = resp.headers.get("Content-Type", "audio/mpeg")
+                except urllib.error.HTTPError as e:
+                    try:
+                        detail = e.read().decode("utf-8", "ignore")
+                    except Exception:
+                        detail = str(e)
+                    self.send_response(502)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": f"ElevenLabs audio fetch failed: {detail}"}).encode())
+                    return
+                except Exception as e:
+                    self.send_response(502)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": f"ElevenLabs audio fetch failed: {e}"}).encode())
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", content_type or "audio/mpeg")
+                self.send_header("Content-Length", str(len(audio)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
+                if (query.get("dl", ["0"])[0] or "").strip() in {"1", "true", "yes"}:
+                    self.send_header("Content-Disposition", f'attachment; filename="conversation_{conversation_id}.mp3"')
+                self.end_headers()
+                try:
+                    self.wfile.write(audio)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    return
             elif path == "/api/analysis":
                 if USE_SUPABASE:
                     token, uid = self._require_user()
