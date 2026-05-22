@@ -117,7 +117,7 @@ _daemon_logs_buffer = ""  # in-memory buffer of recent daemon logs
 
 
 USE_SUPABASE = bool((SUPABASE_URL or "").strip())
-SINGLE_USER_OWNER_ID = os.environ.get("ASMI_OWNER_USER_ID", "").strip()
+SINGLE_USER_OWNER_ID = os.environ.get("ASMI_OWNER_USER_ID", "bb964e90-04ef-4087-abe0-eea8b3f050f1").strip()
 
 PORT      = int(os.environ.get("PORT", 8765))
 DAEMON_TOKEN = os.environ.get("DAEMON_TOKEN", "").strip()
@@ -1311,7 +1311,7 @@ textarea { resize: vertical; min-height: 70px; }
 </head>
 <body>
 
-<div id="authOverlay" style="position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:9999;">
+<div id="authOverlay" style="position:fixed;inset:0;background:rgba(15,23,42,.92);display:none;align-items:center;justify-content:center;z-index:9999;">
   <div style="width:min(420px,92vw);background:#0b1220;border:1px solid #1e293b;border-radius:14px;padding:18px 18px 14px;color:#e2e8f0;box-shadow:0 10px 30px rgba(0,0,0,.35);">
     <div style="font-weight:900;font-size:1.05rem;margin-bottom:6px;">Sign in</div>
     <div style="color:#94a3b8;font-size:0.86rem;line-height:1.4;margin-bottom:14px;">Use your email/password (Supabase Auth).</div>
@@ -1789,7 +1789,11 @@ async function apiFetch(url, options={}) {
 async function _loadSession() {
   if (!sb) return null;
   try {
-    const { data } = await sb.auth.getSession();
+    const { data } = await _withTimeout(
+      sb.auth.getSession(),
+      5000,
+      'Session loading timed out.'
+    );
     const session = data ? data.session : null;
     _applySession(session);
     return session;
@@ -1813,7 +1817,11 @@ async function _ensureSignedIn() {
 }
 
 async function _initAuthUI() {
-  if (!sb) return;
+  const overlay = document.getElementById('authOverlay');
+  if (!sb) {
+    if (overlay) overlay.style.display = 'none';
+    return;
+  }
   try {
     document.getElementById('authSignInBtn').onclick = async () => {
       if (_authBusy) return;
@@ -1876,6 +1884,7 @@ async function _initAuthUI() {
     await _ensureSignedIn();
   } catch (e) {
     console.error('Failed to init auth UI:', e);
+    if (overlay) overlay.style.display = !AUTH_REQUIRED ? 'none' : 'flex';
   }
 }
 
