@@ -61,10 +61,10 @@ def send_imessage(message: str, handle: str | None = None) -> bool:
 
 # ─── Receive ──────────────────────────────────────────────────────────────────
 
-def _query_messages(handle: str, since_mac_ns: int, limit: int = 10) -> list[dict]:
+def _query_messages(handle: str, since_mac_ns: int, limit: int = 100) -> list[dict]:
     """
     Read messages from chat.db that:
-      - came FROM the given handle (is_from_me = 0)
+      - came FROM or were SENT TO the given handle
       - arrived after since_mac_ns
     Returns list of dicts: {text, timestamp, is_from_me}
     """
@@ -78,7 +78,6 @@ def _query_messages(handle: str, since_mac_ns: int, limit: int = 10) -> list[dic
             JOIN   handle  h ON m.handle_id = h.ROWID
             WHERE  h.id         = ?
               AND  m.date        > ?
-              AND  m.is_from_me  = 0
               AND  m.text        IS NOT NULL
               AND  m.text        != ''
             ORDER  BY m.date ASC
@@ -108,11 +107,10 @@ def wait_for_responses(
     drain_all: bool = False,
     return_raw: bool = False,
     silence_after: float = SILENCE_AFTER,
-) -> list[str]:
+) -> list[str] | list[dict]:
     """
     Wait up to `timeout` seconds for `count` responses from Asmi after `sent_at`.
-    Collect up to `max_responses` replies that arrive after the user message.
-    Returns list of response texts (may be fewer than `count` if timeout reached).
+    Collect replies that arrive after the user message, as well as capturing any manual user messages sent in between.
     """
     handle = _resolve_handle(handle)
     since_ns      = _mac_ts(sent_at)
@@ -127,10 +125,10 @@ def wait_for_responses(
         if stop_file and os.path.exists(stop_file):
             print("\n  ⏹ Stop requested — using responses captured so far")
             break
-        msgs = _query_messages(handle, since_ns, limit=max_responses)
+        msgs = _query_messages(handle, since_ns, limit=max(100, max_responses))
         new_msgs  = []
         for m in msgs:
-            key = (m["timestamp"].isoformat(), m["text"])
+            key = (m["timestamp"].isoformat(), m["text"], m["is_from_me"])
             if key in seen_keys:
                 continue
             seen_keys.add(key)
@@ -138,9 +136,15 @@ def wait_for_responses(
         if new_msgs:
             for m in new_msgs:
                 collected.append(m)
-                print(f"\n  ✓ Got response [{len(collected)}/{count}]: {m['text'][:80]}…")
+                if not m.get("is_from_me"):
+                    assistant_count = sum(1 for x in collected if not x.get("is_from_me"))
+                    print(f"\n  ✓ Got response [{assistant_count}/{count}]: {m['text'][:80]}…")
+                else:
+                    print(f"\n  ✉ Captured user message: {m['text'][:80]}…")
             last_new_time = time.time()
-        if len(collected) >= max_responses:
+            
+        assistant_count = sum(1 for x in collected if not x.get("is_from_me"))
+        if assistant_count >= max_responses:
             break
         # If we have received at least one response, ensure we always wait
         # `silence_after` seconds after the last response before ending capture,
@@ -148,17 +152,19 @@ def wait_for_responses(
         if last_new_time is not None:
             deadline = max(deadline, last_new_time + silence_after)
         if last_new_time is not None and time.time() - last_new_time >= silence_after:
-            if drain_all or len(collected) >= count:
+            if drain_all or assistant_count >= count:
                 break
         print(".", end="", flush=True)
         time.sleep(POLL_INTERVAL)
 
-    if len(collected) < count:
-        print(f"\n  ⚠ Timeout — got {len(collected)}/{count} responses")
+    assistant_count = sum(1 for x in collected if not x.get("is_from_me"))
+    if assistant_count < count:
+        print(f"\n  ⚠ Timeout — got {assistant_count}/{count} responses")
     else:
         print()
 
     if return_raw:
-        return collected[:max_responses]
-    return [m["text"] for m in collected[:max_responses]]
+        return collected
+    return [m["text"] for m in collected if not m.get("is_from_me")][:max_responses]
+
 

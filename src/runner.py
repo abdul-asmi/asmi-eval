@@ -119,6 +119,71 @@ def _group_raw_responses_by_turn(sent_turns: list[dict], raw_msgs: list[dict]) -
     return turns
 
 
+def reconstruct_transcript(session_start: datetime, raw_msgs: list[dict], default_user: str = None) -> list[dict]:
+    """
+    Reconstruct the transcript turns chronologically.
+    Every user message (is_from_me = True) starts a new turn.
+    Assistant replies (is_from_me = False) are grouped under the most recent user turn.
+    If there are no user messages in raw_msgs but default_user is provided,
+    we seed a single turn with default_user.
+    """
+    turns = []
+    # Ensure raw_msgs are sorted chronologically
+    sorted_msgs = sorted(raw_msgs or [], key=lambda m: m.get("timestamp") or datetime.min)
+    
+    current_turn = None
+    turn_counter = 1
+    
+    for m in sorted_msgs:
+        text = (m.get("text") or "").strip()
+        if not text:
+            continue
+        ts = m.get("timestamp")
+        ts_iso = ts.isoformat() if isinstance(ts, datetime) else str(ts)
+        
+        if m.get("is_from_me"):
+            # It's a user message (automated or manual)
+            current_turn = {
+                "turn": turn_counter,
+                "user": text,
+                "responses": [],
+                "started_at": ts_iso,
+                "finished_at": ts_iso,
+            }
+            turns.append(current_turn)
+            turn_counter += 1
+        else:
+            # It's an assistant response
+            if current_turn is None:
+                # Assistant replied before any user message was recorded in raw_msgs.
+                # If default_user is provided, we can seed the first turn with it.
+                user_text = default_user or "<System / Context>"
+                start_time_iso = session_start.isoformat() if isinstance(session_start, datetime) else str(session_start)
+                current_turn = {
+                    "turn": turn_counter,
+                    "user": user_text,
+                    "responses": [],
+                    "started_at": start_time_iso,
+                    "finished_at": ts_iso,
+                }
+                turns.append(current_turn)
+                turn_counter += 1
+            current_turn["responses"].append(text)
+            current_turn["finished_at"] = max(current_turn["finished_at"], ts_iso)
+            
+    if not turns and default_user:
+        start_time_iso = session_start.isoformat() if isinstance(session_start, datetime) else str(session_start)
+        turns.append({
+            "turn": 1,
+            "user": default_user,
+            "responses": [],
+            "started_at": start_time_iso,
+            "finished_at": start_time_iso,
+        })
+        
+    return turns
+
+
 # ── Phase 1: collect responses ─────────────────────────────────────────────────
 
 def collect(tc: dict) -> dict:
@@ -170,6 +235,7 @@ def collect(tc: dict) -> dict:
         ok = send_imessage(msg)
         if not ok:
             result["responses"] = []
+            result["transcript"] = reconstruct_transcript(sent_at, [], default_user=msg)
         else:
             raw = wait_for_responses(
                 sent_at,
@@ -180,14 +246,10 @@ def collect(tc: dict) -> dict:
                 return_raw=True,
                 silence_after=silence_after,
             )
-            transcript = _group_raw_responses_by_turn([{
-                "turn": 1,
-                "user": msg,
-                "started_at": sent_at.isoformat(),
-                "finished_at": sent_at.isoformat(),
-            }], raw)
+            transcript = reconstruct_transcript(sent_at, raw, default_user=msg)
             result["transcript"] = transcript
-            result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
+            result["tasks_sent"] = [t["user"] for t in transcript]
+            result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip() and not m.get("is_from_me")]
             cv = judge_response_count(tc["name"], result["responses"], expected)
             result["count_verdict"] = cv
 
@@ -195,12 +257,9 @@ def collect(tc: dict) -> dict:
         msgs     = _split_lines(tc["messages"])
         expected = tc.get("expected_responses", len(msgs))
         result["tasks_sent"] = msgs
-        # Collect a per-turn transcript using timestamps so multiple assistant
-        # replies to a single user message render correctly in the UI.
         burst_delay = tc.get("burst_delay", BURST_SEND_DELAY)
         wait = tc.get("wait", BURST_WAIT)
         session_start = None
-        sent_turns = []
         for i, msg in enumerate(msgs):
             if _stop_requested():
                 stopped_early = True
@@ -210,19 +269,14 @@ def collect(tc: dict) -> dict:
                 session_start = sent_at
             print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
             send_imessage(msg)
-            sent_turns.append({
-                "turn": i + 1,
-                "user": msg,
-                "started_at": sent_at.isoformat(),
-                "finished_at": sent_at.isoformat(),
-            })
             if i < len(msgs) - 1:
                 if not _sleep_interruptible(burst_delay):
                     stopped_early = True
                     break
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
+        session_start = session_start or datetime.now(timezone.utc)
         raw = wait_for_responses(
-            session_start or datetime.now(timezone.utc),
+            session_start,
             count=expected,
             timeout=wait,
             max_responses=max(10, expected + 6),
@@ -230,10 +284,10 @@ def collect(tc: dict) -> dict:
             return_raw=True,
             silence_after=silence_after,
         )
-        transcript = _group_raw_responses_by_turn(sent_turns, raw)
+        transcript = reconstruct_transcript(session_start, raw, default_user=msgs[0] if msgs else None)
         result["transcript"] = transcript
-        result["tasks_sent"] = [t["user"] for t in sent_turns]
-        result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
+        result["tasks_sent"] = [t["user"] for t in transcript]
+        result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip() and not m.get("is_from_me")]
         cv = judge_response_count(tc["name"], result["responses"], expected)
         result["count_verdict"] = cv
 
@@ -242,7 +296,6 @@ def collect(tc: dict) -> dict:
         msgs  = _split_lines(tc["messages"])
         expected = tc.get("expected_responses", len(msgs))
         result["tasks_sent"] = [setup] + msgs
-        sent_turns = []
         if _stop_requested():
             stopped_early = True
             result["tasks_sent"] = []
@@ -253,16 +306,10 @@ def collect(tc: dict) -> dict:
         print(f"  → Setup: {setup}")
         setup_sent = datetime.now(timezone.utc)
         send_imessage(setup)
-        sent_turns.append({
-            "turn": 1,
-            "user": setup,
-            "started_at": setup_sent.isoformat(),
-            "finished_at": setup_sent.isoformat(),
-        })
         if not _sleep_interruptible(tc.get("setup_wait", 20)):
             stopped_early = True
-            result["transcript"] = sent_turns
-            result["tasks_sent"] = [t["user"] for t in sent_turns]
+            result["transcript"] = reconstruct_transcript(setup_sent, [], default_user=setup)
+            result["tasks_sent"] = [setup]
             result["finished_at"] = datetime.now(timezone.utc).isoformat()
             print("  ⏹ Stop requested — setup sent, not sending burst messages")
             return result
@@ -273,15 +320,8 @@ def collect(tc: dict) -> dict:
             if _stop_requested():
                 stopped_early = True
                 break
-            sent_at = datetime.now(timezone.utc)
             print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
             send_imessage(msg)
-            sent_turns.append({
-                "turn": i + 2,
-                "user": msg,
-                "started_at": sent_at.isoformat(),
-                "finished_at": sent_at.isoformat(),
-            })
             if i < len(msgs) - 1:
                 if not _sleep_interruptible(burst_delay):
                     stopped_early = True
@@ -296,10 +336,10 @@ def collect(tc: dict) -> dict:
             return_raw=True,
             silence_after=silence_after,
         )
-        transcript = _group_raw_responses_by_turn(sent_turns, raw)
+        transcript = reconstruct_transcript(session_start, raw, default_user=setup)
         result["transcript"] = transcript
-        result["tasks_sent"] = [t["user"] for t in sent_turns]
-        result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
+        result["tasks_sent"] = [t["user"] for t in transcript]
+        result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip() and not m.get("is_from_me")]
         cv = judge_response_count(tc["name"], result["responses"], expected)
         result["count_verdict"] = cv
 
@@ -314,7 +354,7 @@ def collect(tc: dict) -> dict:
 
         session_start = None
         seen = set()
-        transcript = []
+        all_raw = []
         for i, msg in enumerate(msgs):
             if _stop_requested():
                 stopped_early = True
@@ -325,12 +365,10 @@ def collect(tc: dict) -> dict:
                 session_start = sent_at
             ok = send_imessage(msg)
             if not ok:
-                transcript.append({
-                    "turn": i + 1,
-                    "user": msg,
-                    "responses": [],
-                    "started_at": sent_at.isoformat(),
-                    "finished_at": sent_at.isoformat(),
+                all_raw.append({
+                    "text": msg,
+                    "timestamp": sent_at,
+                    "is_from_me": True
                 })
             else:
                 raw = wait_for_responses(
@@ -342,30 +380,22 @@ def collect(tc: dict) -> dict:
                     return_raw=True,
                     silence_after=silence_after,
                 )
-                new_msgs = []
                 for m in raw or []:
-                    key = (m.get("timestamp").isoformat() if m.get("timestamp") else "", m.get("text") or "")
+                    key = (m.get("timestamp").isoformat() if m.get("timestamp") else "", m.get("text") or "", m.get("is_from_me"))
                     if key in seen:
                         continue
                     seen.add(key)
-                    new_msgs.append(m)
-                responses = [m.get("text") for m in new_msgs if (m.get("text") or "").strip()]
-                result["responses"].extend(responses)
-                transcript.append({
-                    "turn": i + 1,
-                    "user": msg,
-                    "responses": responses,
-                    "started_at": sent_at.isoformat(),
-                    "finished_at": (new_msgs[-1].get("timestamp").isoformat() if new_msgs else sent_at.isoformat()),
-                })
+                    all_raw.append(m)
             if i < len(msgs) - 1:
                 print(f"  (waiting {sequence_delay}s before next message…)")
                 if not _sleep_interruptible(sequence_delay):
                     stopped_early = True
                     break
 
-        result["transcript"] = transcript
-        result["tasks_sent"] = [t["user"] for t in transcript]
+        session_start = session_start or datetime.now(timezone.utc)
+        result["transcript"] = reconstruct_transcript(session_start, all_raw, default_user=msgs[0] if msgs else None)
+        result["tasks_sent"] = [t["user"] for t in result["transcript"]]
+        result["responses"] = [m.get("text") for m in all_raw if (m.get("text") or "").strip() and not m.get("is_from_me")]
         cv = judge_response_count(tc["name"], [r for r in result["responses"] if r], expected)
         result["count_verdict"] = cv
 
@@ -379,7 +409,6 @@ def collect(tc: dict) -> dict:
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
         max_responses = int(tc.get("max_responses") or max(10, expected + 6))
         session_start = datetime.now(timezone.utc)
-        transcript_seed = []
         if _stop_requested():
             stopped_early = True
             result["reason"] = "Stopped before sending this test."
@@ -388,22 +417,9 @@ def collect(tc: dict) -> dict:
             return result
         print(f"  → Sending msg 1: {msg1[:70]}")
         send_imessage(msg1)
-        transcript_seed.append({
-            "turn": 1,
-            "user": msg1,
-            "started_at": session_start.isoformat(),
-            "finished_at": session_start.isoformat(),
-        })
         if _sleep_interruptible(delay):
             print(f"  → Sending msg 2: {msg2[:70]}")
-            sent2_at = datetime.now(timezone.utc)
             send_imessage(msg2)
-            transcript_seed.append({
-                "turn": 2,
-                "user": msg2,
-                "started_at": sent2_at.isoformat(),
-                "finished_at": sent2_at.isoformat(),
-            })
         else:
             stopped_early = True
 
@@ -416,9 +432,9 @@ def collect(tc: dict) -> dict:
             return_raw=True,
             silence_after=silence_after,
         )
-        result["transcript"] = _group_raw_responses_by_turn(transcript_seed, raw)
-        result["tasks_sent"] = [t["user"] for t in transcript_seed]
-        result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip()]
+        result["transcript"] = reconstruct_transcript(session_start, raw, default_user=msg1)
+        result["tasks_sent"] = [t["user"] for t in result["transcript"]]
+        result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip() and not m.get("is_from_me")]
         # Dedup count check
         actual = len([r for r in result["responses"] if r])
         if actual > expected:
@@ -437,9 +453,10 @@ def collect(tc: dict) -> dict:
         wait = tc.get("wait", RESPONSE_TIMEOUT)
         max_turns = int(tc.get("max_turns") or max(2, len(followups) + 1))
         max_responses = int(tc.get("max_responses") or 10)
-        transcript = []
+        
         session_start = None
-        seen_responses = set()
+        seen_keys = set()
+        all_raw = []
 
         def _hit_stop(text: str) -> bool:
             if not stop_when:
@@ -459,7 +476,10 @@ def collect(tc: dict) -> dict:
             sent_at = datetime.now(timezone.utc)
             if session_start is None:
                 session_start = sent_at
+            
+            # Send the automated user message
             send_imessage(current_user)
+            
             poll = wait_for_responses(
                 session_start,
                 count=1,
@@ -469,26 +489,17 @@ def collect(tc: dict) -> dict:
                 return_raw=True,
                 silence_after=8.0,
             )
-            new_msgs = []
-            for msg in poll:
-                key = (msg["timestamp"].isoformat(), msg["text"])
-                if key in seen_responses:
+            for m in poll or []:
+                key = (m.get("timestamp").isoformat() if m.get("timestamp") else "", m.get("text") or "", m.get("is_from_me"))
+                if key in seen_keys:
                     continue
-                seen_responses.add(key)
-                new_msgs.append(msg)
-            responses = [m["text"] for m in new_msgs if m.get("text")]
+                seen_keys.add(key)
+                all_raw.append(m)
 
-            result["tasks_sent"].append(current_user)
-            result["responses"].extend(responses)
-            transcript.append({
-                "turn": turn_idx + 1,
-                "user": current_user,
-                "responses": responses,
-                "started_at": sent_at.isoformat(),
-                "finished_at": datetime.now(timezone.utc).isoformat(),
-            })
+            # Get only the assistant responses for this step to check stop conditions
+            step_responses = [m.get("text") for m in poll if m.get("text") and not m.get("is_from_me")]
 
-            latest = " ".join(responses[-2:]) if responses else ""
+            latest = " ".join(step_responses[-2:]) if step_responses else ""
             if _hit_stop(latest):
                 result["verdict"] = "PASS"
                 result["reason"] = "Interactive conversation reached the stop condition."
@@ -506,7 +517,10 @@ def collect(tc: dict) -> dict:
 
             current_user = followups[turn_idx]
 
-        result["transcript"] = transcript
+        session_start = session_start or datetime.now(timezone.utc)
+        result["transcript"] = reconstruct_transcript(session_start, all_raw, default_user=start_message)
+        result["tasks_sent"] = [t["user"] for t in result["transcript"]]
+        result["responses"] = [m.get("text") for m in all_raw if (m.get("text") or "").strip() and not m.get("is_from_me")]
         result["auto_continue"] = auto_continue
         result["max_turns"] = max_turns
         result["max_responses"] = max_responses
