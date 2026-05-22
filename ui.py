@@ -1419,8 +1419,13 @@ textarea { resize: vertical; min-height: 70px; }
 
   <div class="tab-menu" id="menuLogs" style="display:none;">
     <div style="display:flex; align-items:center; gap:10px; width:100%; flex-wrap:wrap;">
-      <span style="font-size:0.82rem;color:#0f172a;white-space:nowrap;">View active daemon log output.</span>
+      <span style="font-size:0.82rem;color:#0f172a;white-space:nowrap;">View daemon logs or Render service logs.</span>
       <div style="display:flex; align-items:center; gap:6px; margin-left:auto; flex-wrap:wrap;">
+        <span style="font-size:0.75rem; color:#475569;">Source:</span>
+        <select id="logSourceSelect" onchange="loadLogs()" style="font-size:0.75rem; padding:3px 8px; border:1px solid #d1d5db; border-radius:6px; background:white; color:#0f172a;">
+          <option value="daemon" selected>Daemon</option>
+          <option value="render">Render</option>
+        </select>
         <span style="font-size:0.75rem; color:#475569;">Show:</span>
         <select id="logLimitSelect" onchange="loadLogs()" style="font-size:0.75rem; padding:3px 8px; border:1px solid #d1d5db; border-radius:6px; background:white; color:#0f172a;">
           <option value="100">Last 100 lines</option>
@@ -1608,15 +1613,15 @@ textarea { resize: vertical; min-height: 70px; }
 
   <div id="logsSection" style="display:none; padding:16px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-      <h2 style="margin:0; color:#0f172a;">Daemon Log</h2>
+      <h2 id="logsHeading" style="margin:0; color:#0f172a;">Daemon Log</h2>
       <div style="display:flex; gap:8px;">
         <button class="btn btn-outline" onclick="loadLogs()" style="font-size:0.75rem; padding:4px 10px;">🔄 Refresh</button>
-        <a href="/api/debug/logs" target="_blank" class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px; text-decoration:none; display:inline-flex; align-items:center; color:#0f172a; border-color:#d1d5db;">📋 Open Raw</a>
+        <a id="openRawLogsLink" href="/api/debug/logs?source=daemon" target="_blank" class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px; text-decoration:none; display:inline-flex; align-items:center; color:#0f172a; border-color:#d1d5db;">📋 Open Raw</a>
       </div>
     </div>
     <div style="position:relative; background:#0f172a; border-radius:12px; border:1px solid #1e293b; padding:16px; box-shadow:0 4px 20px rgba(0,0,0,0.15);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:0.75rem; color:#94a3b8; font-family:monospace; border-bottom:1px solid #1e293b; padding-bottom:8px;">
-        <span>daemon.log</span>
+        <span id="logFileLabel">daemon.log</span>
         <span id="logTime">Not loaded yet</span>
       </div>
       <pre id="logContent" style="margin:0; background:#0f172a; color:#e2e8f0; font-family:monospace; font-size:0.8rem; white-space:pre-wrap; line-height:1.6; max-height:600px; overflow-y:auto; word-break:break-all; text-align:left;"></pre>
@@ -3675,12 +3680,21 @@ function showTab(tab) {
 async function loadLogs() {
   const logContent = document.getElementById('logContent');
   const logTime = document.getElementById('logTime');
+  const sourceSelect = document.getElementById('logSourceSelect') || { value: 'daemon' };
   const limitSelect = document.getElementById('logLimitSelect') || { value: 500 };
   const filterInput = document.getElementById('logSearchInput') || { value: '' };
+  const logsHeading = document.getElementById('logsHeading');
+  const logFileLabel = document.getElementById('logFileLabel');
+  const openRawLink = document.getElementById('openRawLogsLink');
+  const source = (sourceSelect.value || 'daemon').toLowerCase();
   
-  logContent.innerHTML = '<span style="color:#64748b;">Fetching daemon logs...</span>';
+  if (logsHeading) logsHeading.textContent = source === 'render' ? 'Render Logs' : 'Daemon Log';
+  if (logFileLabel) logFileLabel.textContent = source === 'render' ? 'render.api.logs' : 'daemon.log';
+  if (openRawLink) openRawLink.href = '/api/debug/logs?source=' + encodeURIComponent(source) + '&limit=' + encodeURIComponent(limitSelect.value || '500');
+
+  logContent.innerHTML = '<span style="color:#64748b;">Fetching ' + (source === 'render' ? 'Render' : 'daemon') + ' logs...</span>';
   try {
-    const res = await apiFetch('/api/debug/logs?limit=' + limitSelect.value);
+    const res = await apiFetch('/api/debug/logs?source=' + encodeURIComponent(source) + '&limit=' + encodeURIComponent(limitSelect.value || '500'));
     const text = await res.text();
     
     let displayedText = text;
@@ -3694,12 +3708,12 @@ async function loadLogs() {
     }
     
     logContent.textContent = displayedText;
-    logTime.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+    logTime.textContent = (source === 'render' ? 'Render API' : 'Local daemon') + ' · Last updated: ' + new Date().toLocaleTimeString();
     
     // Auto-scroll to the bottom
     logContent.scrollTop = logContent.scrollHeight;
   } catch(e) {
-    logContent.innerHTML = '<span style="color:#ef4444;">Error fetching logs: ' + e.message + '</span>';
+    logContent.innerHTML = '<span style="color:#ef4444;">Error fetching ' + (source === 'render' ? 'Render' : 'daemon') + ' logs: ' + e.message + '</span>';
   }
 }
 
@@ -4567,31 +4581,131 @@ class Handler(BaseHTTPRequestHandler):
 
                 # Get limit parameter
                 qs = urllib.parse.parse_qs(urlparse(self.path).query)
+                source = (qs.get("source", ["daemon"])[0] or "daemon").strip().lower()
                 limit = 500
                 try:
                     limit = int(qs.get("limit", [500])[0])
                 except Exception:
                     pass
+                limit = max(1, min(limit, 1000))
 
                 logs = ""
-                # Try local daemon.log first
-                log_path = os.path.join(EVAL_DIR, "daemon.log")
-                if os.path.exists(log_path):
-                    try:
-                        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-                            lines = f.readlines()
-                            logs = "".join(lines[-limit:])
-                    except Exception as e:
-                        logs = f"Error reading log file: {e}\n"
-
-                # Fallback to received logs buffer
-                if not logs or not logs.strip():
-                    global _daemon_logs_buffer
-                    if _daemon_logs_buffer:
-                        lines = _daemon_logs_buffer.splitlines()
-                        logs = "\n".join(lines[-limit:])
+                if source == "render":
+                    render_api_key = os.environ.get("RENDER_API_KEY", "").strip()
+                    render_owner_id = os.environ.get("RENDER_OWNER_ID", "").strip()
+                    resources_raw = (
+                        os.environ.get("RENDER_RESOURCE_IDS", "").strip()
+                        or os.environ.get("RENDER_RESOURCE_ID", "").strip()
+                    )
+                    resources = [r.strip() for r in resources_raw.split(",") if r.strip()]
+                    if not render_api_key:
+                        logs = (
+                            "Render logs unavailable: RENDER_API_KEY is not configured.\n"
+                            "Add it in Render service Environment settings and redeploy."
+                        )
+                    elif not render_owner_id:
+                        logs = (
+                            "Render logs unavailable: RENDER_OWNER_ID is not configured.\n"
+                            "Set your workspace owner ID in env and redeploy."
+                        )
+                    elif not resources:
+                        logs = (
+                            "Render logs unavailable: RENDER_RESOURCE_ID or RENDER_RESOURCE_IDS is not configured.\n"
+                            "Set the Render service resource ID(s) (comma-separated for multiple)."
+                        )
                     else:
-                        logs = logs or "No logs in daemon.log and no remote logs received yet."
+                        qparams: list[tuple[str, str]] = [
+                            ("ownerId", render_owner_id),
+                            ("direction", "backward"),
+                            ("limit", str(min(limit, 100))),
+                        ]
+                        for res_id in resources:
+                            qparams.append(("resource", res_id))
+                        for log_type in ["app", "request"]:
+                            qparams.append(("type", log_type))
+
+                        render_url = "https://api.render.com/v1/logs?" + urllib.parse.urlencode(qparams, doseq=True)
+                        req = urllib.request.Request(
+                            render_url,
+                            headers={
+                                "Authorization": f"Bearer {render_api_key}",
+                                "Accept": "application/json",
+                            },
+                        )
+                        try:
+                            with urllib.request.urlopen(req, timeout=20) as resp:
+                                payload = json.loads(resp.read().decode("utf-8", "ignore"))
+                            rows = payload.get("logs")
+                            if not isinstance(rows, list):
+                                rows = payload.get("items")
+                            if not isinstance(rows, list):
+                                rows = payload.get("data")
+                            if not isinstance(rows, list):
+                                rows = []
+
+                            rendered: list[str] = []
+                            for row in rows:
+                                if not isinstance(row, dict):
+                                    rendered.append(str(row))
+                                    continue
+                                ts = (
+                                    row.get("timestamp")
+                                    or row.get("time")
+                                    or row.get("createdAt")
+                                    or row.get("datetime")
+                                    or ""
+                                )
+                                lvl = str(row.get("level") or row.get("severity") or "").upper()
+                                typ = str(row.get("type") or "").strip()
+                                msg = row.get("message")
+                                if msg is None:
+                                    msg = row.get("text")
+                                if msg is None:
+                                    msg = row.get("msg")
+                                if msg is None:
+                                    msg = json.dumps(row, ensure_ascii=False)
+                                prefix_parts = [str(ts).strip()]
+                                if lvl:
+                                    prefix_parts.append(f"[{lvl}]")
+                                if typ:
+                                    prefix_parts.append(f"({typ})")
+                                prefix = " ".join(part for part in prefix_parts if part)
+                                rendered.append((prefix + " " + str(msg).rstrip()).strip())
+
+                            if rendered:
+                                logs = "\n".join(rendered[:limit])
+                                if payload.get("hasMore"):
+                                    logs += "\n\n---\nMore logs available from Render (pagination not expanded in UI yet)."
+                            else:
+                                logs = "No Render logs returned for current filter/time window."
+                        except urllib.error.HTTPError as e:
+                            detail = ""
+                            try:
+                                detail = e.read().decode("utf-8", "ignore")
+                            except Exception:
+                                detail = str(e)
+                            logs = f"Render API error ({e.code}): {detail}"
+                        except Exception as e:
+                            logs = f"Render logs fetch error: {e}"
+                else:
+                    # Try local daemon.log first
+                    log_path = os.path.join(EVAL_DIR, "daemon.log")
+                    if os.path.exists(log_path):
+                        try:
+                            with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                                lines = f.readlines()
+                                logs = "".join(lines[-limit:])
+                        except Exception as e:
+                            logs = f"Error reading log file: {e}\n"
+
+                    # Fallback to received logs buffer
+                    if not logs or not logs.strip():
+                        global _daemon_logs_buffer
+                        if _daemon_logs_buffer:
+                            lines = _daemon_logs_buffer.splitlines()
+                            logs = "\n".join(lines[-limit:])
+                        else:
+                            logs = logs or "No logs in daemon.log and no remote logs received yet."
 
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
