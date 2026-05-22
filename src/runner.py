@@ -142,6 +142,16 @@ def reconstruct_transcript(session_start: datetime, raw_msgs: list[dict], defaul
         ts_iso = ts.isoformat() if isinstance(ts, datetime) else str(ts)
         
         if m.get("is_from_me"):
+            # Dedup consecutive identical user messages (e.g. from manual tracking + SQLite)
+            if current_turn and current_turn["user"] == text:
+                try:
+                    prev_ts = datetime.fromisoformat(current_turn["started_at"])
+                    ts_dt = ts if isinstance(ts, datetime) else datetime.fromisoformat(ts)
+                    if abs((ts_dt - prev_ts).total_seconds()) < 30.0:
+                        continue
+                except Exception:
+                    pass
+
             # It's a user message (automated or manual)
             current_turn = {
                 "turn": turn_counter,
@@ -359,18 +369,19 @@ def collect(tc: dict) -> dict:
             if _stop_requested():
                 stopped_early = True
                 break
-            print(f"\n  → Step [{i+1}/{len(msgs)}]: {msg[:70]}")
+            print(f"\\n  → Step [{i+1}/{len(msgs)}]: {msg[:70]}")
             sent_at = datetime.now(timezone.utc)
             if session_start is None:
                 session_start = sent_at
+            
+            all_raw.append({
+                "text": msg,
+                "timestamp": sent_at,
+                "is_from_me": True
+            })
+            
             ok = send_imessage(msg)
-            if not ok:
-                all_raw.append({
-                    "text": msg,
-                    "timestamp": sent_at,
-                    "is_from_me": True
-                })
-            else:
+            if ok:
                 raw = wait_for_responses(
                     session_start,
                     count=1,
@@ -406,6 +417,7 @@ def collect(tc: dict) -> dict:
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
         max_responses = int(tc.get("max_responses") or max(10, expected + 6))
         session_start = datetime.now(timezone.utc)
+        all_raw = []
         if _stop_requested():
             stopped_early = True
             result["reason"] = "Stopped before sending this test."
@@ -413,9 +425,11 @@ def collect(tc: dict) -> dict:
             print("  ⏹ Stop requested — not sending this test")
             return result
         print(f"  → Sending msg 1: {msg1[:70]}")
+        all_raw.append({"text": msg1, "timestamp": datetime.now(timezone.utc), "is_from_me": True})
         send_imessage(msg1)
         if _sleep_interruptible(delay):
             print(f"  → Sending msg 2: {msg2[:70]}")
+            all_raw.append({"text": msg2, "timestamp": datetime.now(timezone.utc), "is_from_me": True})
             send_imessage(msg2)
         else:
             stopped_early = True
@@ -429,7 +443,10 @@ def collect(tc: dict) -> dict:
             return_raw=True,
             silence_after=silence_after,
         )
-        result["transcript"] = reconstruct_transcript(session_start, raw, default_user=msg1)
+        for m in raw or []:
+            all_raw.append(m)
+            
+        result["transcript"] = reconstruct_transcript(session_start, all_raw, default_user=msg1)
         result["tasks_sent"] = [t["user"] for t in result["transcript"]]
         result["responses"] = [m.get("text") for m in (raw or []) if (m.get("text") or "").strip() and not m.get("is_from_me")]
         # Dedup count check
