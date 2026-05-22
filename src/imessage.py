@@ -103,6 +103,36 @@ def _query_messages(handle: str, since_mac_ns: int, limit: int = 100) -> list[di
         return []
 
 
+def catch_up_manual_messages(
+    session_start: datetime,
+    seen_keys: set,
+    handle: str | None = None,
+    extra_wait: float = 3.0,
+) -> list[dict]:
+    """
+    After wait_for_responses exits, sleep briefly then do one final chat.db
+    query to catch any outgoing (is_from_me) user messages that were slow
+    to sync to SQLite — e.g. messages typed manually during the test.
+    Only returns messages NOT already in seen_keys, and only is_from_me ones
+    that haven't been recorded yet (incoming ones would already be in seen_keys).
+    """
+    time.sleep(extra_wait)
+    handle = _resolve_handle(handle)
+    since_ns = _mac_ts(session_start)
+    msgs = _query_messages(handle, since_ns, limit=200)
+    late_arrivals = []
+    for m in msgs:
+        key = (m["timestamp"].isoformat(), m["text"], m["is_from_me"])
+        if key not in seen_keys:
+            seen_keys.add(key)
+            if m.get("is_from_me"):
+                # Only surface late manual user messages — assistant messages
+                # that arrived this late are anomalies we can ignore safely.
+                late_arrivals.append(m)
+                print(f"  [catch-up] captured late manual message: {m['text'][:80]}")
+    return late_arrivals
+
+
 def wait_for_responses(
     sent_at: datetime,
     count: int = 1,

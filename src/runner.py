@@ -4,7 +4,7 @@ import os
 import json
 
 from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY
-from imessage import send_imessage, wait_for_responses
+from imessage import send_imessage, wait_for_responses, catch_up_manual_messages
 from judge import judge_status, judge_with_context, judge_response_count
 
 
@@ -394,6 +394,9 @@ def collect(tc: dict) -> dict:
                 )
                 for m in raw or []:
                     all_raw.append(m)
+                # Catch any manual user messages that synced late to chat.db
+                late = catch_up_manual_messages(session_start, seen_keys)
+                all_raw.extend(late)
             if i < len(msgs) - 1:
                 print(f"  (waiting {sequence_delay}s before next message…)")
                 if not _sleep_interruptible(sequence_delay):
@@ -401,6 +404,8 @@ def collect(tc: dict) -> dict:
                     break
 
         session_start = session_start or datetime.now(timezone.utc)
+        # Sort chronologically so late-arriving manual messages are in the right position
+        all_raw.sort(key=lambda m: m.get("timestamp") or datetime.min.replace(tzinfo=timezone.utc))
         result["transcript"] = reconstruct_transcript(session_start, all_raw, default_user=msgs[0] if msgs else None)
         result["tasks_sent"] = [t["user"] for t in result["transcript"]]
         result["responses"] = [m.get("text") for m in all_raw if (m.get("text") or "").strip() and not m.get("is_from_me")]
