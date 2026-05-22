@@ -4437,24 +4437,42 @@ class Handler(BaseHTTPRequestHandler):
                         running_stop = False
                         running_skip_ids = []
 
-                    # Fetch oldest queued run for this owner
+                    # Fetch queued runs for this owner (newest first).
                     status, rows = sb_service_get(
                         "/rest/v1/runs",
                         params={
                             "select": "id,selection,test_cases_snapshot,asmi_target,asmi_handle,progress",
                             "owner_user_id": f"eq.{owner_user_id}",
                             "status": "eq.queued",
-                            "order": "created_at.asc",
-                            "limit": 1,
+                            "order": "created_at.desc",
+                            "limit": 20,
                         },
                     )
                     if status >= 300:
                         self._json({"run": None, "stop": running_stop, "skip_ids": running_skip_ids})
                         return
-                    run_row = (rows or [None])[0] if isinstance(rows, list) else None
+                    run_rows = rows if isinstance(rows, list) else []
+                    run_row = run_rows[0] if run_rows else None
                     if not run_row:
                         self._json({"run": None, "stop": running_stop, "skip_ids": running_skip_ids})
                         return
+                    # Latest-run-wins: cancel any older queued runs so daemon never drains stale backlog.
+                    for stale in run_rows[1:]:
+                        stale_id = stale.get("id")
+                        if not stale_id:
+                            continue
+                        try:
+                            sb_service_patch(
+                                "/rest/v1/runs",
+                                params={"id": f"eq.{stale_id}", "owner_user_id": f"eq.{owner_user_id}"},
+                                json_body={
+                                    "status": "stopped",
+                                    "output": "Superseded by newer queued run.",
+                                    "updated_at": iso_utc_now(),
+                                },
+                            )
+                        except Exception:
+                            pass
                     run_id = run_row.get("id")
                     selection = run_row.get("selection") if isinstance(run_row.get("selection"), dict) else {}
                     payload = {
@@ -5292,6 +5310,19 @@ class Handler(BaseHTTPRequestHandler):
                 token, uid = self._require_user()
                 # Intentionally optimistic to avoid false "daemon offline" warnings.
                 mac_online = True
+                # Latest-run-wins: stop any older queued/running jobs before enqueuing this new one.
+                try:
+                    sb_service_patch(
+                        "/rest/v1/runs",
+                        params={"owner_user_id": f"eq.{uid}", "status": "in.(queued,running)"},
+                        json_body={
+                            "status": "stopped",
+                            "output": "Superseded by newer run request.",
+                            "updated_at": iso_utc_now(),
+                        },
+                    )
+                except Exception:
+                    pass
                 selection = {
                     "category": cat,
                     "categories": cats,
