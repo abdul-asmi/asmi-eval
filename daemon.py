@@ -28,6 +28,7 @@ import urllib.request
 from datetime import datetime, timezone, timedelta
 
 _SSL_CTX = ssl.create_default_context()
+_LAST_POLL_ERR_AT = 0.0
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
@@ -116,19 +117,29 @@ def _poll_railway() -> dict | None:
     return _poll_railway_full().get("run")
 
 
+def _log_poll_error_throttled(label: str, url: str, err: Exception):
+    """Avoid spamming identical poll errors every 5 seconds."""
+    global _LAST_POLL_ERR_AT
+    now = time.time()
+    if now - _LAST_POLL_ERR_AT >= 20:
+        _LAST_POLL_ERR_AT = now
+        print(f"  [{label} poll error] {url} -> {err}")
+
+
 def _poll_railway_full() -> dict:
-    """Poll /api/poll — tries Railway first, then falls back to local UI."""
+    """Poll /api/poll — tries remote UI first, then local UI fallback."""
     if RAILWAY_URL:
-        try:
-            req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
-            if DAEMON_TOKEN:
-                req.add_header("X-Daemon-Token", DAEMON_TOKEN)
-            if DAEMON_OWNER_USER_ID:
-                req.add_header("X-Owner-User-Id", DAEMON_OWNER_USER_ID)
-            with urllib.request.urlopen(req, timeout=5, context=_SSL_CTX) as resp:
-                return json.loads(resp.read())
-        except Exception as e:
-            print(f"  [railway poll error] {e}")
+        for timeout_s in (6, 10):
+            try:
+                req = urllib.request.Request(f"{RAILWAY_URL}/api/poll", method="GET")
+                if DAEMON_TOKEN:
+                    req.add_header("X-Daemon-Token", DAEMON_TOKEN)
+                if DAEMON_OWNER_USER_ID:
+                    req.add_header("X-Owner-User-Id", DAEMON_OWNER_USER_ID)
+                with urllib.request.urlopen(req, timeout=timeout_s, context=_SSL_CTX) as resp:
+                    return json.loads(resp.read())
+            except Exception as e:
+                _log_poll_error_throttled("remote", RAILWAY_URL, e)
     if LOCAL_UI_URL:
         try:
             req = urllib.request.Request(f"{LOCAL_UI_URL}/api/poll", method="GET")
@@ -566,6 +577,10 @@ def run():
     print(f"    {COMMAND_PREFIX}help       → see all commands")
     print(f"    {COMMAND_PREFIX}run all    → run full test suite")
     print(f"    {COMMAND_PREFIX}status     → last run summary\n")
+    if RAILWAY_URL:
+        print(f"  Remote UI: {RAILWAY_URL}")
+    if LOCAL_UI_URL:
+        print(f"  Local UI fallback: {LOCAL_UI_URL}\n")
 
     poll_count = 0
     while True:
