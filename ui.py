@@ -3250,8 +3250,15 @@ async function _pollOutput() {
       // Update inline elapsed for active single test
       if (_activeTestId) {
         const inlineEl = document.getElementById('result_' + _activeTestId);
-        if (inlineEl && inlineEl.classList.contains('running'))
-          inlineEl.innerHTML = _inlineRunningHtml(secs);
+        if (inlineEl && inlineEl.classList.contains('running')) {
+          // Detect if the background analyzer has been spawned for a call_eval test.
+          // The runner prints "⚡ call_eval last step" when handing off to the bg process.
+          const isCallEvalBg = data.output && (
+            data.output.includes('[Detached Spawn]') ||
+            data.output.includes('call_eval last step')
+          );
+          inlineEl.innerHTML = _inlineRunningHtml(secs, isCallEvalBg);
+        }
       }
       // Update progress bar
       if (!_activeTestId && data.progress && data.progress.total > 0) {
@@ -3274,16 +3281,26 @@ async function _pollOutput() {
       }
 
       if (data.results && data.results.length > 0) {
+        // Check if any result is PENDING (call_eval background analysis)
+        const hasPending = data.results.some(x => (x.verdict || '').toUpperCase() === 'PENDING');
+
         // Multi-test: keep completion compact and direct user to Reports tab
         if (!_activeTestId) {
           document.getElementById('outputPanel').style.display = 'block';
-          document.getElementById('outputStatus').textContent = 'Done';
+          document.getElementById('outputStatus').textContent = hasPending ? 'Sent ✓' : 'Done';
           document.getElementById('outputElapsed').textContent = `${secs2}s elapsed`;
           document.getElementById('resultsTable').style.display = 'none';
           document.getElementById('resultsTable').innerHTML = '';
           document.getElementById('behaviorAnalysisPanel').style.display = 'none';
-          document.getElementById('outputBodyText').textContent = 'Run complete. Open the Reports tab to view results and download the report.';
-          toast('Run complete. Check Reports tab.');
+          if (hasPending) {
+            document.getElementById('outputBodyText').textContent =
+              '📞 Messages sent! The call is happening and the analysis is running in background.\n' +
+              'You can run other tests now. Check the Reports tab in a few minutes for the final verdict.';
+            toast('📞 Call triggered! Analysis running in background — check Reports tab soon.');
+          } else {
+            document.getElementById('outputBodyText').textContent = 'Run complete. Open the Reports tab to view results and download the report.';
+            toast('Run complete. Check Reports tab.');
+          }
         }
         // Single-test: render inline in card
         if (_activeTestId) {
@@ -3321,7 +3338,21 @@ async function _pollOutput() {
   } catch(e) {}
 }
 
-function _inlineRunningHtml(secs) {
+function _inlineRunningHtml(secs, isPendingCallEval) {
+  if (isPendingCallEval) {
+    return `<div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:1.1rem">📞</span>
+        <div>
+          <div style="font-weight:600;color:#c4b5fd;font-size:0.85rem">Messages sent — call in progress</div>
+          <div style="color:#94a3b8;font-size:0.75rem;">Analysis running in background · ${secs}s</div>
+        </div>
+      </div>
+      <div style="font-size:0.75rem;color:#7c3aed;background:#1e1b4b;border-radius:4px;padding:6px 10px;">
+        💡 Check <strong>Reports tab</strong> in a few minutes · You can run other tests now
+      </div>
+    </div>`;
+  }
   return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
     <div><span class="inline-running-dots">Running</span> <span style="color:#94a3b8;font-size:0.78rem">${secs}s</span></div>
     <button class="btn btn-danger" onclick="event.stopPropagation(); stopRun()" style="font-size:0.75rem;padding:4px 10px;">Stop + judge</button>
@@ -3385,8 +3416,31 @@ function _resultCard(r) {
 function _renderInlineResult(id, r) {
   const inlineEl = document.getElementById('result_' + id);
   if (!inlineEl) return;
-  inlineEl.className = 'inline-result done';
-  inlineEl.innerHTML = _resultCard(r);
+  if ((r.verdict || '').toUpperCase() === 'PENDING') {
+    // call_eval: foreground done, background still analysing
+    inlineEl.className = 'inline-result done';
+    inlineEl.innerHTML = `<div class="rt-card" style="border-left:4px solid #7c3aed;background:linear-gradient(135deg,#1e1b4b 0%,#312e81 100%)">
+      <div class="rt-card-hdr" style="padding:12px 14px;">
+        <span class="rt-tname" style="color:#c4b5fd">📞 ${esc(r.name || id)}</span>
+        <span class="rt-dur" style="color:#a78bfa">In background</span>
+      </div>
+      <div style="padding:10px 14px 14px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span style="font-size:1.2rem">⏳</span>
+          <div>
+            <div style="font-weight:600;color:#e2e8f0;font-size:0.9rem">Call triggered — analysis running in background</div>
+            <div style="color:#94a3b8;font-size:0.78rem;margin-top:2px">iMessages sent. The ElevenLabs call is active. Transcript + verdict will auto-update in the Reports tab.</div>
+          </div>
+        </div>
+        <div style="background:#0f172a;border-radius:6px;padding:8px 12px;color:#7c3aed;font-size:0.78rem;font-style:italic;">
+          💡 You can run other tests now. Check <strong>Reports tab</strong> in a few minutes for the final result.
+        </div>
+      </div>
+    </div>`;
+  } else {
+    inlineEl.className = 'inline-result done';
+    inlineEl.innerHTML = _resultCard(r);
+  }
 }
 
 function _renderResults(results) {

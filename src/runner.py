@@ -1071,31 +1071,21 @@ def collect(tc: dict) -> dict:
                 is_cmd = msg.strip().startswith("cmd_")
                 is_last_call_eval = (test_type == "call_eval" and i == len(msgs) - 1 and not is_cmd)
                 if is_last_call_eval:
-                    def is_call_active() -> bool:
-                        if call_started_at is None:
-                            return False
-                        elapsed = (datetime.now(timezone.utc) - call_started_at.astimezone(timezone.utc)).total_seconds()
-                        if elapsed > 150:
-                            return False
-                        status = str(monitor_state.get("conversation_status") or "").lower().strip()
-                        if status in {"done", "completed", "finished", "ended", "failed", "error", "aborted"}:
-                            return False
-                        if monitor_thread and monitor_thread.is_alive():
-                            return True
-                        if elapsed < 30:
-                            return True
-                        return False
-
+                    # Short non-blocking wait: just capture Asmi's first
+                    # acknowledgment message (e.g. "I've scheduled the call").
+                    # All deep post-call response polling is done in the
+                    # background by background_analyzer.py so the daemon loop
+                    # is freed immediately to answer Slack commands.
+                    print("  ⚡ call_eval last step — handing off to background analyzer after quick capture…")
                     raw = wait_for_responses(
                         session_start,
-                        count=4,
-                        timeout=180,
+                        count=1,
+                        timeout=8,
                         max_responses=max_responses,
-                        drain_all=True,
+                        drain_all=False,
                         return_raw=True,
-                        silence_after=silence_after,
+                        silence_after=3.0,
                         seen_keys=seen_keys,
-                        is_call_active_fn=is_call_active,
                     )
                 else:
                     raw = wait_for_responses(
@@ -1124,76 +1114,78 @@ def collect(tc: dict) -> dict:
                     stopped_early = True
                     break
 
-        # Now wait for the ElevenLabs call to complete and get the transcript
-        call_transcript_result = None
-        if call_started_at:
-            if _stop_requested():
-                print("\n  [ElevenLabs] Stop requested before transcript wait — using captured evidence")
-                transcript_wait_seconds = 1
-            else:
-                print(f"\n  📞 Waiting up to {call_timeout}s for ElevenLabs call transcript (Asmi called {call_phone})…")
-                transcript_wait_seconds = call_timeout
-            try:
-                call_transcript_result = wait_for_call_transcript(
-                    call_started_after=call_started_at,
-                    preferred_conversation_id=(monitor_state.get("conversation_id") or "").strip() or None,
-                    timeout=transcript_wait_seconds,
-                    poll_interval=min(5, max(1, transcript_wait_seconds)),
-                )
-            except Exception as e:
-                print(f"  [ElevenLabs] transcript error: {e}")
-                call_transcript_result = None
-
-        session_start = session_start or datetime.now(timezone.utc)
-        all_raw.sort(key=lambda m: m.get("timestamp") or datetime.min.replace(tzinfo=timezone.utc))
-        result["transcript"] = reconstruct_transcript(session_start, all_raw, default_user=msgs[0] if msgs else None)
-        result["tasks_sent"] = [t["user"] for t in result["transcript"]]
-        result["responses"] = [m.get("text") for m in all_raw if (m.get("text") or "").strip() and not m.get("is_from_me")]
-
-        convo_id = (monitor_state.get("conversation_id") or "").strip()
-        if call_transcript_result:
-            result["call_transcript"] = call_transcript_result.get("transcript_text", "")
-            result["call_transcript_raw"] = call_transcript_result.get("transcript", [])
-            result["call_conversation_id"] = call_transcript_result.get("conversation_id", "")
-            result["call_duration_secs"] = call_transcript_result.get("duration_secs")
-            print(f"  ✓ Call transcript captured ({len(call_transcript_result.get('transcript', []))} turns, {call_transcript_result.get('duration_secs', '?')}s)")
-        elif convo_id:
-            result["call_transcript"] = None
-            result["call_conversation_id"] = convo_id
-            print(f"  ⚠ Call transcript fetching timed out/failed but conversation ID was captured: {convo_id}")
-        else:
-            result["call_transcript"] = None
-            print("  ⚠ No call transcript or conversation ID captured")
-
-        active_convo_id = result.get("call_conversation_id")
-        if active_convo_id:
-            result["call_recording_chat"] = _save_and_send_call_recording(
-                active_convo_id,
-                test_id,
-                tc.get("name") or test_id,
-                call_transcript_result=call_transcript_result,
-            )
-        else:
-            result["call_recording_chat"] = {"status": "skipped", "sent": False, "error": "no call transcript/conversation id"}
-
-        if monitor_events:
-            result["call_monitor_events"] = monitor_events[-200:]
-            result["call_monitor_log"] = "\n".join(
-                f"[{idx+1:03d}] {evt.get('summary', '')}" for idx, evt in enumerate(result["call_monitor_events"])
-            )
-        else:
-            result["call_monitor_events"] = []
-            result["call_monitor_log"] = ""
-        result["call_monitor_state"] = monitor_state
+        # Detached background call analysis trigger
+        preferred_convo = (monitor_state.get("conversation_id") or "").strip()
+        
+        # Spawn detached background_analyzer.py
+        import subprocess
+        import sys
+        
+        # Clean up active monitor and watchdog threads
         if monitor_thread is not None:
             monitor_stop.set()
             monitor_thread.join(timeout=5)
         if twilio_watchdog_thread is not None:
             twilio_watchdog_stop.set()
             twilio_watchdog_thread.join(timeout=5)
+
+        bg_analyzer_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "background_analyzer.py")
+        started_iso = call_started_at.isoformat() if call_started_at else datetime.now(timezone.utc).isoformat()
+        run_id = os.environ.get("ASMI_RUN_ID", "")
+        asmi_target = os.environ.get("ASMI_TARGET", "").strip().lower()
+        asmi_handle = os.environ.get("ASMI_HANDLE", "").strip()
+
+        cmd = [
+            sys.executable,
+            bg_analyzer_path,
+            "--test-id", test_id,
+            "--call-started-after", started_iso,
+            "--run-id", run_id,
+            "--asmi-target", asmi_target,
+            "--asmi-handle", asmi_handle,
+        ]
+        if preferred_convo:
+            cmd.extend(["--preferred-convo-id", preferred_convo])
+
+        print(f"\n  [Detached Spawn] Spawning background analyzer: {' '.join(cmd)}")
+        try:
+            subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+                start_new_session=True,
+            )
+        except Exception as e:
+            print(f"  ⚠ Failed to spawn detached background analyzer: {e}")
+
+        # Construct pending results and exit early
+        session_start = session_start or datetime.now(timezone.utc)
+        all_raw.sort(key=lambda m: m.get("timestamp") or datetime.min.replace(tzinfo=timezone.utc))
+        result["transcript"] = reconstruct_transcript(session_start, all_raw, default_user=msgs[0] if msgs else None)
+        result["tasks_sent"] = [t["user"] for t in result["transcript"]]
+        result["responses"] = [m.get("text") for m in all_raw if (m.get("text") or "").strip() and not m.get("is_from_me")]
+
+        result["call_transcript"] = "ElevenLabs call started; analysis running in background."
+        result["call_transcript_raw"] = []
+        result["call_conversation_id"] = preferred_convo
+        result["call_duration_secs"] = None
+        result["call_recording_chat"] = {"status": "pending", "sent": False, "error": "Analysis running in background."}
+        
+        if monitor_events:
+            result["call_monitor_events"] = monitor_events[-200:]
+            result["call_monitor_log"] = "\n".join(
+                f"[{idx+1:03d}] {evt.get('summary', '')}" for idx, evt in enumerate(monitor_events)
+            )
+        else:
+            result["call_monitor_events"] = []
+            result["call_monitor_log"] = ""
+        result["call_monitor_state"] = monitor_state
         result["twilio_hard_cap"] = twilio_watchdog_state
-        if not (result.get("call_transcript") or "").strip():
-            result["call_transcript"] = _missing_call_transcript_note(result, tc)
+        
+        result["verdict"] = "PENDING"
+        result["reason"] = "iMessages dispatched; call initiated and analysis running in background."
 
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
     if stopped_early:
