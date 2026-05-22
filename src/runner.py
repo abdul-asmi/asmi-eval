@@ -3,9 +3,16 @@ from datetime import datetime, timezone
 import os
 import json
 
-from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY
+from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT
 from imessage import send_imessage, wait_for_responses, catch_up_manual_messages
 from judge import judge_status, judge_with_context, judge_response_count
+try:
+    from elevenlabs_phone import wait_for_call_transcript
+    _ELEVENLABS_AVAILABLE = True
+except ImportError:
+    _ELEVENLABS_AVAILABLE = False
+    def wait_for_call_transcript(*a, **kw):
+        return None
 
 
 def _stop_requested() -> bool:
@@ -541,6 +548,104 @@ def collect(tc: dict) -> dict:
         result["max_turns"] = max_turns
         result["max_responses"] = max_responses
 
+    elif test_type == "call_eval":
+        # ── End-to-end call eval ──────────────────────────────────────────────
+        # Sends iMessage(s) to Asmi to trigger a task that involves an outbound
+        # call to CALL_EVAL_PHONE (a Twilio number). ElevenLabs answers as a
+        # persona. After the call ends, we fetch the transcript from ElevenLabs.
+        msgs = _split_lines(tc.get("messages") or tc.get("message"))
+        persona_prompt = (tc.get("persona_prompt") or "").strip()
+        wait = tc.get("wait", RESPONSE_TIMEOUT)
+        silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
+        max_responses = int(tc.get("max_responses") or 10)
+        sequence_delay = tc.get("sequence_delay", SEQUENCE_DELAY)
+        call_timeout = int(tc.get("call_transcript_timeout") or CALL_TRANSCRIPT_TIMEOUT)
+
+        # Substitute {{call_number}} placeholder with the configured Twilio number
+        call_phone = CALL_EVAL_PHONE.strip()
+        msgs = [
+            m.replace("{{call_number}}", call_phone).replace("{{CALL_NUMBER}}", call_phone)
+            for m in msgs
+        ]
+
+        if not call_phone:
+            result["reason"] = "CALL_EVAL_PHONE is not configured — cannot run call_eval test."
+            result["verdict"] = "UNCLEAR"
+            result["finished_at"] = datetime.now(timezone.utc).isoformat()
+            return result
+
+        session_start = None
+        seen_keys = set()
+        all_raw = []
+        call_started_at = None
+
+        for i, msg in enumerate(msgs):
+            if _stop_requested():
+                stopped_early = True
+                break
+            print(f"\n  → Step [{i+1}/{len(msgs)}]: {msg[:70]}")
+            sent_at = datetime.now(timezone.utc)
+            if session_start is None:
+                session_start = sent_at
+
+            all_raw.append({"text": msg, "timestamp": sent_at, "is_from_me": True})
+
+            # Mark the moment we send the message that triggers the call
+            # (the last non-cmd_ message is most likely the one that causes the call)
+            if not msg.strip().startswith("cmd_") and call_started_at is None:
+                call_started_at = sent_at
+
+            ok = send_imessage(msg)
+            if ok:
+                raw = wait_for_responses(
+                    session_start,
+                    count=1,
+                    timeout=wait,
+                    max_responses=max_responses,
+                    drain_all=True,
+                    return_raw=True,
+                    silence_after=silence_after,
+                    seen_keys=seen_keys,
+                )
+                for m in raw or []:
+                    all_raw.append(m)
+                late = catch_up_manual_messages(session_start, seen_keys)
+                all_raw.extend(late)
+            if i < len(msgs) - 1:
+                print(f"  (waiting {sequence_delay}s before next message…)")
+                if not _sleep_interruptible(sequence_delay):
+                    stopped_early = True
+                    break
+
+        # Now wait for the ElevenLabs call to complete and get the transcript
+        call_transcript_result = None
+        if call_started_at and not stopped_early:
+            print(f"\n  📞 Waiting for ElevenLabs call transcript (Asmi called {call_phone})…")
+            try:
+                call_transcript_result = wait_for_call_transcript(
+                    call_started_after=call_started_at,
+                    timeout=call_timeout,
+                )
+            except Exception as e:
+                print(f"  [ElevenLabs] transcript error: {e}")
+                call_transcript_result = None
+
+        session_start = session_start or datetime.now(timezone.utc)
+        all_raw.sort(key=lambda m: m.get("timestamp") or datetime.min.replace(tzinfo=timezone.utc))
+        result["transcript"] = reconstruct_transcript(session_start, all_raw, default_user=msgs[0] if msgs else None)
+        result["tasks_sent"] = [t["user"] for t in result["transcript"]]
+        result["responses"] = [m.get("text") for m in all_raw if (m.get("text") or "").strip() and not m.get("is_from_me")]
+
+        if call_transcript_result:
+            result["call_transcript"] = call_transcript_result.get("transcript_text", "")
+            result["call_transcript_raw"] = call_transcript_result.get("transcript", [])
+            result["call_conversation_id"] = call_transcript_result.get("conversation_id", "")
+            result["call_duration_secs"] = call_transcript_result.get("duration_secs")
+            print(f"  ✓ Call transcript captured ({len(call_transcript_result.get('transcript', []))} turns, {call_transcript_result.get('duration_secs', '?')}s)")
+        else:
+            result["call_transcript"] = None
+            print("  ⚠ No call transcript captured")
+
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
     if stopped_early:
         result["reason"] = "Stopped early; judging responses captured so far."
@@ -589,6 +694,7 @@ def batch_judge(results: list[dict], all_responses: list[str], test_cases: list[
             captured      = r.get("responses", []),
             all_responses = all_responses,
             pass_criteria = criteria,
+            call_transcript = r.get("call_transcript"),
         )
         r["verdict"] = llm["verdict"]
         r["reason"]  = llm["reason"]

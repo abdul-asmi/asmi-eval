@@ -43,7 +43,7 @@ actually be answering an earlier or later task. Your job is to:
   2. Find which response(s) are actually answering the specific task(s) for this test
   3. Evaluate whether those matched responses meet the pass criteria
 
-══ THIS TEST ════════════════════════════════════════
+══ THIS TEST ══════════════════════════════════════════════════
 Name: {test_name}
 Category: {category}
 
@@ -58,28 +58,32 @@ Pass criteria:
 
 ══ FULL RESPONSE POOL (all {total} responses from entire run) ══════════════════
 {all_responses}
+══ CALL TRANSCRIPT ══════════════════════════════════════════════════
+{call_transcript_section}
 ════════════════════════════════════════════════════
 
 Steps:
 1. From the full pool, identify which response(s) are answering the task(s) above.
    A response is relevant if it directly addresses the task content.
 2. If you find a relevant response: evaluate it against the pass criteria.
-3. If no response in the pool addresses this task: verdict is FAIL.
+3. If a CALL TRANSCRIPT is present, also evaluate what happened during the actual voice call.
+4. If no response in the pool addresses this task: verdict is FAIL.
 
 Reply in EXACTLY this format (no extra text):
 MATCHED: Brief quote of the relevant response(s), or "none found"
 VERDICT: PASS
 REASON: One sentence.
-
 (Replace PASS with FAIL or UNCLEAR as appropriate)
 """
 
 
-def judge_with_context(test_name, category, tasks, captured, all_responses, pass_criteria):
+def judge_with_context(test_name, category, tasks, captured, all_responses, pass_criteria,
+                       call_transcript: str | None = None):
     """
     Context-aware judge — gives Gemini the full response pool from the entire
     run so it can find which response actually answers this specific task,
     regardless of which test window it was captured in.
+    Optionally includes the ElevenLabs call transcript for call_eval tests.
     """
     valid_captured = [r for r in captured if r] if captured else []
 
@@ -87,6 +91,16 @@ def judge_with_context(test_name, category, tasks, captured, all_responses, pass
     pool_lines = "\n".join(
         f"  [{i+1}] {r}" for i, r in enumerate(all_responses)
     )
+
+    # Format call transcript section
+    if call_transcript and call_transcript.strip():
+        call_transcript_section = (
+            "The following is the actual voice call transcript between Asmi (the AI agent)\n"
+            "and the third-party persona (played by ElevenLabs)::\n\n"
+            + call_transcript
+        )
+    else:
+        call_transcript_section = "(no call transcript — either no call was made or transcript unavailable)"
 
     prompt = _PROMPT_WITH_CONTEXT.format(
         system        = SYSTEM_CONTEXT,
@@ -97,6 +111,7 @@ def judge_with_context(test_name, category, tasks, captured, all_responses, pass
         pass_criteria = pass_criteria,
         total         = len(all_responses),
         all_responses = pool_lines,
+        call_transcript_section = call_transcript_section,
     )
 
     result = _call_gemini(prompt)

@@ -66,4 +66,27 @@ CATEGORY_RUN_ORDER = [
     "reengagement",         # 16. Retention (slowest)
     "guardrails",           # 17. Safety
     "timezone",             # 18. Misc
+    "call_eval",            # 19. End-to-end call evaluation via ElevenLabs persona
 ]
+
+# ─── ElevenLabs Call Eval ──────────────────────────────────────────────────────
+# Used for test type "call_eval": Asmi places a call to CALL_EVAL_PHONE (a Twilio
+# number), ElevenLabs answers as a persona, and we fetch the call transcript.
+#
+# Setup:
+#   1. Buy a Twilio voice number (twilio.com, ~$1/month)
+#   2. In ElevenLabs dashboard → Conversational AI → create an agent
+#      (enable "system_prompt" overrides under agent Security settings)
+#   3. ElevenLabs → Phone Numbers → Import → Twilio → assign the agent
+#   4. Set the three env vars below in .env.local
+
+ELEVENLABS_API_KEY       = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+ELEVENLABS_AGENT_ID      = os.environ.get("ELEVENLABS_AGENT_ID", "").strip()
+
+# The Twilio phone number Asmi will call during call_eval tests.
+# Use E.164 format in the env (e.g. +14125551234) but store without + here.
+CALL_EVAL_PHONE          = os.environ.get("CALL_EVAL_PHONE", "").strip().lstrip("+")
+
+# How long to wait for the ElevenLabs call to complete before giving up.
+CALL_TRANSCRIPT_TIMEOUT  = int(os.environ.get("CALL_TRANSCRIPT_TIMEOUT", "240"))
+

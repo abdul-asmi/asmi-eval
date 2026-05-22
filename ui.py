@@ -3912,6 +3912,21 @@ function _renderTranscriptCard(run, test) {
     asmi_target: test.asmi_target || run.asmi_target,
     asmi_handle: test.asmi_handle || run.asmi_handle,
   });
+
+  // Call transcript section (call_eval tests)
+  let callTranscriptHtml = '';
+  if (test.call_transcript && test.call_transcript.trim()) {
+    const dur = test.call_duration_secs ? ` · ${test.call_duration_secs}s` : '';
+    const convId = test.call_conversation_id ? `<span style="font-size:0.72rem;color:#64748b;font-family:monospace;margin-left:8px;">${esc(test.call_conversation_id)}</span>` : '';
+    callTranscriptHtml = `
+      <details style="margin-top:12px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:0.88rem;color:#0369a1;padding:8px 12px;background:#e0f2fe;border-radius:8px;list-style:none;display:flex;align-items:center;gap:6px;">
+          📞 Call Transcript${dur}${convId}
+        </summary>
+        <div style="margin-top:8px;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:14px;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;line-height:1.7;border:1px solid #1e293b;max-height:400px;overflow-y:auto;">${esc(test.call_transcript)}</div>
+      </details>`;
+  }
+
   return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
       <span style="font-weight:700;color:#0f172a;">${esc(test.id)}: ${esc(test.name)}</span>
@@ -3919,9 +3934,11 @@ function _renderTranscriptCard(run, test) {
       <span style="background:${vBg};color:${vColor};padding:4px 8px;border-radius:999px;font-size:0.75rem;">${verdict}</span>
       <span style="color:#64748b;font-size:0.78rem;font-family:monospace;">${esc(ts)}</span>
       <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:999px;font-size:0.75rem;">${turns.length} turn(s)</span>
+      ${test.call_transcript ? '<span style="background:#d1fae5;color:#065f46;padding:4px 8px;border-radius:999px;font-size:0.75rem;">📞 Call recorded</span>' : ''}
     </div>
     ${turns.length ? turns.map(_renderTranscriptBlock).join('') : '<div style="color:#64748b;font-size:0.85rem;">No transcript available.</div>'}
     ${test.reason ? `<div style="margin-top:8px;font-size:0.85rem;color:#475569;"><strong>Judge:</strong> ${esc(test.reason)}</div>` : ''}
+    ${callTranscriptHtml}
   </div>`;
 }
 
@@ -4576,6 +4593,9 @@ class Handler(BaseHTTPRequestHandler):
                                 "tasks_sent": rr.get("tasks_sent", []),
                                 "responses": rr.get("responses", []),
                                 "transcript": rr.get("transcript", []),
+                                "call_transcript": rr.get("call_transcript") or None,
+                                "call_conversation_id": rr.get("call_conversation_id") or None,
+                                "call_duration_secs": rr.get("call_duration_secs") or None,
                             })
                             total_responses += len(rr.get("responses", []) or [])
                         responses.append({
@@ -4617,6 +4637,9 @@ class Handler(BaseHTTPRequestHandler):
                                     "tasks_sent": r.get("tasks_sent", []),
                                     "responses": r.get("responses", []),
                                     "transcript": r.get("transcript", []),
+                                    "call_transcript": r.get("call_transcript") or None,
+                                    "call_conversation_id": r.get("call_conversation_id") or None,
+                                    "call_duration_secs": r.get("call_duration_secs") or None,
                                 })
                                 total_responses += len(r.get("responses", []))
                             responses.append({
@@ -4647,6 +4670,9 @@ class Handler(BaseHTTPRequestHandler):
                                 "tasks_sent": r.get("tasks_sent", []),
                                 "responses": r.get("responses", []),
                                 "transcript": r.get("transcript", []),
+                                "call_transcript": r.get("call_transcript") or None,
+                                "call_conversation_id": r.get("call_conversation_id") or None,
+                                "call_duration_secs": r.get("call_duration_secs") or None,
                             })
                             total_responses += len(r.get("responses", []))
                         responses.insert(0, {
