@@ -4449,13 +4449,27 @@ class Handler(BaseHTTPRequestHandler):
                         },
                     )
                     if status >= 300:
-                        self._json({"run": None, "stop": running_stop, "skip_ids": running_skip_ids})
+                        self._json({"run": None, "stop": running_stop, "stop_current": running_stop, "skip_ids": running_skip_ids})
                         return
                     run_rows = rows if isinstance(rows, list) else []
                     run_row = run_rows[0] if run_rows else None
                     if not run_row:
-                        self._json({"run": None, "stop": running_stop, "skip_ids": running_skip_ids})
+                        self._json({"run": None, "stop": running_stop, "stop_current": running_stop, "skip_ids": running_skip_ids})
                         return
+                    # If a newer queued run exists while another run is active,
+                    # ask the active daemon subprocess to stop gracefully. The
+                    # queued run will be claimed after the old run posts results.
+                    if running_row and running_row.get("id"):
+                        running_progress["stop"] = True
+                        running_stop = True
+                        try:
+                            sb_service_patch(
+                                "/rest/v1/runs",
+                                params={"id": f"eq.{running_row.get('id')}", "owner_user_id": f"eq.{owner_user_id}"},
+                                json_body={"progress": running_progress},
+                            )
+                        except Exception:
+                            pass
                     # Latest-run-wins: cancel any older queued runs so daemon never drains stale backlog.
                     for stale in run_rows[1:]:
                         stale_id = stale.get("id")
@@ -4497,6 +4511,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({
                         "run": payload,
                         "stop": bool(progress.get("stop")), # Ignore running_stop for a brand new run!
+                        "stop_current": running_stop,
                         "skip_ids": progress.get("skip_ids") or [],
                     })
                 else:

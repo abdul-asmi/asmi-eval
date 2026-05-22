@@ -100,7 +100,12 @@ def judge_with_context(test_name, category, tasks, captured, all_responses, pass
             + call_transcript
         )
     else:
-        call_transcript_section = "(no call transcript — either no call was made or transcript unavailable)"
+        call_transcript_section = (
+            "NO ELEVENLABS CALL TRANSCRIPT WAS CAPTURED.\n"
+            "Judge from the iMessage responses, full response pool, and pass criteria. "
+            "If the criteria require proof of a completed phone call or confirmed call outcome, "
+            "do not invent success without transcript, audio, monitor, or other concrete evidence."
+        )
 
     prompt = _PROMPT_WITH_CONTEXT.format(
         system        = SYSTEM_CONTEXT,

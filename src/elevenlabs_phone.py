@@ -41,6 +41,21 @@ def _agent_id() -> str:
     return aid
 
 
+def _stop_requested() -> bool:
+    path = os.environ.get("ASMI_STOP_FILE", "").strip()
+    return bool(path and os.path.exists(path))
+
+
+def _sleep_interruptible(seconds: float) -> bool:
+    """Sleep in short chunks. Returns False if the UI requested stop."""
+    deadline = time.time() + max(0.0, float(seconds or 0))
+    while time.time() < deadline:
+        if _stop_requested():
+            return False
+        time.sleep(min(0.5, deadline - time.time()))
+    return not _stop_requested()
+
+
 def list_recent_conversations(agent_id: str, limit: int = 25) -> list[dict]:
     """
     Fetch the most recent conversations for the given agent.
@@ -106,7 +121,12 @@ def wait_for_call_transcript(
     print(f"\n  [ElevenLabs] Waiting up to {timeout}s for call transcript (agent={agent_id})…", end="", flush=True)
 
     while time.time() < deadline:
-        time.sleep(poll_interval)
+        if _stop_requested():
+            print("\n  [ElevenLabs] Stop requested — using transcript captured so far")
+            break
+        if not _sleep_interruptible(poll_interval):
+            print("\n  [ElevenLabs] Stop requested — using transcript captured so far")
+            break
         print(".", end="", flush=True)
 
         # If we already know the conversation id, poll details directly.

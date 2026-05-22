@@ -308,6 +308,27 @@ def _save_and_send_call_recording(conversation_id: str, test_id: str, test_name:
     return state
 
 
+def _missing_call_transcript_note(result: dict, tc: dict) -> str:
+    """Give Gemini explicit evidence when ElevenLabs did not return a transcript."""
+    monitor = result.get("call_monitor_state") or {}
+    monitor_log = (result.get("call_monitor_log") or "").strip()
+    twilio = result.get("twilio_hard_cap") or {}
+    recording = result.get("call_recording_chat") or {}
+    criteria = (tc.get("pass_criteria") or "").strip()
+    return (
+        "NO ELEVENLABS CALL TRANSCRIPT CAPTURED.\n"
+        "Evaluate using the iMessage transcript, captured Asmi responses, live monitor state, "
+        "recording status, Twilio watchdog state, and pass criteria below.\n"
+        "If the pass criteria require proof that the phone call completed or produced a real outcome, "
+        "do not infer success unless the available evidence proves it.\n\n"
+        f"Pass criteria: {criteria or '(none)'}\n"
+        f"Live monitor state: {json.dumps(monitor, ensure_ascii=False)}\n"
+        f"Live monitor log: {monitor_log or '(none)'}\n"
+        f"Twilio watchdog state: {json.dumps(twilio, ensure_ascii=False)}\n"
+        f"Recording status: {json.dumps(recording, ensure_ascii=False)}"
+    )
+
+
 def _skip_ids() -> set[str]:
     path = os.environ.get("ASMI_SKIP_FILE", "").strip()
     if not path or not os.path.exists(path):
@@ -897,7 +918,7 @@ def collect(tc: dict) -> dict:
         silence_after = float(tc.get("silence_after") or SILENCE_AFTER)
         max_responses = int(tc.get("max_responses") or 10)
         sequence_delay = tc.get("sequence_delay", SEQUENCE_DELAY)
-        call_timeout = int(tc.get("call_transcript_timeout") or CALL_TRANSCRIPT_TIMEOUT)
+        call_timeout = max(1, min(int(tc.get("call_transcript_timeout") or CALL_TRANSCRIPT_TIMEOUT), 180))
 
         if not msgs:
             result["reason"] = "call_eval test is missing messages — add a messages list or message before running."
@@ -987,13 +1008,18 @@ def collect(tc: dict) -> dict:
 
         # Now wait for the ElevenLabs call to complete and get the transcript
         call_transcript_result = None
-        if call_started_at and not stopped_early:
-            print(f"\n  📞 Waiting for ElevenLabs call transcript (Asmi called {call_phone})…")
+        if call_started_at:
+            if stopped_early or _stop_requested():
+                print("\n  [ElevenLabs] Stop requested before transcript wait — using captured evidence")
+            else:
+                print(f"\n  📞 Waiting up to {call_timeout}s for ElevenLabs call transcript (Asmi called {call_phone})…")
+            transcript_wait_seconds = 1 if (stopped_early or _stop_requested()) else call_timeout
             try:
                 call_transcript_result = wait_for_call_transcript(
                     call_started_after=call_started_at,
                     preferred_conversation_id=(monitor_state.get("conversation_id") or "").strip() or None,
-                    timeout=call_timeout,
+                    timeout=transcript_wait_seconds,
+                    poll_interval=min(5, max(1, transcript_wait_seconds)),
                 )
             except Exception as e:
                 print(f"  [ElevenLabs] transcript error: {e}")
@@ -1037,6 +1063,8 @@ def collect(tc: dict) -> dict:
             twilio_watchdog_stop.set()
             twilio_watchdog_thread.join(timeout=5)
         result["twilio_hard_cap"] = twilio_watchdog_state
+        if not (result.get("call_transcript") or "").strip():
+            result["call_transcript"] = _missing_call_transcript_note(result, tc)
 
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
     if stopped_early:

@@ -175,7 +175,7 @@ def _poll_railway_full() -> dict:
 def _check_stop() -> bool:
     """Return True if the server has a stop signal pending."""
     data = _poll_railway_full()
-    return bool(data.get("stop"))
+    return bool(data.get("stop") or data.get("stop_current"))
 
 
 def _ack_run_to_server(run: dict):
@@ -396,7 +396,7 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
                         json.dump(sorted(requested_skips), f)
                 except Exception:
                     pass
-            if data.get("stop"):
+            if data.get("stop") or data.get("stop_current"):
                 if not os.path.exists(stop_path):
                     print(f"\n  [stop] graceful stop requested (pid={proc.pid}); will judge captured results")
                     try:

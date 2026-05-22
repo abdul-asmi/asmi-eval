@@ -94,7 +94,9 @@ ELEVENLABS_AGENT_ID      = os.environ.get("ELEVENLABS_AGENT_ID", "").strip()
 CALL_EVAL_PHONE          = os.environ.get("CALL_EVAL_PHONE", "").strip().lstrip("+")
 
 # How long to wait for the ElevenLabs call to complete before giving up.
-CALL_TRANSCRIPT_TIMEOUT  = int(os.environ.get("CALL_TRANSCRIPT_TIMEOUT", "240"))
+# Keep this capped so call_eval reports finish even if ElevenLabs never marks
+# the conversation terminal.
+CALL_TRANSCRIPT_TIMEOUT  = int(os.environ.get("CALL_TRANSCRIPT_TIMEOUT", "180"))
 
 # Twilio hard call cap (seconds) for call_eval.
 # This enforces connected call duration by ending the active Twilio call via REST.
