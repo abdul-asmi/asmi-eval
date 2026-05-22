@@ -353,7 +353,7 @@ def collect(tc: dict) -> dict:
         sequence_delay = tc.get("sequence_delay", SEQUENCE_DELAY)
 
         session_start = None
-        seen = set()
+        seen_keys = set()
         all_raw = []
         for i, msg in enumerate(msgs):
             if _stop_requested():
@@ -379,12 +379,9 @@ def collect(tc: dict) -> dict:
                     drain_all=True,
                     return_raw=True,
                     silence_after=silence_after,
+                    seen_keys=seen_keys,
                 )
                 for m in raw or []:
-                    key = (m.get("timestamp").isoformat() if m.get("timestamp") else "", m.get("text") or "", m.get("is_from_me"))
-                    if key in seen:
-                        continue
-                    seen.add(key)
                     all_raw.append(m)
             if i < len(msgs) - 1:
                 print(f"  (waiting {sequence_delay}s before next message…)")
@@ -488,12 +485,9 @@ def collect(tc: dict) -> dict:
                 drain_all=True,
                 return_raw=True,
                 silence_after=8.0,
+                seen_keys=seen_keys,
             )
             for m in poll or []:
-                key = (m.get("timestamp").isoformat() if m.get("timestamp") else "", m.get("text") or "", m.get("is_from_me"))
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
                 all_raw.append(m)
 
             # Get only the assistant responses for this step to check stop conditions

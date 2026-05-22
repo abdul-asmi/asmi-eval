@@ -72,17 +72,22 @@ def _query_messages(handle: str, since_mac_ns: int, limit: int = 100) -> list[di
         conn = sqlite3.connect(f"file:{CHAT_DB}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
+        
+        # Query messages associated with the handle either as the direct sender/recipient handle_id (incoming),
+        # or via the chat join table (both incoming and outgoing).
         cur.execute("""
-            SELECT m.text, m.date, m.is_from_me
+            SELECT DISTINCT m.text, m.date, m.is_from_me
             FROM   message m
-            JOIN   handle  h ON m.handle_id = h.ROWID
-            WHERE  h.id         = ?
+            LEFT JOIN handle h ON m.handle_id = h.ROWID
+            LEFT JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+            LEFT JOIN chat c ON cmj.chat_id = c.ROWID
+            WHERE  (h.id = ? OR c.chat_identifier = ?)
               AND  m.date        > ?
               AND  m.text        IS NOT NULL
               AND  m.text        != ''
             ORDER  BY m.date ASC
             LIMIT  ?
-        """, (handle, since_mac_ns, limit))
+        """, (handle, handle, since_mac_ns, limit))
         rows = cur.fetchall()
         conn.close()
         return [
@@ -107,6 +112,7 @@ def wait_for_responses(
     drain_all: bool = False,
     return_raw: bool = False,
     silence_after: float = SILENCE_AFTER,
+    seen_keys: set | None = None,
 ) -> list[str] | list[dict]:
     """
     Wait up to `timeout` seconds for `count` responses from Asmi after `sent_at`.
@@ -117,7 +123,8 @@ def wait_for_responses(
     deadline      = time.time() + timeout
     collected     = []
     last_new_time = None
-    seen_keys     = set()
+    if seen_keys is None:
+        seen_keys = set()
     stop_file     = os.environ.get("ASMI_STOP_FILE", "").strip()
 
     print(f"  Waiting for {count} response(s) (timeout={timeout}s)…", end="", flush=True)
