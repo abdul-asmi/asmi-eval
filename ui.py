@@ -5292,6 +5292,7 @@ class Handler(BaseHTTPRequestHandler):
                 token, uid = self._require_user()
                 # Determine if the Mac daemon is online using persisted heartbeat.
                 mac_online = False
+                db_heartbeat_seen = False
                 try:
                     status_hb, hb = sb_service_get(
                         "/rest/v1/relay_devices",
@@ -5304,6 +5305,7 @@ class Handler(BaseHTTPRequestHandler):
                         },
                     )
                     if status_hb < 300 and isinstance(hb, list) and hb and hb[0].get("last_seen_at"):
+                        db_heartbeat_seen = True
                         # last_seen_at is ISO; compare in seconds by letting JS/UI also show queue regardless.
                         from datetime import datetime, timezone
                         ts = hb[0]["last_seen_at"]
@@ -5314,6 +5316,10 @@ class Handler(BaseHTTPRequestHandler):
                             mac_online = True
                 except Exception:
                     mac_online = False
+                # Fallback: if DB heartbeat is missing/flaky but this same process saw
+                # daemon /api/poll recently, trust in-memory heartbeat.
+                if not mac_online and not db_heartbeat_seen:
+                    mac_online = (time.time() - _last_heartbeat) < 90
                 selection = {
                     "category": cat,
                     "categories": cats,
