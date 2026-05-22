@@ -3122,7 +3122,7 @@ function _updateLiveFeed(output, progress, runStatus) {
   
   const items = [];
   if (output) {
-    const lines = output.split('\n');
+    const lines = output.split('\\n');
     for (let line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
