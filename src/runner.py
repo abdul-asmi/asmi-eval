@@ -74,11 +74,18 @@ def _monitor_event_summary(event: dict) -> str:
 
 
 def _start_elevenlabs_monitor(agent_id: str, started_after: datetime, events: list[dict], state: dict, stop_event: threading.Event) -> threading.Thread | None:
-    if not _WEBSOCKETS_AVAILABLE or not agent_id or not started_after:
+    if not _WEBSOCKETS_AVAILABLE:
+        state["status"] = "disabled"
+        state["error"] = "websockets package is missing (install requirements.txt)"
+        return None
+    if not agent_id or not started_after:
+        state["status"] = "disabled"
+        state["error"] = "ELEVENLABS_AGENT_ID or call start timestamp missing"
         return None
 
     api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
     if not api_key:
+        state["status"] = "disabled"
         state["error"] = "ELEVENLABS_API_KEY is missing"
         return None
 

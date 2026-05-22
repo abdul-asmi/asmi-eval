@@ -1,2 +1,3 @@
 google-genai
 PyJWT[crypto]
+websockets>=12.0
