@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 import os
 import json
 
-from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT, CALL_EVAL_MAX_DURATION
-from imessage import send_imessage, wait_for_responses, catch_up_manual_messages
+from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT, CALL_EVAL_MAX_DURATION, REPORTS_DIR, COMMAND_HANDLE
+from imessage import send_imessage, send_imessage_attachment, wait_for_responses, catch_up_manual_messages
 from judge import judge_status, judge_with_context, judge_response_count
-from elevenlabs_phone import list_recent_conversations, wait_for_call_transcript
+from elevenlabs_phone import get_conversation_audio, list_recent_conversations, wait_for_call_transcript
 from twilio_phone import twilio_configured, newest_active_call_sid, end_call
 
 try:
@@ -250,6 +250,62 @@ def _start_twilio_hard_cap_watchdog(
     thread = threading.Thread(target=_runner, daemon=True)
     thread.start()
     return thread
+
+
+def _audio_extension(content_type: str) -> str:
+    ctype = (content_type or "").split(";")[0].strip().lower()
+    if ctype in {"audio/mpeg", "audio/mp3"}:
+        return ".mp3"
+    if ctype in {"audio/wav", "audio/x-wav"}:
+        return ".wav"
+    if ctype == "audio/ogg":
+        return ".ogg"
+    if ctype == "audio/webm":
+        return ".webm"
+    if ctype == "audio/mp4":
+        return ".m4a"
+    return ".mp3"
+
+
+def _save_and_send_call_recording(conversation_id: str, test_id: str, test_name: str) -> dict:
+    """
+    Fetch the ElevenLabs recording and send it to the user's command chat.
+    Keeps the Asmi eval thread clean by default.
+    """
+    state = {"status": "not_started", "path": "", "sent": False, "error": ""}
+    if not conversation_id:
+        state["status"] = "skipped"
+        state["error"] = "missing conversation_id"
+        return state
+    if os.environ.get("SEND_CALL_RECORDING_TO_CHAT", "1").strip().lower() in {"0", "false", "no", "off"}:
+        state["status"] = "disabled"
+        return state
+
+    try:
+        audio, content_type = get_conversation_audio(conversation_id)
+        ext = _audio_extension(content_type)
+        out_dir = os.path.join(REPORTS_DIR, "call_recordings")
+        os.makedirs(out_dir, exist_ok=True)
+        safe_test = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in (test_id or "call"))
+        out_path = os.path.join(out_dir, f"{safe_test}_{conversation_id}{ext}")
+        with open(out_path, "wb") as f:
+            f.write(audio)
+        state["path"] = out_path
+        state["status"] = "saved"
+
+        dest = os.environ.get("CALL_RECORDING_CHAT_HANDLE", "").strip() or COMMAND_HANDLE
+        label = f"Call recording for {test_id}: {test_name}\nConversation: {conversation_id}"
+        send_imessage(label, handle=dest)
+        sent = send_imessage_attachment(out_path, handle=dest)
+        state["sent"] = bool(sent)
+        state["status"] = "sent" if sent else "send_failed"
+        print(f"  [ElevenLabs audio] saved recording → {out_path}")
+        print(f"  [ElevenLabs audio] sent to chat={dest}: {sent}")
+    except Exception as e:
+        state["status"] = "error"
+        state["error"] = str(e)
+        print(f"  [ElevenLabs audio] error: {e}")
+    return state
 
 
 def _skip_ids() -> set[str]:
@@ -955,8 +1011,14 @@ def collect(tc: dict) -> dict:
             result["call_conversation_id"] = call_transcript_result.get("conversation_id", "")
             result["call_duration_secs"] = call_transcript_result.get("duration_secs")
             print(f"  ✓ Call transcript captured ({len(call_transcript_result.get('transcript', []))} turns, {call_transcript_result.get('duration_secs', '?')}s)")
+            result["call_recording_chat"] = _save_and_send_call_recording(
+                result["call_conversation_id"],
+                test_id,
+                tc.get("name") or test_id,
+            )
         else:
             result["call_transcript"] = None
+            result["call_recording_chat"] = {"status": "skipped", "sent": False, "error": "no call transcript/conversation id"}
             print("  ⚠ No call transcript captured")
 
         if monitor_events:

@@ -211,6 +211,56 @@ def send_imessage(message: str, handle: str | None = None) -> bool:
     return False
 
 
+def send_imessage_attachment(file_path: str, handle: str | None = None) -> bool:
+    """Send a local file attachment over iMessage."""
+    stop_file = os.environ.get("ASMI_STOP_FILE", "").strip()
+    if stop_file and os.path.exists(stop_file):
+        print("  ⏹ Stop requested — not sending iMessage attachment")
+        return False
+    if not file_path or not os.path.exists(file_path):
+        print(f"  [attachment send error] file not found: {file_path}")
+        return False
+
+    handle = _resolve_handle(handle)
+    safe_path = file_path.replace("\\", "\\\\").replace('"', '\\"')
+    attempts = max(1, int(IMESSAGE_SEND_ATTEMPTS or 1))
+    retry_delay = max(0.5, float(IMESSAGE_SEND_RETRY_DELAY or 2.0))
+
+    for attempt in range(1, attempts + 1):
+        script = f'''
+            tell application "Messages"
+                set targetService to 1st service whose service type = iMessage
+                set targetBuddy to buddy "{handle}" of targetService
+                send POSIX file "{safe_path}" to targetBuddy
+            end tell
+        '''
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            print(f"  [attachment send error] attempt {attempt}/{attempts}: AppleScript timed out")
+            result = None
+
+        if result is not None and result.returncode == 0:
+            return True
+
+        stderr = (result.stderr or "").strip() if result is not None else ""
+        stdout = (result.stdout or "").strip() if result is not None else ""
+        details = stderr or stdout or "unknown AppleScript error"
+        print(f"  [attachment send error] attempt {attempt}/{attempts}: {details}")
+        if attempt < attempts:
+            backoff = retry_delay * attempt
+            print(f"  ↻ Retrying attachment send in {backoff:.1f}s…")
+            time.sleep(backoff)
+
+    print("  [attachment send failed] all attempts exhausted")
+    return False
+
+
 # ─── Receive ──────────────────────────────────────────────────────────────────
 
 def _query_messages(handle: str, since_mac_ns: int, limit: int = 100) -> list[dict]:
