@@ -3,7 +3,7 @@ set -euo pipefail
 
 PORT=8765
 LOG=/tmp/asmi-ui.log
-EVAL_DIR="$(cd "$(dirname "$0")" && pwd)"
+EVAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 pkill -f "python.*ui.py" 2>/dev/null || true
 sleep 1

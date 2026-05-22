@@ -3,8 +3,8 @@
 # Run once:  bash setup_daemon.sh
 # This makes the daemon start automatically and restart if it crashes.
 
-EVAL_DIR="$(cd "$(dirname "$0")" && pwd)"
-WRAPPER="$EVAL_DIR/run_daemon.sh"
+EVAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+WRAPPER="$EVAL_DIR/scripts/run_daemon.sh"
 PLIST="$HOME/Library/LaunchAgents/com.asmi.eval.daemon.plist"
 
 echo "Setting up Asmi Eval Daemon..."

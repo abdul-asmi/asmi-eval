@@ -7,6 +7,6 @@ export PYTHONUNBUFFERED=1
 export PATH="/Library/Frameworks/Python.framework/Versions/3.13/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 PYTHON="/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
-SCRIPT="/Users/yaybeedee/Desktop/asmi/eval/daemon.py"
+SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/daemon.py"
 
 exec "$PYTHON" "$SCRIPT"

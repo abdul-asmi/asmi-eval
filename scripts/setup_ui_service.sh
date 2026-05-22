@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-EVAL_DIR="$(cd "$(dirname "$0")" && pwd)"
+EVAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PLIST="$HOME/Library/LaunchAgents/com.asmi.eval.ui.plist"
 PYTHON="/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
 
