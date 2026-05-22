@@ -314,6 +314,7 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
     Kills the process and returns a ⏹ message if stop is requested.
     """
     env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
     if extra_env:
         env.update({k: str(v) for k, v in extra_env.items() if v is not None})
     old_snapshot = os.environ.get("ASMI_TEST_CASES_JSON")
@@ -328,21 +329,21 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
             _all_tc_for_routing = []
         dynamic_categories = {t.get("category") for t in _all_tc_for_routing if t.get("category")}
         if not arg or arg == "all":
-            proc_cmd = [sys.executable, "run_eval.py"]
+            proc_cmd = [sys.executable, "-u", "run_eval.py"]
             label = "full suite"
         elif "," in arg:
             parts = [p.strip() for p in arg.split(",") if p.strip()]
             if parts and all(p in dynamic_categories for p in parts):
-                proc_cmd = [sys.executable, "run_eval.py", "--categories", arg]
+                proc_cmd = [sys.executable, "-u", "run_eval.py", "--categories", arg]
                 label = f"categories: {arg}"
             else:
-                proc_cmd = [sys.executable, "run_eval.py", "--ids", arg]
+                proc_cmd = [sys.executable, "-u", "run_eval.py", "--ids", arg]
                 label = f"tests: {arg}"
         elif arg in dynamic_categories:
-            proc_cmd = [sys.executable, "run_eval.py", "--category", arg]
+            proc_cmd = [sys.executable, "-u", "run_eval.py", "--category", arg]
             label = f"category: {arg}"
         else:
-            proc_cmd = [sys.executable, "run_eval.py", "--id", arg]
+            proc_cmd = [sys.executable, "-u", "run_eval.py", "--id", arg]
             label = f"test: {arg}"
 
         # Refresh the in-memory id → category mapping so progress uses latest dashboard edits
@@ -422,30 +423,42 @@ def _run_with_stop(cmd: str, extra_env: dict | None = None) -> str:
                         pass
             time.sleep(1)
 
+    def post_output_periodically():
+        """Background thread: periodically post accumulated output to the UI."""
+        nonlocal stop_flag
+        last_posted = ""
+        while not stop_flag:
+            time.sleep(2.0)
+            if stop_flag:
+                break
+            current_output = "".join(output_lines)
+            if current_output != last_posted:
+                def _post_bg(out=current_output):
+                    _post_output_to_local_ui(out, status="running")
+                    _post_output_to_railway(out, status="running")
+                threading.Thread(target=_post_bg, daemon=True).start()
+                last_posted = current_output
+
     # Start background thread for stop checking
     stop_thread = threading.Thread(target=check_stop_periodically, daemon=True)
     stop_thread.start()
 
+    # Start background thread for posting output
+    post_thread = threading.Thread(target=post_output_periodically, daemon=True)
+    post_thread.start()
+
     # Read output continuously without blocking delays
     try:
-        last_post_time = time.time()
-        for line in proc.stdout:
+        while True:
             if stop_flag:
+                break
+            line = proc.stdout.readline()
+            if not line:
                 break
             output_lines.append(line)
             print(line, end="", flush=True)
             _parse_progress_line(line, total_count)
             _mark_test_done(line)
-
-            # Post live output update every 2.0 seconds in a background thread
-            now = time.time()
-            if now - last_post_time >= 2.0:
-                current_output = "".join(output_lines)
-                def _post_bg(out=current_output):
-                    _post_output_to_local_ui(out, status="running")
-                    _post_output_to_railway(out, status="running")
-                threading.Thread(target=_post_bg, daemon=True).start()
-                last_post_time = now
     except Exception as e:
         print(f"  [read error] {e}")
     finally:
