@@ -4166,8 +4166,8 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     self._json({
                         "run": payload,
-                        "stop": bool(progress.get("stop")) or running_stop,
-                        "skip_ids": progress.get("skip_ids") or running_skip_ids,
+                        "stop": bool(progress.get("stop")), # Ignore running_stop for a brand new run!
+                        "skip_ids": progress.get("skip_ids") or [],
                     })
                 else:
                     run = _pending_run
