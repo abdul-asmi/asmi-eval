@@ -350,6 +350,24 @@ def _save_and_send_call_recording(conversation_id: str, test_id: str, test_name:
     attachments_sent = audio_sent or pdf_sent
     state["attachments_sent"] = attachments_sent
 
+    # 3.5. Optionally send the call details to Slack if configured
+    slack_token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    slack_channel = os.environ.get("SLACK_CHANNEL", "").strip()
+    if slack_token and slack_channel:
+        print("  [Slack] Triggering call dispatch to Slack channel…")
+        try:
+            from slack import send_call_to_slack
+            slack_state = send_call_to_slack(
+                conversation_id=conversation_id,
+                test_id=test_id,
+                test_name=test_name,
+                call_transcript_result=call_transcript_result,
+            )
+            state["slack"] = slack_state
+        except Exception as e:
+            print(f"  [Slack] Dispatch failed: {e}")
+            state["slack"] = {"error": str(e)}
+
     # 4. Standard public Render link logic for command chat
     try:
         public_url = _public_call_recording_url(conversation_id)
