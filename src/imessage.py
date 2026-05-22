@@ -48,6 +48,54 @@ def _normalize_text(text: str) -> str:
     return " ".join((text or "").strip().split())
 
 
+def _query_recent_outgoing_any_handle(since_mac_ns: int, limit: int = 200) -> list[dict]:
+    """
+    Read recent outgoing messages regardless of handle/chat mapping.
+    Useful when chat_identifier formatting differs from configured ASMI_HANDLE.
+    """
+    try:
+        conn = sqlite3.connect(f"file:{CHAT_DB}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT m.text, m.date, m.is_from_me
+            FROM   message m
+            WHERE  m.is_from_me = 1
+              AND  m.date       > ?
+              AND  m.text       IS NOT NULL
+              AND  m.text       != ''
+            ORDER BY m.date DESC
+            LIMIT ?
+            """,
+            (since_mac_ns, limit),
+        )
+        rows = cur.fetchall()
+        conn.close()
+        return [
+            {
+                "text": row["text"],
+                "timestamp": _from_mac_ts(row["date"]),
+                "is_from_me": bool(row["is_from_me"]),
+            }
+            for row in rows
+        ]
+    except Exception:
+        return []
+
+
+def _text_matches(candidate: str, needle: str) -> bool:
+    c = _normalize_text(candidate or "")
+    n = _normalize_text(needle or "")
+    if not c or not n:
+        return False
+    if c == n:
+        return True
+    if len(n) >= 24 and (n in c or c in n):
+        return True
+    return False
+
+
 def _has_outgoing_match(
     handle: str,
     message: str,
@@ -68,13 +116,19 @@ def _has_outgoing_match(
             continue
         if ts < lookback:
             continue
-        text = _normalize_text(m.get("text") or "")
-        if not text:
-            continue
-        if text == needle:
+        text = m.get("text") or ""
+        if _text_matches(text, needle):
             return True
-        # Fallback for line-break / whitespace normalization differences.
-        if len(needle) >= 24 and (needle in text or text in needle):
+
+    # Fallback: handle/chat_identifier formatting can vary (+1, country code, email),
+    # so also check any recent outgoing message text regardless of handle mapping.
+    for m in _query_recent_outgoing_any_handle(_mac_ts(lookback), limit=300):
+        ts = m.get("timestamp")
+        if not isinstance(ts, datetime):
+            continue
+        if ts < lookback:
+            continue
+        if _text_matches(m.get("text") or "", needle):
             return True
     return False
 
@@ -109,6 +163,7 @@ def send_imessage(message: str, handle: str | None = None) -> bool:
     retry_delay = max(0.5, float(IMESSAGE_SEND_RETRY_DELAY or 2.0))
     verify_timeout = max(1.0, float(IMESSAGE_SEND_VERIFY_TIMEOUT or 12.0))
     verify_poll = max(0.2, float(IMESSAGE_SEND_VERIFY_POLL or 0.6))
+    had_script_success = False
 
     for attempt in range(1, attempts + 1):
         attempt_started = datetime.now(timezone.utc)
@@ -131,6 +186,7 @@ def send_imessage(message: str, handle: str | None = None) -> bool:
             result = None
 
         if result is not None and result.returncode == 0:
+            had_script_success = True
             if _wait_for_outgoing_match(handle, message, attempt_started, verify_timeout, verify_poll):
                 if attempt > 1:
                     print(f"  ✓ Send recovered on attempt {attempt}/{attempts}")
@@ -146,6 +202,12 @@ def send_imessage(message: str, handle: str | None = None) -> bool:
             backoff = retry_delay * attempt
             print(f"  ↻ Retrying send in {backoff:.1f}s…")
             time.sleep(backoff)
+
+    # Last-resort success path: if AppleScript accepted the send but chat.db sync
+    #/handle matching failed verification, continue run instead of hard-failing.
+    if had_script_success:
+        print("  [send verify warning] AppleScript send succeeded; proceeding despite chat.db verify miss")
+        return True
 
     print("  [send failed] all attempts exhausted")
     return False
@@ -295,4 +357,3 @@ def wait_for_responses(
     if return_raw:
         return collected
     return [m["text"] for m in collected if not m.get("is_from_me")][:max_responses]
-
