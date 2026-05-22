@@ -1109,11 +1109,12 @@ def collect(tc: dict) -> dict:
         # Now wait for the ElevenLabs call to complete and get the transcript
         call_transcript_result = None
         if call_started_at:
-            if stopped_early or _stop_requested():
+            if _stop_requested():
                 print("\n  [ElevenLabs] Stop requested before transcript wait — using captured evidence")
+                transcript_wait_seconds = 1
             else:
                 print(f"\n  📞 Waiting up to {call_timeout}s for ElevenLabs call transcript (Asmi called {call_phone})…")
-            transcript_wait_seconds = 1 if (stopped_early or _stop_requested()) else call_timeout
+                transcript_wait_seconds = call_timeout
             try:
                 call_transcript_result = wait_for_call_transcript(
                     call_started_after=call_started_at,
