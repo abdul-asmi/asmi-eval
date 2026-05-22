@@ -127,8 +127,9 @@ GH_REPO   = os.environ.get("GITHUB_REPO", "")
 GH_FILE   = os.environ.get("GITHUB_FILE_PATH", "test_cases.py")
 
 # Fallback: read/write local file if GitHub not configured (local dev)
-LOCAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "test_cases.py")
-REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
+EVAL_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCAL_FILE = os.path.join(EVAL_DIR, "src", "test_cases.py")
+REPORTS_DIR = os.path.join(EVAL_DIR, "reports")
 OVERALL_ANALYSIS_FILE = os.path.join(REPORTS_DIR, "overall_analysis.json")
 USE_GITHUB = bool(LEGACY_GITHUB_ENABLE and GH_TOKEN and GH_REPO)
 
@@ -1787,14 +1788,25 @@ async function apiFetch(url, options={}) {
 
 async function _loadSession() {
   if (!sb) return null;
-  const { data } = await sb.auth.getSession();
-  const session = data ? data.session : null;
-  _applySession(session);
-  return session;
+  try {
+    const { data } = await sb.auth.getSession();
+    const session = data ? data.session : null;
+    _applySession(session);
+    return session;
+  } catch (e) {
+    console.error('Failed to load session:', e);
+    _applySession(null);
+    return null;
+  }
 }
 
 async function _ensureSignedIn() {
-  const session = await _loadSession();
+  let session = null;
+  try {
+    session = await _loadSession();
+  } catch (e) {
+    console.error('Failed to ensure signed in:', e);
+  }
   const overlay = document.getElementById('authOverlay');
   if (overlay) overlay.style.display = (session || !AUTH_REQUIRED) ? 'none' : 'flex';
   return !!session || !AUTH_REQUIRED;
@@ -1802,61 +1814,69 @@ async function _ensureSignedIn() {
 
 async function _initAuthUI() {
   if (!sb) return;
-  document.getElementById('authSignInBtn').onclick = async () => {
-    if (_authBusy) return;
-    _setAuthBusy(true);
-    _setAuthMsg('Signing in…', true);
-    const email = (document.getElementById('authEmail').value || '').trim();
-    const pass  = (document.getElementById('authPass').value || '').trim();
-    try {
-      const { data, error } = await _withTimeout(
-        sb.auth.signInWithPassword({ email, password: pass }),
-        15000,
-        'Sign in timed out. Check your Supabase Auth settings and network.'
-      );
-      if (error) {
-        _setAuthMsg(error.message || 'Sign in failed');
-        return;
+  try {
+    document.getElementById('authSignInBtn').onclick = async () => {
+      if (_authBusy) return;
+      _setAuthBusy(true);
+      _setAuthMsg('Signing in…', true);
+      const email = (document.getElementById('authEmail').value || '').trim();
+      const pass  = (document.getElementById('authPass').value || '').trim();
+      try {
+        const { data, error } = await _withTimeout(
+          sb.auth.signInWithPassword({ email, password: pass }),
+          15000,
+          'Sign in timed out. Check your Supabase Auth settings and network.'
+        );
+        if (error) {
+          _setAuthMsg(error.message || 'Sign in failed');
+          return;
+        }
+        const session = data && data.session ? data.session : await _loadSession();
+        if (!session) {
+          _setAuthMsg('Sign in succeeded, but no session was returned. Confirm email is enabled and refresh once.');
+          return;
+        }
+        _applySession(session);
+        _setAuthMsg('', true);
+        load();
+      } catch (e) {
+        _setAuthMsg((e && e.message) ? e.message : 'Sign in failed');
+      } finally {
+        _setAuthBusy(false);
       }
-      const session = data && data.session ? data.session : await _loadSession();
-      if (!session) {
-        _setAuthMsg('Sign in succeeded, but no session was returned. Confirm email is enabled and refresh once.');
-        return;
+    };
+    document.getElementById('authSignUpBtn').onclick = async () => {
+      if (_authBusy) return;
+      _setAuthBusy(true);
+      _setAuthMsg('Creating account… (check email to confirm)', true);
+      const email = (document.getElementById('authEmail').value || '').trim();
+      const pass  = (document.getElementById('authPass').value || '').trim();
+      try {
+        const { error } = await _withTimeout(
+          sb.auth.signUp({ email, password: pass }),
+          15000,
+          'Account creation timed out. Check your Supabase Auth settings and network.'
+        );
+        if (error) _setAuthMsg(error.message || 'Sign up failed');
+        else _setAuthMsg('Account created. Please confirm your email, then sign in.', true);
+      } catch (e) {
+        _setAuthMsg((e && e.message) ? e.message : 'Sign up failed');
+      } finally {
+        _setAuthBusy(false);
       }
-      _applySession(session);
-      _setAuthMsg('', true);
-      load();
-    } catch (e) {
-      _setAuthMsg((e && e.message) ? e.message : 'Sign in failed');
-    } finally {
-      _setAuthBusy(false);
-    }
-  };
-  document.getElementById('authSignUpBtn').onclick = async () => {
-    if (_authBusy) return;
-    _setAuthBusy(true);
-    _setAuthMsg('Creating account… (check email to confirm)', true);
-    const email = (document.getElementById('authEmail').value || '').trim();
-    const pass  = (document.getElementById('authPass').value || '').trim();
+    };
     try {
-      const { error } = await _withTimeout(
-        sb.auth.signUp({ email, password: pass }),
-        15000,
-        'Account creation timed out. Check your Supabase Auth settings and network.'
-      );
-      if (error) _setAuthMsg(error.message || 'Sign up failed');
-      else _setAuthMsg('Account created. Please confirm your email, then sign in.', true);
+      sb.auth.onAuthStateChange(async (_event, session) => {
+        _applySession(session);
+        await _ensureSignedIn();
+      });
     } catch (e) {
-      _setAuthMsg((e && e.message) ? e.message : 'Sign up failed');
-    } finally {
-      _setAuthBusy(false);
+      console.error('Failed to bind auth change listener:', e);
     }
-  };
-  sb.auth.onAuthStateChange(async (_event, session) => {
-    _applySession(session);
     await _ensureSignedIn();
-  });
-  await _ensureSignedIn();
+  } catch (e) {
+    console.error('Failed to init auth UI:', e);
+  }
 }
 
 _initAuthUI();
