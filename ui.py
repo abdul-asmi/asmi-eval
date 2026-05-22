@@ -22,6 +22,7 @@ import base64
 import csv
 import glob
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -99,6 +100,26 @@ def _secret_fingerprint(value: str) -> str:
     if not raw:
         return ""
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _call_recording_public_secret() -> str:
+    return (
+        os.environ.get("CALL_RECORDING_PUBLIC_SECRET", "").strip()
+        or DAEMON_TOKEN
+        or os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    )
+
+
+def _call_recording_audio_token(conversation_id: str) -> str:
+    secret = _call_recording_public_secret()
+    if not secret:
+        return ""
+    return hmac.new(secret.encode("utf-8"), conversation_id.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _valid_call_recording_audio_token(conversation_id: str, token: str) -> bool:
+    expected = _call_recording_audio_token(conversation_id)
+    return bool(expected and token and hmac.compare_digest(expected, token))
 
 # ── Run queue (in-memory) ──────────────────────────────────────────────────────
 _pending_run     = None   # dict {category, id} or None
@@ -4189,6 +4210,7 @@ function _renderCallRecordingCard(run, test) {
     asmi_handle: test.asmi_handle || run.asmi_handle,
   });
   const convId = (test.call_conversation_id || '').trim();
+  const publicUrl = (((test.call_recording_chat || {}).public_url) || '').trim();
   const audioHostId = 'recording_audio_' + _safeDomId(convId || test.id || run.stem || '');
   const hasTranscript = test.call_transcript && test.call_transcript.trim();
   const hasMonitor = (test.call_monitor_log && test.call_monitor_log.trim()) || (test.call_monitor_events || []).length || test.call_monitor_state;
@@ -4203,6 +4225,8 @@ function _renderCallRecordingCard(run, test) {
   const audioHtml = convId ? `
     <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
       <button class="btn btn-outline" onclick='loadCallRecording(${JSON.stringify(convId)}, ${JSON.stringify(audioHostId)})' style="font-size:0.75rem;padding:4px 10px;white-space:nowrap;">▶ Load audio</button>
+      ${publicUrl ? `<a class="btn btn-outline" href="${esc(publicUrl)}" target="_blank" rel="noopener" style="font-size:0.75rem;padding:4px 10px;white-space:nowrap;text-decoration:none;">🔗 Open public audio URL</a>` : ''}
+      ${publicUrl ? `<button class="btn btn-outline" onclick='copyText(${JSON.stringify(publicUrl)})' style="font-size:0.75rem;padding:4px 10px;white-space:nowrap;">Copy URL</button>` : ''}
       <span style="color:#64748b;font-size:0.78rem;">Conversation ID: <span style="font-family:monospace;">${esc(convId)}</span></span>
     </div>
     <div id="${audioHostId}" style="margin-top:8px;"></div>` : '<div style="margin-top:10px;color:#64748b;font-size:0.82rem;">No conversation ID yet, so audio is not available.</div>';
@@ -4917,6 +4941,7 @@ class Handler(BaseHTTPRequestHandler):
                                 "call_monitor_events": rr.get("call_monitor_events", []),
                                 "call_monitor_log": rr.get("call_monitor_log") or "",
                                 "call_monitor_state": rr.get("call_monitor_state") or {},
+                                "call_recording_chat": rr.get("call_recording_chat") or {},
                             })
                             total_responses += len(rr.get("responses", []) or [])
                         responses.append({
@@ -4964,6 +4989,7 @@ class Handler(BaseHTTPRequestHandler):
                                     "call_monitor_events": r.get("call_monitor_events", []),
                                     "call_monitor_log": r.get("call_monitor_log") or "",
                                     "call_monitor_state": r.get("call_monitor_state") or {},
+                                    "call_recording_chat": r.get("call_recording_chat") or {},
                                 })
                                 total_responses += len(r.get("responses", []))
                             responses.append({
@@ -5000,6 +5026,7 @@ class Handler(BaseHTTPRequestHandler):
                                 "call_monitor_events": r.get("call_monitor_events", []),
                                 "call_monitor_log": r.get("call_monitor_log") or "",
                                 "call_monitor_state": r.get("call_monitor_state") or {},
+                                "call_recording_chat": r.get("call_recording_chat") or {},
                             })
                             total_responses += len(r.get("responses", []))
                         responses.insert(0, {
@@ -5010,11 +5037,25 @@ class Handler(BaseHTTPRequestHandler):
                             "totalResponses": total_responses,
                         })
                     self._json(responses)
-            elif path == "/api/call-audio":
-                if USE_SUPABASE:
+            elif path == "/api/call-audio" or path.startswith("/api/public/call-audio/"):
+                parsed_url = urlparse(self.path)
+                query = urllib.parse.parse_qs(parsed_url.query)
+                is_public_audio = path.startswith("/api/public/call-audio/")
+                if not is_public_audio and USE_SUPABASE:
                     self._require_user()
-                query = urllib.parse.parse_qs(urlparse(self.path).query)
-                conversation_id = (query.get("conversation_id", [""])[0] or "").strip()
+                if is_public_audio:
+                    filename = path.rsplit("/", 1)[-1]
+                    conversation_id = urllib.parse.unquote(filename[:-4] if filename.endswith(".mp3") else filename).strip()
+                    token = (query.get("token", [""])[0] or "").strip()
+                    if not _valid_call_recording_audio_token(conversation_id, token):
+                        self.send_response(403)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Cache-Control", "no-store")
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"ok": False, "error": "Invalid recording token"}).encode())
+                        return
+                else:
+                    conversation_id = (query.get("conversation_id", [""])[0] or "").strip()
                 if not conversation_id:
                     self.send_response(400)
                     self.send_header("Content-Type", "application/json")

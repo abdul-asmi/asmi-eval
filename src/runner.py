@@ -4,11 +4,14 @@ import threading
 from datetime import datetime, timezone
 import os
 import json
+import hashlib
+import hmac
+import urllib.parse
 
-from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT, CALL_EVAL_MAX_DURATION, REPORTS_DIR, COMMAND_HANDLE
-from imessage import send_imessage, send_imessage_attachment, wait_for_responses, catch_up_manual_messages
+from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT, CALL_EVAL_MAX_DURATION, COMMAND_HANDLE, RAILWAY_URL, DAEMON_TOKEN
+from imessage import send_imessage, wait_for_responses, catch_up_manual_messages
 from judge import judge_status, judge_with_context, judge_response_count
-from elevenlabs_phone import get_conversation_audio, list_recent_conversations, wait_for_call_transcript
+from elevenlabs_phone import list_recent_conversations, wait_for_call_transcript
 from twilio_phone import twilio_configured, newest_active_call_sid, end_call
 
 try:
@@ -252,27 +255,39 @@ def _start_twilio_hard_cap_watchdog(
     return thread
 
 
-def _audio_extension(content_type: str) -> str:
-    ctype = (content_type or "").split(";")[0].strip().lower()
-    if ctype in {"audio/mpeg", "audio/mp3"}:
-        return ".mp3"
-    if ctype in {"audio/wav", "audio/x-wav"}:
-        return ".wav"
-    if ctype == "audio/ogg":
-        return ".ogg"
-    if ctype == "audio/webm":
-        return ".webm"
-    if ctype == "audio/mp4":
-        return ".m4a"
-    return ".mp3"
+def _call_recording_public_secret() -> str:
+    return (
+        os.environ.get("CALL_RECORDING_PUBLIC_SECRET", "").strip()
+        or DAEMON_TOKEN
+        or os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    )
+
+
+def _call_recording_token(conversation_id: str) -> str:
+    secret = _call_recording_public_secret()
+    if not secret:
+        return ""
+    return hmac.new(secret.encode("utf-8"), conversation_id.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _public_call_recording_url(conversation_id: str) -> str:
+    base = (
+        os.environ.get("CALL_RECORDING_PUBLIC_BASE_URL", "").strip()
+        or RAILWAY_URL
+    ).rstrip("/")
+    token = _call_recording_token(conversation_id)
+    if not base or not token:
+        return ""
+    conv = urllib.parse.quote(conversation_id, safe="")
+    return f"{base}/api/public/call-audio/{conv}.mp3?token={token}"
 
 
 def _save_and_send_call_recording(conversation_id: str, test_id: str, test_name: str) -> dict:
     """
-    Fetch the ElevenLabs recording and send it to the user's command chat.
-    Keeps the Asmi eval thread clean by default.
+    Send a server-hosted ElevenLabs recording link to the user's command chat.
+    The link streams from Render, so playback does not depend on a local Mac file.
     """
-    state = {"status": "not_started", "path": "", "sent": False, "error": ""}
+    state = {"status": "not_started", "public_url": "", "sent": False, "error": ""}
     if not conversation_id:
         state["status"] = "skipped"
         state["error"] = "missing conversation_id"
@@ -282,25 +297,24 @@ def _save_and_send_call_recording(conversation_id: str, test_id: str, test_name:
         return state
 
     try:
-        audio, content_type = get_conversation_audio(conversation_id)
-        ext = _audio_extension(content_type)
-        out_dir = os.path.join(REPORTS_DIR, "call_recordings")
-        os.makedirs(out_dir, exist_ok=True)
-        safe_test = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in (test_id or "call"))
-        out_path = os.path.join(out_dir, f"{safe_test}_{conversation_id}{ext}")
-        with open(out_path, "wb") as f:
-            f.write(audio)
-        state["path"] = out_path
-        state["status"] = "saved"
+        public_url = _public_call_recording_url(conversation_id)
+        if not public_url:
+            state["status"] = "error"
+            state["error"] = "missing CALL_RECORDING_PUBLIC_BASE_URL/REMOTE_UI_URL or signing secret"
+            return state
 
         dest = os.environ.get("CALL_RECORDING_CHAT_HANDLE", "").strip() or COMMAND_HANDLE
-        label = f"Call recording for {test_id}: {test_name}\nConversation: {conversation_id}"
-        send_imessage(label, handle=dest)
-        sent = send_imessage_attachment(out_path, handle=dest)
+        label = (
+            f"Call recording for {test_id}: {test_name}\n"
+            f"Conversation: {conversation_id}\n"
+            f"{public_url}"
+        )
+        sent = send_imessage(label, handle=dest)
+        state["public_url"] = public_url
         state["sent"] = bool(sent)
-        state["status"] = "sent" if sent else "send_failed"
-        print(f"  [ElevenLabs audio] saved recording → {out_path}")
-        print(f"  [ElevenLabs audio] sent to chat={dest}: {sent}")
+        state["status"] = "link_sent" if sent else "link_send_failed"
+        print(f"  [ElevenLabs audio] public link → {public_url}")
+        print(f"  [ElevenLabs audio] link sent to chat={dest}: {sent}")
     except Exception as e:
         state["status"] = "error"
         state["error"] = str(e)

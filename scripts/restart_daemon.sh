@@ -63,6 +63,29 @@ if [ -f "$PLIST" ]; then
   launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null || true
 fi
 
+if command -v osascript >/dev/null 2>&1; then
+  echo "Starting daemon from Terminal so Full Disk Access and background lifetime apply..."
+  TERMINAL_CMD="cd $(printf '%q' "$EVAL_DIR"); set -a; source .env.local; set +a; pkill -f '[d]aemon.py' 2>/dev/null || true; nohup $(printf '%q' "$PYTHON") -u daemon.py > daemon.log 2>&1 & disown; sleep 2; pgrep -fl '[d]aemon.py'; tail -n 80 daemon.log"
+  osascript - "$TERMINAL_CMD" <<'OSA' >/dev/null
+on run argv
+  tell application "Terminal"
+    activate
+    do script item 1 of argv
+  end tell
+end run
+OSA
+  sleep 3
+  if pgrep -f "daemon.py" >/dev/null 2>&1; then
+    echo "Daemon started from Terminal."
+    echo "Log: $LOG"
+    echo ""
+    echo "Follow logs:"
+    echo "  tail -f \"$LOG\""
+    exit 0
+  fi
+  echo "Terminal start did not produce a live daemon; falling back to local nohup..."
+fi
+
 echo "Starting daemon with nohup..."
 export PYTHONUNBUFFERED=1
 nohup "$PYTHON" -u daemon.py > "$LOG" 2>&1 &
