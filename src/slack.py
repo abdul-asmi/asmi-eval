@@ -259,6 +259,8 @@ def open_dm_channel(user_id: str) -> str:
 def _is_slack_command(text: str) -> bool:
     """Check if a message looks like a command."""
     t = text.strip().lower()
+    # Slack app mentions arrive as "<@BOTID> command"; treat those like commands.
+    t = __import__("re").sub(r"^(<@[^>]+>\s*)+", "", t).strip()
     if t.startswith("!"):
         return True
     keywords = ["uat", "run ", "rejudge", "status", "list", "help", "add test"]
@@ -376,7 +378,7 @@ def get_bot_channels() -> list[str]:
         res = requests.get(
             "https://slack.com/api/users.conversations",
             headers={"Authorization": f"Bearer {token}"},
-            params={"types": "public_channel,private_channel", "limit": 100},
+            params={"types": "public_channel,private_channel,im,mpim", "limit": 100},
             timeout=15,
         )
         res.raise_for_status()
@@ -384,6 +386,8 @@ def get_bot_channels() -> list[str]:
         if data.get("ok"):
             for ch in data.get("channels", []):
                 ch_id = ch.get("id")
+                if ch.get("is_im") and ch.get("user") == "USLACKBOT":
+                    continue
                 if ch_id:
                     channels.append(ch_id)
         else:

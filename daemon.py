@@ -116,6 +116,12 @@ def _send_reply(text: str):
     send_imessage(text, handle=COMMAND_HANDLE)
 
 
+def _clean_slack_command(text: str) -> str:
+    """Remove Slack mentions/prefixes before routing to the command handler."""
+    cleaned = _re_mod.sub(r"^(<@[^>]+>\s*)+", "", (text or "").strip()).strip()
+    return cleaned.lstrip("!").strip()
+
+
 def _poll_railway() -> dict | None:
     """Check Railway UI for a pending run request. Returns run dict or None."""
     return _poll_railway_full().get("run")
@@ -774,7 +780,7 @@ def run():
                         ch_id = smsg["channel_id"]
                         user_id = smsg.get("user_id", "")
                         
-                        clean = text.lstrip("!").strip()
+                        clean = _clean_slack_command(text)
                         ts_str = datetime.now().strftime("%H:%M:%S")
                         print(f"\n  [{ts_str}] Slack Command received from channel {ch_id}: {text[:80]}")
 

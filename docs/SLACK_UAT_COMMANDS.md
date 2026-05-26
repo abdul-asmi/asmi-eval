@@ -8,10 +8,11 @@ Slack command control is connected.
 - Bot: testing_calls_11labs
 - Listening channel: `#call-testing-11labs`
 - Channel ID: `C0B54EYTW31`
+- Bot DMs: supported when the Mac daemon is running
 - Mac daemon: required and currently the executor for iMessage/chat.db tests
 - Hosted UI source of truth: Render/Supabase test definitions
 
-The Slack bot listens for `!uat ...` commands in channels it is a member of. Final UAT reports go to the command sender's Slack DM when Slack can open the DM. If DM delivery fails, the summary falls back to the command channel.
+The Slack bot listens for `!uat ...` commands in channels it is a member of and in bot DMs. Final UAT reports go to the command sender's Slack DM when Slack can open the DM. If DM delivery fails, the summary falls back to the command channel.
 
 ## Commands
 
