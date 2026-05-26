@@ -32,6 +32,12 @@ def _get_categories() -> set[str]:
 HELP_TEXT = """
 *Asmi Eval Commands*
 
+!uat core             → run PM-approved core suite
+!uat interactive      → open-ended PM break-finding, stop with !uat stop
+!uat interactive X    → focused PM break-finding
+!uat changelog NOTES  → generate changelog-specific interactive UAT
+!uat status           → current UAT state
+!uat last             → resend latest UAT report/artifacts
 !run all              → run full test suite
 !run [category]       → run one category
 !run [test_id]        → run one specific test
@@ -51,10 +57,14 @@ Examples:
 
 # ─── Router ───────────────────────────────────────────────────────────────────
 
-def handle(text: str) -> str:
+def handle(text: str, context: dict | None = None) -> str:
     """Main entry point. Takes raw command text, returns response string."""
     text  = text.strip()
     lower = text.lower().lstrip("!")
+
+    if lower.startswith("uat"):
+        from uat import handle_uat_command
+        return handle_uat_command(lower if lower == text else text.lstrip("!"), context=context)
 
     if lower in ["help", "commands", "menu"]:
         return HELP_TEXT

@@ -226,12 +226,42 @@ def post_message_to_slack(text: str, channel_id: str = None) -> bool:
         return False
 
 
+def open_dm_channel(user_id: str) -> str:
+    """
+    Open or fetch a Slack DM channel for a user ID.
+    Returns an empty string when Slack cannot open the DM.
+    """
+    token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    user_id = (user_id or "").strip()
+    if not token or not user_id:
+        return ""
+
+    try:
+        res = requests.post(
+            "https://slack.com/api/conversations.open",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json={"users": user_id},
+            timeout=15,
+        )
+        res.raise_for_status()
+        data = res.json()
+        if data.get("ok"):
+            return ((data.get("channel") or {}).get("id") or "").strip()
+        print(f"  [Slack] conversations.open failed: {data}")
+    except Exception as e:
+        print(f"  [Slack] Failed to open DM: {e}")
+    return ""
+
+
 def _is_slack_command(text: str) -> bool:
     """Check if a message looks like a command."""
     t = text.strip().lower()
     if t.startswith("!"):
         return True
-    keywords = ["run ", "rejudge", "status", "list", "help", "add test"]
+    keywords = ["uat", "run ", "rejudge", "status", "list", "help", "add test"]
     return any(t.startswith(k) for k in keywords)
 
 
@@ -324,7 +354,7 @@ def poll_slack_commands(last_ts: str | None) -> tuple[list[dict], str | None]:
                 continue
 
             if _is_slack_command(text):
-                new_commands.append({"text": text, "ts": msg_ts})
+                new_commands.append({"text": text, "ts": msg_ts, "user_id": msg.get("user") or ""})
 
         return new_commands, current_last_ts
 
@@ -431,7 +461,12 @@ def poll_slack_commands_multi(channel_last_ts: dict[str, str]) -> tuple[list[dic
                     continue
 
                 if _is_slack_command(text):
-                    new_commands.append({"text": text, "ts": msg_ts, "channel_id": channel_id})
+                    new_commands.append({
+                        "text": text,
+                        "ts": msg_ts,
+                        "channel_id": channel_id,
+                        "user_id": msg.get("user") or "",
+                    })
 
         except Exception as e:
             print(f"  [Slack Polling] Error polling channel {channel_id}: {e}")

@@ -107,7 +107,7 @@ def _is_command(text: str) -> bool:
     if COMMAND_PREFIX and t.startswith(COMMAND_PREFIX.lower()):
         return True
     # Also accept natural-language commands without prefix
-    keywords = ["run ", "rejudge", "status", "list", "help", "add test", "!"]
+    keywords = ["uat", "run ", "rejudge", "status", "list", "help", "add test", "!"]
     return any(t.startswith(k) for k in keywords)
 
 
@@ -772,6 +772,7 @@ def run():
                     for smsg in slack_cmds:
                         text = smsg["text"].strip()
                         ch_id = smsg["channel_id"]
+                        user_id = smsg.get("user_id", "")
                         
                         clean = text.lstrip("!").strip()
                         ts_str = datetime.now().strftime("%H:%M:%S")
@@ -782,7 +783,7 @@ def run():
                         os.environ["SLACK_CHANNEL"] = ch_id
 
                         try:
-                            response = handle(clean)
+                            response = handle(clean, context={"channel_id": ch_id, "slack_user_id": user_id})
                         except Exception as e:
                             response = f"❌ Error executing command: {e}"
 

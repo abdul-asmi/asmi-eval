@@ -4876,6 +4876,17 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(cases)
                 except Exception as e:
                     self._json({"error": str(e)})
+            elif path == "/api/daemon/tests":
+                try:
+                    owner_user_id = self._require_daemon()
+                    if USE_SUPABASE:
+                        token = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+                        cases = load_or_seed_test_cases_supabase(token, owner_user_id)
+                    else:
+                        cases = load_test_cases()
+                    self._json({"ok": True, "test_cases": cases})
+                except Exception as e:
+                    self._json({"ok": False, "error": str(e), "test_cases": []})
             elif path == "/api/tests/template.csv":
                 content = _csv_template_bytes()
                 self._csv(content, filename="test_cases_template.csv")
