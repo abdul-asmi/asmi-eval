@@ -30,6 +30,10 @@ def handle_uat_command(text: str, context: dict | None = None) -> str:
 
     if lower in {"uat", "uat help", "help uat"}:
         return _help()
+    if lower == "uat ping":
+        return _ping(context)
+    if lower == "uat config":
+        return _config(context)
     if lower == "uat core":
         return _run_core(context)
     if lower == "uat status":
@@ -51,11 +55,43 @@ def _help() -> str:
     return "\n".join([
         "*PM UAT commands*",
         "`!uat core` — run PM core tests only",
+        "`!uat ping` — verify Slack → Mac daemon command path",
+        "`!uat config` — show current target, channel, and PM core IDs",
         "`!uat interactive` — open-ended break-finding, stop with `!uat stop`",
         "`!uat interactive <thing>` — focused break-finding",
         "`!uat changelog <release notes>` — generate changelog-specific interactive tests",
         "`!uat status` — current UAT state",
         "`!uat last` — resend latest PM summary and artifacts",
+    ])
+
+
+def _ping(context: dict | None = None) -> str:
+    context = context or {}
+    channel = (context.get("channel_id") or os.environ.get("SLACK_CHANNEL") or "").strip()
+    user_id = (context.get("slack_user_id") or "").strip()
+    return "\n".join([
+        "UAT ping OK.",
+        f"Slack channel: `{channel or 'unknown'}`",
+        f"Slack user captured for DM routing: `{'yes' if user_id else 'no'}`",
+        "Mac daemon: running this command handler now.",
+    ])
+
+
+def _config(context: dict | None = None) -> str:
+    context = context or {}
+    channel = (context.get("channel_id") or os.environ.get("SLACK_CHANNEL") or "").strip()
+    cases = load_test_cases()
+    ids = {str(tc.get("id") or "") for tc in cases}
+    present = [tid for tid in CORE_IDS if tid in ids]
+    missing = [tid for tid in CORE_IDS if tid not in ids]
+    return "\n".join([
+        "UAT config",
+        f"Target: `prod` / `{PROD_HANDLE}`",
+        f"Slack channel: `{channel or 'unknown'}`",
+        f"Loaded tests: `{len(cases)}`",
+        "PM core IDs: `" + "`, `".join(CORE_IDS) + "`",
+        "Core available: `" + "`, `".join(present) + "`" if present else "Core available: none",
+        "Core missing: `" + "`, `".join(missing) + "`" if missing else "Core missing: none",
     ])
 
 
