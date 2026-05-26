@@ -22,7 +22,7 @@ if os.path.exists(_env_path):
 ASMI_HANDLE = "+14082307921"          # Asmi's iMessage number
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-preview").strip()
+GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemma-4-31b-it").strip()
 
 RESPONSE_TIMEOUT   = 30    # default seconds to wait for a single response
 BURST_WAIT         = 30    # default seconds to wait when expecting multiple responses
@@ -117,3 +117,22 @@ CALL_TRANSCRIPT_TIMEOUT  = int(os.environ.get("CALL_TRANSCRIPT_TIMEOUT", "180"))
 # Twilio hard call cap (seconds) for call_eval.
 # This enforces connected call duration by ending the active Twilio call via REST.
 CALL_EVAL_MAX_DURATION = int(os.environ.get("CALL_EVAL_MAX_DURATION", "100"))
+
+# ─── WhatsApp Channel ──────────────────────────────────────────────────────────
+# Uses the Twilio Messaging API to send WhatsApp messages to Asmi for testing.
+# Inbound replies come via the Twilio webhook: POST /api/whatsapp/webhook on Render.
+#
+# Setup:
+#   1. In Twilio Console → Messaging → Senders → WhatsApp Senders
+#      Enable WhatsApp on a number (Sandbox: +14155238886, or your dedicated number)
+#   2. Set the incoming webhook URL to:
+#      https://asmi-eval.onrender.com/api/whatsapp/webhook  (HTTP POST)
+#   3. Set the three env vars below in .env.local AND Render
+
+TWILIO_WHATSAPP_FROM  = os.environ.get("TWILIO_WHATSAPP_FROM",  "").strip()
+WHATSAPP_PROD_HANDLE  = os.environ.get("WHATSAPP_PROD_HANDLE",  "+14086689990").strip()
+WHATSAPP_DEV_HANDLE   = os.environ.get("WHATSAPP_DEV_HANDLE",   "+15551904113").strip()
+WHATSAPP_WARMUP_ENABLED = os.environ.get("WHATSAPP_WARMUP_ENABLED", "0").strip()
+WHATSAPP_WARMUP_TEMPLATE_SID = os.environ.get("WHATSAPP_WARMUP_TEMPLATE_SID", "").strip()
+WHATSAPP_WARMUP_TEMPLATE_VARIABLES = os.environ.get("WHATSAPP_WARMUP_TEMPLATE_VARIABLES", "").strip()
+WHATSAPP_WARMUP_TIMEOUT = int(os.environ.get("WHATSAPP_WARMUP_TIMEOUT", "60"))

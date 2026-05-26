@@ -8,8 +8,9 @@ import hashlib
 import hmac
 import urllib.parse
 
-from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT, CALL_EVAL_MAX_DURATION, COMMAND_HANDLE, RAILWAY_URL, DAEMON_TOKEN
+from config import RESPONSE_TIMEOUT, BURST_WAIT, BURST_SEND_DELAY, SEQUENCE_DELAY, SILENCE_AFTER, CMD_ONBOARD, CATEGORY_RUN_ORDER, JUDGE_DELAY, CALL_EVAL_PHONE, CALL_TRANSCRIPT_TIMEOUT, CALL_EVAL_MAX_DURATION, COMMAND_HANDLE, RAILWAY_URL, DAEMON_TOKEN, WHATSAPP_PROD_HANDLE, WHATSAPP_DEV_HANDLE
 from imessage import send_imessage, wait_for_responses, catch_up_manual_messages
+from whatsapp_channel import send_whatsapp, wait_for_whatsapp_responses, catch_up_whatsapp_messages, ensure_whatsapp_session
 from judge import judge_status, judge_with_context, judge_response_count
 from elevenlabs_phone import list_recent_conversations, wait_for_call_transcript
 from twilio_phone import twilio_configured, newest_active_call_sid, end_call
@@ -615,6 +616,29 @@ def collect(tc: dict) -> dict:
     }
     stopped_early = False
 
+    # ── Channel routing ──────────────────────────────────────────────────────
+    # Resolve send / wait helpers based on tc['channel'] (default: imessage).
+    # All test types use send_fn / wait_fn / catch_up_fn so existing tests are
+    # completely unaffected — they still run over iMessage.
+    _channel = (tc.get("channel") or "imessage").lower().strip()
+    _asmi_target = (os.environ.get("ASMI_TARGET") or os.environ.get("ASMI_HANDLE") or "").strip()
+    if _channel == "whatsapp":
+        # Pick prod or dev WhatsApp handle based on the target env
+        _wa_handle = WHATSAPP_PROD_HANDLE if "prod" in _asmi_target else WHATSAPP_DEV_HANDLE
+        _wa_handle = tc.get("whatsapp_handle") or _wa_handle  # test-level override
+        send_fn       = lambda msg: send_whatsapp(msg, _wa_handle)
+        wait_fn       = lambda sent_at, **kw: wait_for_whatsapp_responses(sent_at, handle=_wa_handle, **kw)
+        catch_up_fn   = lambda sent_at, seen_keys: catch_up_whatsapp_messages(sent_at, seen_keys, handle=_wa_handle)
+        result["channel"] = "whatsapp"
+        result["whatsapp_handle"] = _wa_handle
+        print(f"  [channel=whatsapp] target handle: {_wa_handle}")
+    else:
+        send_fn     = send_imessage
+        wait_fn     = wait_for_responses
+        catch_up_fn = catch_up_manual_messages
+        result["channel"] = "imessage"
+    # ─────────────────────────────────────────────────────────────────────────
+
     if test_type == "single":
         if _stop_requested():
             stopped_early = True
@@ -631,15 +655,15 @@ def collect(tc: dict) -> dict:
         max_responses = int(tc.get("max_responses") or max(10, expected + 6))
 
         result["tasks_sent"] = [msg]
-        print(f"  → {msg[:80]}")
+        print(f"  --> {msg[:80]}")
         sent_at = datetime.now(timezone.utc)
-        ok = send_imessage(msg)
+        ok = send_fn(msg)
         if not ok:
             result["responses"] = []
             result["transcript"] = reconstruct_transcript(sent_at, [], default_user=msg)
         else:
             is_cmd = msg.strip().startswith("cmd_")
-            raw = wait_for_responses(
+            raw = wait_fn(
                 sent_at,
                 count=expected,
                 timeout=10 if is_cmd else wait,
@@ -670,8 +694,8 @@ def collect(tc: dict) -> dict:
             sent_at = datetime.now(timezone.utc)
             if session_start is None:
                 session_start = sent_at
-            print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
-            ok = send_imessage(msg)
+            print(f"  --> Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
+            ok = send_fn(msg)
             if not ok:
                 stopped_early = True
                 result["reason"] = f"Send failed at burst message {i+1}/{len(msgs)}."
@@ -720,7 +744,7 @@ def collect(tc: dict) -> dict:
             return result
         print(f"  → Setup: {setup}")
         setup_sent = datetime.now(timezone.utc)
-        setup_ok = send_imessage(setup)
+        setup_ok = send_fn(setup)
         if not setup_ok:
             stopped_early = True
             result["reason"] = "Send failed for setup message."
@@ -748,7 +772,7 @@ def collect(tc: dict) -> dict:
                 stopped_early = True
                 break
             print(f"  → Sending [{i+1}/{len(msgs)}]: {msg[:70]}")
-            ok = send_imessage(msg)
+            ok = send_fn(msg)
             if not ok:
                 stopped_early = True
                 result["reason"] = f"Send failed at burst message {i+1}/{len(msgs)}."
@@ -1066,7 +1090,7 @@ def collect(tc: dict) -> dict:
                         stop_event=twilio_watchdog_stop,
                     )
 
-            ok = send_imessage(msg)
+            ok = send_fn(msg)
             if ok:
                 is_cmd = msg.strip().startswith("cmd_")
                 is_last_call_eval = (test_type == "call_eval" and i == len(msgs) - 1 and not is_cmd)
@@ -1077,8 +1101,8 @@ def collect(tc: dict) -> dict:
                     # background by background_analyzer.py so the daemon loop
                     # is freed immediately to answer Slack commands.
                     print("  ⚡ call_eval last step — handing off to background analyzer after quick capture…")
-                    raw = wait_for_responses(
-                        session_start,
+                    raw = wait_fn(
+                        sent_at=session_start,
                         count=1,
                         timeout=8,
                         max_responses=max_responses,
@@ -1088,8 +1112,8 @@ def collect(tc: dict) -> dict:
                         seen_keys=seen_keys,
                     )
                 else:
-                    raw = wait_for_responses(
-                        session_start,
+                    raw = wait_fn(
+                        sent_at=session_start,
                         count=1,
                         timeout=10 if is_cmd else wait,
                         max_responses=max_responses,
@@ -1298,13 +1322,18 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
         to_run = [t for t in to_run if t["category"] != "interactive"]
         to_run = _sort_by_priority(list(to_run))
 
+    channels = {(t.get("channel") or "imessage").lower().strip() for t in to_run}
+    channel_label = "mixed" if len(channels) > 1 else next(iter(channels), "imessage")
+
     print(f"\n{'═'*65}")
     print(f"  ASMI EVAL — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     if running_all:
         print(f"  Priority order: {', '.join(CATEGORY_RUN_ORDER[:5])}…")
-    print(f"  Phase 1: Sending {len(to_run)} test(s) via iMessage")
+    print(f"  Phase 1: Sending {len(to_run)} test(s) via {channel_label}")
     print(f"  Phase 2: Batch judging at the end (Gemini free tier safe)")
     print(f"{'═'*65}")
+
+    warmed_whatsapp_handles: set[str] = set()
 
     # Phase 1 — send all, collect responses
     results      = []
@@ -1318,9 +1347,10 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
             break
 
         cat = tc["category"]
+        channel = (tc.get("channel") or "imessage").lower().strip()
 
         # Before the first onboarding test in a full run, reset Asmi to fresh state
-        if running_all and cat == "onboarding" and last_category != "onboarding":
+        if running_all and channel != "whatsapp" and cat == "onboarding" and last_category != "onboarding":
             # Avoid double-sending cmd_onboard if the first onboarding test
             # already starts with it.
             first_msg = (_messages_to_send(tc)[:1] or [""])[0]
@@ -1331,6 +1361,14 @@ def run_all(test_cases: list[dict], filter_category: str = None, filter_categori
                 send_imessage(CMD_ONBOARD)
                 print(f"  Waiting 10s for Asmi to reset…")
                 time.sleep(10)
+
+        if channel == "whatsapp":
+            target_key = (os.environ.get("ASMI_TARGET") or os.environ.get("ASMI_HANDLE") or "").strip().lower()
+            wa_handle = tc.get("whatsapp_handle") or (WHATSAPP_PROD_HANDLE if "prod" in target_key else WHATSAPP_DEV_HANDLE)
+            if wa_handle and wa_handle not in warmed_whatsapp_handles:
+                print(f"\n  ━━━ WhatsApp warmup for {wa_handle} ━━━")
+                ensure_whatsapp_session(wa_handle)
+                warmed_whatsapp_handles.add(wa_handle)
 
         # Print a separator when switching categories
         if cat != last_category:

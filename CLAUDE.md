@@ -171,7 +171,7 @@ To add a new category: add it to `test_cases.py` and to the `CATEGORIES` dict in
 - `RESPONSE_TIMEOUT = 150` — seconds to wait for a single response
 - `BURST_WAIT = 240` — seconds to wait for multiple responses
 - `POLL_INTERVAL = 3` — how often chat.db is polled
-- `GEMINI_MODEL = "models/gemini-3.1-flash-lite-preview"` — judge model
+- `GEMINI_MODEL = "models/gemma-4-31b-it"` — judge model
 
 For slow call tests, override per-test with `"wait": 180` or more.
 

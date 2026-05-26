@@ -1,5 +1,5 @@
 # ─── Gemini LLM Judge ─────────────────────────────────────────────────────────
-# Uses google-genai SDK with gemini-3.1-flash-lite-preview
+# Uses google-genai SDK with gemma-4-31b-it
 
 import google.genai as genai
 import os
@@ -27,7 +27,6 @@ unless the pass_criteria explicitly asks you to judge the command behavior.
 Known control commands (examples):
 - cmd_onboard: restart onboarding flow (quirks: may not reset timezone/name)
 - cmd_onboard_skip: skip pre-onboarding (often run twice)
-- cmd_reset_history: clear chat messages (profile preserved)
 - cmd_message_then_call_mode: switch mode for check-in/reminder tests
 - cmd_message_only_mode: switch to message-only (no calls)
 - cmd_call_audio_test: generate a random call audio test

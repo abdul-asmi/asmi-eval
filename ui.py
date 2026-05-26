@@ -19,6 +19,7 @@ Optional:
 
 import ast
 import base64
+import contextlib
 import csv
 import glob
 import hashlib
@@ -29,6 +30,7 @@ import re
 import io
 import subprocess
 import sys
+import threading
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -44,6 +46,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src
 import google.genai as genai
 from report import generate as generate_report, generate_pdf as generate_report_pdf
 from test_case_store import _extract_test_cases
+from runner import run_all as run_eval_cases
+from whatsapp_channel import enqueue_inbound
 from supabase_helpers import (
     SupabaseError,
     SUPABASE_ANON_KEY,
@@ -63,7 +67,7 @@ from supabase_helpers import (
     verify_supabase_jwt,
 )
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemini-3.1-flash-lite-preview")
+GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "models/gemma-4-31b-it")
 
 _client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
@@ -135,6 +139,7 @@ _run_progress    = {}     # dict {current_test, current_category, completed, tot
 _run_queue       = []     # ordered list of {id, name, category, status}
 _skip_requested  = set()  # test IDs to skip before they start
 _daemon_logs_buffer = ""  # in-memory buffer of recent daemon logs
+_hosted_whatsapp_threads = {}  # run_id/local key -> thread
 
 
 USE_SUPABASE = bool((SUPABASE_URL or "").strip())
@@ -311,6 +316,167 @@ def _single_user_owner_id(preferred: str = "") -> str:
     if status < 300 and isinstance(rows, list) and rows and rows[0].get("owner_user_id"):
         return str(rows[0]["owner_user_id"])
     raise SupabaseError("No single-user owner found. Set ASMI_OWNER_USER_ID in Render.")
+
+
+def _selected_tests_from_request(data: dict, test_cases_snapshot: list[dict]) -> list[dict]:
+    ids = data.get("ids")
+    ids = [str(x).strip() for x in ids if str(x).strip()] if isinstance(ids, list) else None
+    rid = (str(data.get("id")).strip() if data.get("id") is not None else None) or None
+    cat = (str(data.get("category")).strip() if data.get("category") is not None else None) or None
+    cats = data.get("categories")
+    cats = [str(x).strip() for x in cats if str(x).strip()] if isinstance(cats, list) else None
+
+    selected = list(test_cases_snapshot or [])
+    if ids:
+        selected = [t for t in selected if str(t.get("id") or "") in ids]
+    if rid:
+        selected = [t for t in selected if str(t.get("id") or "") == rid]
+    if cats:
+        selected = [t for t in selected if str(t.get("category") or "") in cats]
+    if cat:
+        selected = [t for t in selected if str(t.get("category") or "") == cat]
+    return selected
+
+
+def _is_whatsapp_only_selection(data: dict, test_cases_snapshot: list[dict]) -> bool:
+    selected = _selected_tests_from_request(data, test_cases_snapshot)
+    return bool(selected) and all((t.get("channel") or "imessage").strip().lower() == "whatsapp" for t in selected)
+
+
+class _ThreadLog:
+    def __init__(self, on_update=None):
+        self._parts = []
+        self._lock = threading.Lock()
+        self._last_flush = 0.0
+        self._on_update = on_update
+
+    def write(self, text):
+        if not text:
+            return
+        with self._lock:
+            self._parts.append(str(text))
+            should_flush = self._on_update and (time.time() - self._last_flush) > 2.0
+            if should_flush:
+                self._last_flush = time.time()
+                snapshot = "".join(self._parts)
+        if should_flush:
+            self._on_update(snapshot)
+
+    def flush(self):
+        pass
+
+    def text(self) -> str:
+        with self._lock:
+            return "".join(self._parts)
+
+
+def _run_hosted_whatsapp_eval(
+    *,
+    run_id: str,
+    owner_user_id: str,
+    selection: dict,
+    test_cases_snapshot: list[dict],
+    asmi_target: str,
+    asmi_handle: str,
+):
+    """
+    Run WhatsApp tests inside this hosted UI process so Twilio webhooks and the
+    runner share the same in-memory inbound queue.
+    """
+    global _run_output, _run_status, _run_started, _run_report_html, _run_results, _run_result_stem, _run_progress
+
+    def _patch_running_output(out: str):
+        global _run_output
+        if USE_SUPABASE and run_id:
+            try:
+                sb_service_patch(
+                    "/rest/v1/runs",
+                    params={"id": f"eq.{run_id}", "owner_user_id": f"eq.{owner_user_id}"},
+                    json_body={"output": out, "status": "running"},
+                )
+            except Exception:
+                pass
+        else:
+            _run_output = out
+
+    log = _ThreadLog(on_update=_patch_running_output)
+    old_env = {
+        "ASMI_TARGET": os.environ.get("ASMI_TARGET"),
+        "ASMI_HANDLE": os.environ.get("ASMI_HANDLE"),
+        "ASMI_TEST_CASES_JSON": os.environ.get("ASMI_TEST_CASES_JSON"),
+    }
+    try:
+        os.environ["ASMI_TARGET"] = asmi_target or ""
+        os.environ["ASMI_HANDLE"] = asmi_handle or ""
+        os.environ["ASMI_TEST_CASES_JSON"] = json.dumps(test_cases_snapshot)
+
+        if not USE_SUPABASE:
+            _run_status = "running"
+            _run_started = time.time()
+            _run_progress = {}
+
+        with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+            results = run_eval_cases(
+                test_cases_snapshot,
+                filter_category=selection.get("category"),
+                filter_categories=selection.get("categories"),
+                filter_id=selection.get("id"),
+                filter_ids=selection.get("ids"),
+            )
+        results = _annotate_results_target(results, asmi_target, asmi_handle)
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        report_path = os.path.join(REPORTS_DIR, f"hosted_whatsapp_report_{run_id or _et_now_str('%Y%m%d_%H%M%S')}.html")
+        generate_report(results, output_path=report_path, asmi_target=asmi_target, asmi_handle=asmi_handle)
+        try:
+            with open(report_path, encoding="utf-8") as f:
+                report_html = f.read()
+        except Exception:
+            report_html = ""
+        output = log.text()
+        status_str = "done"
+    except Exception as e:
+        results = []
+        report_html = ""
+        output = log.text() + f"\nHosted WhatsApp run failed: {e}\n"
+        status_str = "failed"
+
+    if USE_SUPABASE and run_id:
+        try:
+            sb_service_patch(
+                "/rest/v1/runs",
+                params={"id": f"eq.{run_id}", "owner_user_id": f"eq.{owner_user_id}"},
+                json_body={
+                    "status": status_str,
+                    "output": output,
+                    "results": results,
+                    "report_html": report_html,
+                    "ended_at": iso_utc_now(),
+                },
+            )
+        except Exception:
+            pass
+    else:
+        _run_output = output
+        _run_status = status_str
+        _run_report_html = report_html
+        _run_results = results
+        _run_result_stem = _et_now_str("%Y%m%d_%H%M%S")
+        if results:
+            _persist_run_artifacts(_run_result_stem, results, report_html, asmi_target, asmi_handle)
+
+    for key, value in old_env.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+
+def _start_hosted_whatsapp_eval(**kwargs):
+    run_key = kwargs.get("run_id") or f"local-{int(time.time())}"
+    thread = threading.Thread(target=_run_hosted_whatsapp_eval, kwargs=kwargs, daemon=True)
+    _hosted_whatsapp_threads[run_key] = thread
+    thread.start()
+    return run_key
 
 
 def load_test_cases_supabase(token: str) -> list[dict]:
@@ -1575,6 +1741,13 @@ textarea { resize: vertical; min-height: 70px; }
           <option value="call_eval">call_eval</option>
         </select>
       </div>
+      <div>
+        <label>Channel</label>
+        <select id="new_channel">
+          <option value="imessage" selected>iMessage</option>
+          <option value="whatsapp">WhatsApp</option>
+        </select>
+      </div>
       <div class="form-full" id="new_msg_wrap">
         <label>Message</label>
         <input type="text" id="new_message" placeholder="Exact iMessage to send to Asmi">
@@ -1778,7 +1951,7 @@ textarea { resize: vertical; min-height: 70px; }
       </ul>
 
       <div style="font-weight:800;margin:12px 0 6px;">List formatting in cells</div>
-      <div style="margin-bottom:12px;">For <code>messages</code>, <code>followups</code>, <code>stop_when</code>: use multiple lines in the cell (best) or separate items with <code>|</code>. (Commas also work for <code>stop_when</code>.) If you ever edit <code>test_cases.py</code> by hand, don’t paste raw newlines inside single-quoted strings — use <code>\\n</code> instead (example: <code>'cmd_reset_history\\nNeed to plan a party'</code>).</div>
+      <div style="margin-bottom:12px;">For <code>messages</code>, <code>followups</code>, <code>stop_when</code>: use multiple lines in the cell (best) or separate items with <code>|</code>. (Commas also work for <code>stop_when</code>.) If you ever edit <code>test_cases.py</code> by hand, don’t paste raw newlines inside single-quoted strings — use <code>\\n</code> instead.</div>
 
       <div style="font-weight:800;margin:12px 0 6px;">Timing defaults</div>
       <div style="margin-bottom:12px;">If a test row has no <code>wait</code>, the default timeout is <b>60 seconds</b>. You can override per test with the <code>wait</code> column. Other knobs include <code>burst_delay</code>, <code>sequence_delay</code>, <code>dedup_delay</code>, <code>setup_wait</code>.</div>
@@ -1798,11 +1971,6 @@ textarea { resize: vertical; min-height: 70px; }
           <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_onboard_skip</div>
           <div style="flex:1;">Skips pre-onboarding. Run it twice (send, wait for response, send again) before testing adhoc call flows.</div>
           <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_onboard_skip')">Copy</button>
-        </div>
-        <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
-          <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_reset_history</div>
-          <div style="flex:1;">Clears all messages from current chat session. Preserves user profile and call history.</div>
-          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_reset_history')">Copy</button>
         </div>
         <div style="display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
           <div style="font-family:monospace;font-weight:700;min-width:210px;">cmd_message_then_call_mode</div>
@@ -1835,7 +2003,7 @@ textarea { resize: vertical; min-height: 70px; }
           <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText('cmd_el_voice_call')">Copy</button>
         </div>
         <div style="display:flex;gap:10px;align-items:center;">
-          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText(['cmd_onboard','cmd_onboard_skip','cmd_reset_history','cmd_message_then_call_mode','cmd_message_only_mode','cmd_call_audio_test','cmd_user_call_legal','cmd_el_voice','cmd_el_voice_call'].join('\\n'))">Copy all</button>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:3px 10px;" onclick="copyText(['cmd_onboard','cmd_onboard_skip','cmd_message_then_call_mode','cmd_message_only_mode','cmd_call_audio_test','cmd_user_call_legal','cmd_el_voice','cmd_el_voice_call'].join('\\n'))">Copy all</button>
           <span style="color:#64748b;font-size:0.82rem;">(Paste into your <code>message</code>/<code>messages</code> cells.)</span>
         </div>
       </div>
@@ -2448,6 +2616,12 @@ function renderRow(t, cat) {
                 .map(tp=>`<option value="${tp}" ${t.type===tp?'selected':''}>${tp}</option>`).join('')}
             </select>
           </div>
+          <div><label>Channel</label>
+            <select onchange="update(${idx},'channel',this.value==='imessage'?undefined:this.value)">
+              <option value="imessage" ${((t.channel||'imessage')==='imessage')?'selected':''}>iMessage</option>
+              <option value="whatsapp" ${(t.channel==='whatsapp')?'selected':''}>WhatsApp</option>
+            </select>
+          </div>
           ${t.start_message !== undefined || t.type === 'interactive' ? `
           <div class="form-full"><label>Start Message</label>
             <input type="text" value="${esc(t.start_message || t.message || '')}" oninput="update(${idx},'start_message',this.value||undefined)">
@@ -2646,6 +2820,7 @@ function toggleNew() {
     document.getElementById('new_precondition').value = '';
     document.getElementById('new_manual_check').value = '';
     document.getElementById('new_type').value = 'single';
+    document.getElementById('new_channel').value = 'imessage';
     document.getElementById('new_auto_continue').value = 'true';
     document.getElementById('new_max_turns').value = '';
     document.getElementById('new_stop_when').value = '';
@@ -2675,6 +2850,8 @@ function addNew() {
     type:         type,
     pass_criteria: document.getElementById('new_pass_criteria').value.trim(),
   };
+  const channel = document.getElementById('new_channel').value;
+  if (channel && channel !== 'imessage') tc.channel = channel;
   if (['burst','sequence','burst_with_setup','call_eval'].includes(type)) {
     tc.messages = document.getElementById('new_messages').value.split('\\n').map(s=>s.trim()).filter(Boolean);
     const waitVal = document.getElementById('new_wait_preset').value;
@@ -5490,7 +5667,29 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         global _pending_run, _last_heartbeat, _run_output, _run_status, _run_started, _run_report_html, _run_results, _run_result_stem, _stop_requested, _run_progress, _run_queue, _skip_requested
         path = urlparse(self.path).path
-        if path == "/api/tests":
+        if path == "/api/whatsapp/webhook":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8", errors="replace")
+            ctype = (self.headers.get("Content-Type") or "").lower()
+            try:
+                if "application/json" in ctype:
+                    payload = json.loads(body) if body.strip() else {}
+                else:
+                    parsed = urllib.parse.parse_qs(body)
+                    payload = {k: (v[0] if isinstance(v, list) and v else "") for k, v in parsed.items()}
+                text = str(payload.get("Body") or payload.get("body") or "").strip()
+                from_number = str(payload.get("From") or payload.get("from") or "").replace("whatsapp:", "").strip()
+                if text and from_number:
+                    enqueue_inbound(text, from_number)
+                    print(f"  [WhatsApp webhook] inbound from {from_number}: {text[:80]}")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/xml; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(b"<Response></Response>")
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+        elif path == "/api/tests":
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
             try:
@@ -5642,6 +5841,7 @@ class Handler(BaseHTTPRequestHandler):
                     test_cases_snapshot = load_test_cases()
             except Exception:
                 test_cases_snapshot = []
+            hosted_whatsapp = _is_whatsapp_only_selection(data, test_cases_snapshot)
             if USE_SUPABASE:
                 token, uid = self._require_user()
                 # Intentionally optimistic to avoid false "daemon offline" warnings.
@@ -5671,8 +5871,9 @@ class Handler(BaseHTTPRequestHandler):
                     token=token,
                     json_body=[{
                         "owner_user_id": uid,
-                        "status": "queued",
+                        "status": "running" if hosted_whatsapp else "queued",
                         "trigger": "manual",
+                        "started_at": iso_utc_now() if hosted_whatsapp else None,
                         "asmi_target": asmi_target,
                         "asmi_handle": asmi_handle,
                         "selection": selection,
@@ -5687,8 +5888,36 @@ class Handler(BaseHTTPRequestHandler):
                 if status >= 300 or not isinstance(inserted, list) or not inserted:
                     raise SupabaseError(f"Failed to enqueue run: {inserted}")
                 run_id = inserted[0].get("id")
+                if hosted_whatsapp:
+                    _start_hosted_whatsapp_eval(
+                        run_id=run_id,
+                        owner_user_id=uid,
+                        selection=selection,
+                        test_cases_snapshot=test_cases_snapshot,
+                        asmi_target=asmi_target or "",
+                        asmi_handle=asmi_handle or "",
+                    )
                 self._json({"ok": True, "run_id": run_id, "mac_online": mac_online, "asmi_target": asmi_target, "asmi_handle": asmi_handle, "queue": []})
             else:
+                selection = {
+                    "category": cat,
+                    "categories": cats,
+                    "id": rid,
+                    "ids": ids,
+                    "interactive_auto_continue": bool(data.get("interactive_auto_continue", True)),
+                }
+                if hosted_whatsapp:
+                    run_key = f"local-{int(time.time())}"
+                    _start_hosted_whatsapp_eval(
+                        run_id=run_key,
+                        owner_user_id="",
+                        selection=selection,
+                        test_cases_snapshot=test_cases_snapshot,
+                        asmi_target=asmi_target or "",
+                        asmi_handle=asmi_handle or "",
+                    )
+                    self._json({"ok": True, "mac_online": True, "asmi_target": asmi_target, "asmi_handle": asmi_handle, "queue": []})
+                    return
                 _run_queue = _build_run_queue(data)
                 _skip_requested = set()
                 _pending_run = {

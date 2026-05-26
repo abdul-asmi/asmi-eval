@@ -14,6 +14,9 @@ The web UI can't send iMessages itself. Your Mac's Messages app does the sending
 - Python 3.10+ (check with `python3 --version`)
 - Terminal with **Full Disk Access** (one-time system setting)
 
+For WhatsApp-only evals, the Mac is not required. The hosted Render service sends
+through Twilio and receives replies through a Twilio webhook.
+
 ---
 
 ## Step 1 — Clone the repo
@@ -151,3 +154,38 @@ rm ~/Library/LaunchAgents/com.asmi.eval.daemon.plist
 ## Once it's running
 
 Go to [asmi-eval.onrender.com](https://asmi-eval.onrender.com), pick a test or category, and click **Run**. The daemon on your Mac will pick it up, send the iMessages, and post results back to the UI within a few minutes.
+
+---
+
+## WhatsApp Cloud Evals
+
+WhatsApp evals run fully on Render when every selected test has
+`channel: "whatsapp"`. Mixed or iMessage selections still use the Mac daemon.
+
+Set these Render environment variables:
+
+```bash
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+TWILIO_WHATSAPP_FROM=+your_business_whatsapp_number
+WHATSAPP_DEV_HANDLE=+asmi_dev_whatsapp_number
+WHATSAPP_PROD_HANDLE=+asmi_prod_whatsapp_number
+```
+
+In Twilio, set the WhatsApp sender inbound webhook to:
+
+```text
+https://asmi-eval.onrender.com/api/whatsapp/webhook
+```
+
+If evals may start outside the WhatsApp 24-hour customer service window, add an
+approved warmup template:
+
+```bash
+WHATSAPP_WARMUP_ENABLED=1
+WHATSAPP_WARMUP_TEMPLATE_SID=HX...
+WHATSAPP_WARMUP_TIMEOUT=60
+```
+
+The warmup template is sent first. Asmi must reply to it; that inbound reply is
+what opens the 24-hour freeform window for the real eval messages.

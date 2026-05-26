@@ -45,12 +45,39 @@ Set your Gemini key as an environment variable before running the tools:
 
 ```bash
 export GEMINI_API_KEY="your-new-gemini-api-key"
-export GEMINI_MODEL="models/gemini-3.1-flash-lite-preview"
+export GEMINI_MODEL="models/gemma-4-31b-it"
 ```
 
 `src/config.py` now reads `GEMINI_API_KEY` from the environment instead of storing it in the repo.
 
 `RAILWAY_URL` is now read from the environment and defaults to the deployed Railway app URL, so completed runs can sync back to the hosted UI automatically. Set `RAILWAY_URL=""` if you want to disable that remote sync for a local-only session.
+
+### WhatsApp evals
+
+Tests with `channel: "whatsapp"` run on the hosted UI directly, so they do not
+need the Mac daemon or iMessage access. Configure Render with:
+
+```bash
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+TWILIO_WHATSAPP_FROM=+your_business_whatsapp_number
+WHATSAPP_DEV_HANDLE=+asmi_dev_whatsapp_number
+WHATSAPP_PROD_HANDLE=+asmi_prod_whatsapp_number
+```
+
+Set the Twilio WhatsApp inbound webhook to:
+
+```text
+https://asmi-eval.onrender.com/api/whatsapp/webhook
+```
+
+Optional template warmup for runs outside the 24-hour WhatsApp window:
+
+```bash
+WHATSAPP_WARMUP_ENABLED=1
+WHATSAPP_WARMUP_TEMPLATE_SID=HX...
+WHATSAPP_WARMUP_TIMEOUT=60
+```
 
 ---
 
@@ -285,7 +312,7 @@ File: `config.py`
 |---|---|---|
 | `ASMI_HANDLE` | `+14082307921` | Asmi's iMessage number |
 | `GEMINI_API_KEY` | `AIzaSy...` | Gemini API key (AI Studio) |
-| `GEMINI_MODEL` | `models/gemini-3.1-flash-lite-preview` | Gemini model to use |
+| `GEMINI_MODEL` | `models/gemma-4-31b-it` | Gemini model to use |
 | `RESPONSE_TIMEOUT` | `150` | Seconds to wait for a single response |
 | `BURST_WAIT` | `240` | Seconds to wait when expecting multiple responses |
 | `POLL_INTERVAL` | `3` | Seconds between `chat.db` polls |
