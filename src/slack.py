@@ -258,13 +258,12 @@ def open_dm_channel(user_id: str) -> str:
 
 def _is_slack_command(text: str) -> bool:
     """Check if a message looks like a command."""
-    t = text.strip().lower()
+    t = (text or "").strip().lower()
     # Slack app mentions arrive as "<@BOTID> command"; treat those like commands.
     t = __import__("re").sub(r"^(<@[^>]+>\s*)+", "", t).strip()
-    if t.startswith("!"):
-        return True
-    keywords = ["uat", "run ", "rejudge", "status", "list", "help", "add test"]
-    return any(t.startswith(k) for k in keywords)
+    # In Slack, require an explicit "!" prefix so bot replies like "UAT ping OK"
+    # never get re-consumed as commands.
+    return t.startswith("!")
 
 
 def get_latest_slack_ts(channel_id: str = None) -> str | None:
@@ -347,12 +346,13 @@ def poll_slack_commands(last_ts: str | None) -> tuple[list[dict], str | None]:
             if last_ts and float(msg_ts) <= float(last_ts):
                 continue
 
-            # Ignore bot messages to avoid feedback loops
-            if msg.get("bot_id") or msg.get("subtype") or "bot" in msg.get("user", "").lower():
-                continue
-
             text = msg.get("text", "").strip()
             if not text:
+                continue
+
+            # Ignore bot messages unless they are explicit commands.
+            # This lets us self-test end-to-end by posting `!uat ...` via the bot token.
+            if (msg.get("bot_id") or msg.get("subtype") or "bot" in (msg.get("user", "") or "").lower()) and not _is_slack_command(text):
                 continue
 
             if _is_slack_command(text):
@@ -456,15 +456,14 @@ def poll_slack_commands_multi(channel_last_ts: dict[str, str]) -> tuple[list[dic
                 if last_ts and float(msg_ts) <= float(last_ts):
                     continue
 
-                # Ignore bot messages to avoid feedback loops
-                if msg.get("bot_id") or msg.get("subtype") or "bot" in msg.get("user", "").lower():
-                    continue
-
                 text = msg.get("text", "").strip()
                 if not text:
                     continue
 
                 if _is_slack_command(text):
+                    # Ignore bot messages unless they are explicit commands.
+                    if (msg.get("bot_id") or msg.get("subtype") or "bot" in (msg.get("user", "") or "").lower()) and not _is_slack_command(text):
+                        continue
                     new_commands.append({
                         "text": text,
                         "ts": msg_ts,
