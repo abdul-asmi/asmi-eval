@@ -16,7 +16,12 @@ from imessage import send_imessage, wait_for_responses
 from test_case_store import load_test_cases
 
 CORE_IDS = ["core_02v1", "core_03v1", "core_04v1", "core_05v1"]
+TARGETS = {
+    "prod": "+14082303488",
+    "dev": "+14082307921",
+}
 PROD_HANDLE = "+14082303488"
+UAT_SETTINGS_PATH = Path(REPORTS_DIR) / "uat_settings.json"
 
 _ACTIVE_LOCK = threading.Lock()
 _ACTIVE: dict | None = None
@@ -30,12 +35,19 @@ def handle_uat_command(text: str, context: dict | None = None) -> str:
 
     if lower in {"uat", "uat help", "help uat"}:
         return _help()
+    if lower.startswith("uat target"):
+        target = arg[len("uat target"):].strip()
+        return _set_target(target)
     if lower == "uat ping":
         return _ping(context)
     if lower == "uat config":
         return _config(context)
-    if lower == "uat core":
-        return _run_core(context)
+    if lower.startswith("uat core"):
+        target = arg[len("uat core"):].strip()
+        return _run_core(context, target)
+    if lower.startswith("uat test"):
+        remainder = arg[len("uat test"):].strip()
+        return _run_single_test(context, remainder)
     if lower == "uat status":
         return _status()
     if lower == "uat last":
@@ -55,6 +67,9 @@ def _help() -> str:
     return "\n".join([
         "*PM UAT commands*",
         "`!uat core` — run PM core tests only",
+        "`!uat core <prod|dev>` — run PM core against a specific target",
+        "`!uat test <test_id> [prod|dev]` — run one test by ID",
+        "`!uat target <prod|dev>` — set the default UAT target",
         "`!uat ping` — verify Slack → Mac daemon command path",
         "`!uat config` — show current target, channel, and PM core IDs",
         "`!uat interactive` — open-ended break-finding, stop with `!uat stop`",
@@ -77,16 +92,53 @@ def _ping(context: dict | None = None) -> str:
     ])
 
 
+def _load_settings() -> dict:
+    if UAT_SETTINGS_PATH.exists():
+        try:
+            data = json.loads(UAT_SETTINGS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    return {"target": "prod"}
+
+
+def _save_settings(settings: dict) -> None:
+    Path(REPORTS_DIR).mkdir(exist_ok=True)
+    UAT_SETTINGS_PATH.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+
+
+def _resolve_target(requested: str = "") -> tuple[str, str]:
+    clean = (requested or "").strip().lower()
+    if clean in TARGETS:
+        return clean, TARGETS[clean]
+    saved = str(_load_settings().get("target") or "prod").strip().lower()
+    if saved in TARGETS:
+        return saved, TARGETS[saved]
+    return "prod", TARGETS["prod"]
+
+
+def _set_target(target: str) -> str:
+    key = (target or "").strip().lower()
+    if key not in TARGETS:
+        return "Usage: `!uat target prod` or `!uat target dev`"
+    settings = _load_settings()
+    settings["target"] = key
+    _save_settings(settings)
+    return f"Default UAT target set to `{key}` / `{TARGETS[key]}`."
+
+
 def _config(context: dict | None = None) -> str:
     context = context or {}
     channel = (context.get("channel_id") or os.environ.get("SLACK_CHANNEL") or "").strip()
+    target_key, target_handle = _resolve_target()
     cases = load_test_cases()
     ids = {str(tc.get("id") or "") for tc in cases}
     present = [tid for tid in CORE_IDS if tid in ids]
     missing = [tid for tid in CORE_IDS if tid not in ids]
     return "\n".join([
         "UAT config",
-        f"Target: `prod` / `{PROD_HANDLE}`",
+        f"Target: `{target_key}` / `{target_handle}`",
         f"Slack channel: `{channel or 'unknown'}`",
         f"Loaded tests: `{len(cases)}`",
         "PM core IDs: `" + "`, `".join(CORE_IDS) + "`",
@@ -98,15 +150,7 @@ def _config(context: dict | None = None) -> str:
 def _slack_targets(context: dict | None) -> tuple[str, str]:
     context = context or {}
     source = (context.get("channel_id") or os.environ.get("SLACK_CHANNEL", "")).strip()
-    user_id = (context.get("slack_user_id") or "").strip()
-    dm = ""
-    if user_id:
-        try:
-            from slack import open_dm_channel
-            dm = open_dm_channel(user_id)
-        except Exception:
-            dm = ""
-    return dm or source, source
+    return source, source
 
 
 def _post_to_slack(text: str, channel_id: str) -> bool:
@@ -125,7 +169,7 @@ def _upload_to_slack(path: str, title: str, channel_id: str, comment: str = "") 
         return False
 
 
-def _run_core(context: dict) -> str:
+def _run_core(context: dict, requested_target: str = "") -> str:
     cases = load_test_cases()
     by_id = {str(t.get("id")): t for t in cases}
     missing = [tid for tid in CORE_IDS if tid not in by_id]
@@ -136,19 +180,22 @@ def _run_core(context: dict) -> str:
             + "\nCore is intentionally exact; I did not substitute other tests."
         )
 
-    dm, source = _slack_targets(context)
+    target_key, target_handle = _resolve_target(requested_target)
+    channel, source = _slack_targets(context)
     with _ACTIVE_LOCK:
         if _ACTIVE:
             return "❌ A UAT run is already active. Send `!uat status` for details."
         session = {
             "kind": "core",
             "focus": "PM core",
-            "dm_channel": dm or source,
+            "channel": channel or source,
             "source_channel": source,
             "started_ts": time.time(),
             "turns": 0,
             "last_state": "queued",
             "core_ids": list(CORE_IDS),
+            "target_key": target_key,
+            "target_handle": target_handle,
         }
         globals()["_ACTIVE"] = session
 
@@ -156,21 +203,20 @@ def _run_core(context: dict) -> str:
     session["thread"] = thread
     thread.start()
 
-    if dm and source and source != dm:
-        _post_to_slack("Starting PM core UAT. I’ll DM the full report and artifacts when it finishes.", source)
-    return "Started PM core UAT: " + ", ".join(CORE_IDS)
+    return f"Started PM core UAT on `{target_key}`: " + ", ".join(CORE_IDS)
 
 
 def _core_worker(session: dict, cases: list[dict]) -> None:
     _post_to_slack(
-        "Starting PM core UAT: " + ", ".join(session.get("core_ids") or CORE_IDS),
-        session.get("dm_channel") or session.get("source_channel") or "",
+        f"Starting PM core UAT on `{session.get('target_key')}`: " + ", ".join(session.get("core_ids") or CORE_IDS),
+        session.get("channel") or session.get("source_channel") or "",
     )
 
     env = os.environ.copy()
-    env["ASMI_TARGET"] = "prod"
-    env["ASMI_HANDLE"] = PROD_HANDLE
+    env["ASMI_TARGET"] = str(session.get("target_key") or "prod")
+    env["ASMI_HANDLE"] = str(session.get("target_handle") or PROD_HANDLE)
     env["ASMI_TEST_CASES_JSON"] = json.dumps(cases)
+    env["ASMI_UAT_MODE"] = "1"
     cmd = [sys.executable, "run_eval.py", "--ids", ",".join(CORE_IDS)]
     try:
         _set_state(session, "running run_eval.py")
@@ -192,7 +238,91 @@ def _core_worker(session: dict, cases: list[dict]) -> None:
         results = _load_latest_results()
         summary = _pm_summary(results, "core", output)
         _record_last("core", summary, results)
-        _send_report_bundle(summary, session.get("dm_channel") or session.get("source_channel") or "")
+        _send_report_bundle(
+            summary,
+            session.get("channel") or session.get("source_channel") or "",
+            extra_paths=_latest_artifacts(include_results_json=False),
+            include_latest=False,
+        )
+    finally:
+        with _ACTIVE_LOCK:
+            if _ACTIVE is session:
+                globals()["_ACTIVE"] = None
+
+
+def _run_single_test(context: dict, remainder: str) -> str:
+    parts = [p for p in remainder.split() if p]
+    if not parts:
+        return "Usage: `!uat test <test_id> [prod|dev]`"
+    test_id = parts[0]
+    requested_target = parts[1] if len(parts) > 1 else ""
+    cases = load_test_cases()
+    by_id = {str(t.get("id")): t for t in cases}
+    if test_id not in by_id:
+        return f"❌ Unknown test id `{test_id}`."
+    target_key, target_handle = _resolve_target(requested_target)
+    channel, source = _slack_targets(context)
+    with _ACTIVE_LOCK:
+        if _ACTIVE:
+            return "❌ A UAT run is already active. Send `!uat status` for details."
+        session = {
+            "kind": "single_test",
+            "focus": test_id,
+            "channel": channel or source,
+            "source_channel": source,
+            "started_ts": time.time(),
+            "turns": 0,
+            "last_state": "queued",
+            "test_ids": [test_id],
+            "target_key": target_key,
+            "target_handle": target_handle,
+        }
+        globals()["_ACTIVE"] = session
+
+    thread = threading.Thread(target=_single_test_worker, args=(session, cases), daemon=True)
+    session["thread"] = thread
+    thread.start()
+    return f"Started UAT for `{test_id}` on `{target_key}`."
+
+
+def _single_test_worker(session: dict, cases: list[dict]) -> None:
+    test_ids = session.get("test_ids") or []
+    _post_to_slack(
+        f"Starting UAT for `{', '.join(test_ids)}` on `{session.get('target_key')}`.",
+        session.get("channel") or session.get("source_channel") or "",
+    )
+    env = os.environ.copy()
+    env["ASMI_TARGET"] = str(session.get("target_key") or "prod")
+    env["ASMI_HANDLE"] = str(session.get("target_handle") or PROD_HANDLE)
+    env["ASMI_TEST_CASES_JSON"] = json.dumps(cases)
+    env["ASMI_UAT_MODE"] = "1"
+    cmd = [sys.executable, "run_eval.py", "--ids", ",".join(test_ids)]
+    try:
+        _set_state(session, f"running {','.join(test_ids)}")
+        result = subprocess.run(
+            cmd,
+            cwd=EVAL_DIR,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=1800,
+        )
+        output = result.stdout + result.stderr
+    except subprocess.TimeoutExpired:
+        output = "Timed out after 30 minutes."
+    except Exception as e:
+        output = f"`!uat test` failed to start: {e}"
+    try:
+        results = _load_latest_results()
+        summary = _pm_summary(results, test_ids[0] if test_ids else "single_test", output)
+        _record_last("single_test", summary, results)
+        _send_report_bundle(
+            summary,
+            session.get("channel") or session.get("source_channel") or "",
+            extra_paths=_latest_artifacts(include_results_json=False),
+            include_latest=False,
+        )
     finally:
         with _ACTIVE_LOCK:
             if _ACTIVE is session:
@@ -218,7 +348,7 @@ def _load_latest_results() -> list[dict]:
         return []
 
 
-def _latest_artifacts() -> list[str]:
+def _latest_artifacts(include_results_json: bool = True) -> list[str]:
     paths: list[str] = []
     pointer = Path(REPORTS_DIR) / ".latest_results_path"
     stem = ""
@@ -228,7 +358,7 @@ def _latest_artifacts() -> list[str]:
         results_path = raw if os.path.isabs(raw) else str(Path(REPORTS_DIR) / raw)
         m = re.search(r"results_(.+)\.json$", os.path.basename(results_path))
         stem = m.group(1) if m else ""
-    if results_path and os.path.exists(results_path):
+    if include_results_json and results_path and os.path.exists(results_path):
         paths.append(results_path)
     if stem:
         for name in [f"report_{stem}.pdf", f"report_{stem}.html"]:
@@ -292,17 +422,18 @@ def _pm_summary(results: list[dict], area: str, output: str = "") -> str:
     else:
         lines.append("- No failures in this run.")
 
-    lines.extend([
-        "",
-        "Artifacts",
-        "- Full PDF / JSON / call recordings uploaded when available.",
-        "",
-        "Ship signal",
-        f"- {'Good for this slice.' if total and failed == 0 else 'Do not call this clean until failures/warnings are reviewed.'}",
-        "",
-        "Top fix before next build",
-        f"- {failures[0].get('name') if failures else 'None from this run.'}",
-    ])
+    if area != "core":
+        lines.extend([
+            "",
+            "Artifacts",
+            "- Full PDF / JSON / call recordings uploaded when available.",
+            "",
+            "Ship signal",
+            f"- {'Good for this slice.' if total and failed == 0 else 'Do not call this clean until failures/warnings are reviewed.'}",
+            "",
+            "Top fix before next build",
+            f"- {failures[0].get('name') if failures else 'None from this run.'}",
+        ])
     if unclear:
         lines[0] += f" ({passed} pass, {failed} fail, {unclear} unclear.)"
     return "\n".join(lines)
@@ -334,8 +465,8 @@ def _send_last(context: dict) -> str:
                 _LAST_UAT = {}
     if not _LAST_UAT:
         return "No UAT report has been generated yet."
-    dm, source = _slack_targets(context)
-    _send_report_bundle(_LAST_UAT.get("summary") or "Latest UAT report unavailable.", dm or source)
+    channel, source = _slack_targets(context)
+    _send_report_bundle(_LAST_UAT.get("summary") or "Latest UAT report unavailable.", channel or source)
     return "Re-sent latest UAT report and available artifacts."
 
 
